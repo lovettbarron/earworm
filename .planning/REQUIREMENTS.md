@@ -9,7 +9,7 @@
 
 - [ ] **LIB-01**: User can scan an existing local audiobook directory and index discovered books by ASIN
 - [ ] **LIB-02**: User can view the current state of their library (books, download status, metadata)
-- [ ] **LIB-03**: Library state persists in a local SQLite database (not on NAS mount)
+- [x] **LIB-03**: Library state persists in a local SQLite database (not on NAS mount)
 - [ ] **LIB-04**: User can configure the library root path (NAS mount or local directory)
 - [ ] **LIB-05**: User can preview what would be downloaded without downloading (dry-run mode)
 - [ ] **LIB-06**: User can get machine-readable JSON output from all list/status commands
@@ -56,7 +56,7 @@
 
 ### Testing
 
-- [ ] **TEST-01**: Unit tests for SQLite database layer (schema creation, CRUD operations, migrations) with table-driven tests
+- [x] **TEST-01**: Unit tests for SQLite database layer (schema creation, CRUD operations, migrations) with table-driven tests
 - [ ] **TEST-02**: Unit tests for configuration loading and validation (config file parsing, flag binding, defaults)
 - [ ] **TEST-03**: Unit tests for local library scanner (directory walking, ASIN extraction, metadata parsing)
 - [ ] **TEST-04**: Integration tests for CLI commands (earworm scan, status, --json output correctness)
@@ -96,7 +96,7 @@
 |-------------|-------|--------|
 | LIB-01 | Phase 2 | Pending |
 | LIB-02 | Phase 2 | Pending |
-| LIB-03 | Phase 1 | Pending |
+| LIB-03 | Phase 1 | Complete |
 | LIB-04 | Phase 1 | Pending |
 | LIB-05 | Phase 3 | Pending |
 | LIB-06 | Phase 2 | Pending |
@@ -125,7 +125,7 @@
 | CLI-03 | Phase 2 | Pending |
 | CLI-04 | Phase 1 | Pending |
 | CLI-05 | Phase 6 | Pending |
-| TEST-01 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Pending |
 | TEST-03 | Phase 2 | Pending |
 | TEST-04 | Phase 2 | Pending |
