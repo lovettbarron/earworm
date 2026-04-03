@@ -47,7 +47,10 @@ Plans:
   3. User can pass `--json` to get machine-readable output from status and list commands
   4. Error messages clearly tell the user what went wrong and suggest recovery steps
   5. Unit tests cover scanner logic (directory walking, ASIN extraction) and integration tests verify CLI commands (scan, status, --json) produce correct output
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 02-01-PLAN.md — DB schema extension, scanner package (ASIN extraction, directory walking), metadata extraction with fallback chain
+- [ ] 02-02-PLAN.md — CLI commands (earworm scan, earworm status), --json output, integration tests
 
 ### Phase 3: Audible Integration
 **Goal**: Users can connect to their Audible account, see what books they own remotely, and identify what is new
@@ -105,7 +108,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Configuration | 0/3 | Planning complete | - |
-| 2. Local Library Scanning | 0/0 | Not started | - |
+| 2. Local Library Scanning | 0/2 | Planning complete | - |
 | 3. Audible Integration | 0/0 | Not started | - |
 | 4. Download Pipeline | 0/0 | Not started | - |
 | 5. File Organization | 0/0 | Not started | - |
