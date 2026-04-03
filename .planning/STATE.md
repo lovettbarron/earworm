@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Reliably download and organize Audible audiobooks into a local library with zero manual intervention
-**Current focus:** Phase 01 — foundation-configuration
+**Current focus:** Phase 02 — local-library-scanning
 
 ## Current Position
 
