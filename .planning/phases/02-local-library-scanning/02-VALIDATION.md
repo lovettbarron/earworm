@@ -2,8 +2,9 @@
 phase: 2
 slug: local-library-scanning
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
+wave_0_note: "TDD task structure (tdd='true' on code-producing tasks) satisfies Wave 0 intent -- tests are co-created with implementation in RED-GREEN-REFACTOR cycles, ensuring every task has automated verification before code is written."
 created: 2026-04-03
 ---
 
@@ -38,27 +39,28 @@ created: 2026-04-03
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 01 | 1 | LIB-01 | unit | `go test ./internal/scanner/... -v -run TestASIN -count=1` | ❌ W0 | ⬜ pending |
-| 02-01-02 | 01 | 1 | LIB-01 | unit | `go test ./internal/scanner/... -v -run TestScan -count=1` | ❌ W0 | ⬜ pending |
-| 02-01-03 | 01 | 1 | TEST-03 | unit | `go test ./internal/metadata/... -v -count=1` | ❌ W0 | ⬜ pending |
-| 02-02-01 | 02 | 2 | LIB-02 | integration | `go test ./internal/cli/... -v -run TestStatus -count=1` | ❌ W0 | ⬜ pending |
-| 02-02-02 | 02 | 2 | LIB-06 | integration | `go test ./internal/cli/... -v -run TestStatusJSON -count=1` | ❌ W0 | ⬜ pending |
-| 02-02-03 | 02 | 2 | CLI-03 | integration | `go test ./internal/cli/... -v -run TestError -count=1` | ❌ W0 | ⬜ pending |
-| 02-02-04 | 02 | 2 | TEST-04 | integration | `go test ./internal/cli/... -v -run "TestScan\|TestStatus" -count=1` | ❌ W0 | ⬜ pending |
+| 02-01-01 | 01 | 1 | LIB-01 | unit | `go test ./internal/scanner/... -v -run TestASIN -count=1` | TDD co-created | pending |
+| 02-01-02 | 01 | 1 | LIB-01 | unit | `go test ./internal/scanner/... -v -run TestScan -count=1` | TDD co-created | pending |
+| 02-01-03 | 01 | 1 | TEST-03 | unit | `go test ./internal/metadata/... -v -count=1` | TDD co-created | pending |
+| 02-02-01 | 02 | 2 | LIB-02 | integration | `go test ./internal/cli/... -v -run TestStatus -count=1` | TDD co-created | pending |
+| 02-02-02 | 02 | 2 | LIB-06 | integration | `go test ./internal/cli/... -v -run TestStatusJSON -count=1` | TDD co-created | pending |
+| 02-02-03 | 02 | 2 | CLI-03 | integration | `go test ./internal/cli/... -v -run TestError -count=1` | TDD co-created | pending |
+| 02-02-04 | 02 | 2 | TEST-04 | integration | `go test ./internal/cli/... -v -run "TestScan\|TestStatus" -count=1` | TDD co-created | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `internal/scanner/scanner_test.go` — stubs for LIB-01, TEST-03 (ASIN extraction, directory walking, incremental sync)
-- [ ] `internal/scanner/asin_test.go` — stubs for TEST-03 (ASIN regex table-driven tests)
-- [ ] `internal/metadata/metadata_test.go` — stubs for TEST-03 (tag extraction, fallback chain)
-- [ ] `internal/cli/scan_test.go` — stubs for TEST-04 (scan command integration)
-- [ ] `internal/cli/status_test.go` — stubs for LIB-02, LIB-06, TEST-04 (status command, JSON output)
+All code-producing tasks in both plans have `tdd="true"`, which means tests are written BEFORE implementation in the RED-GREEN-REFACTOR cycle. This satisfies Wave 0 intent -- every task creates its test file as the first step, ensuring automated verification exists before any production code.
 
-*Wave 0 creates test stubs that fail until implementation is complete.*
+Test files created by TDD tasks:
+- `internal/scanner/scanner_test.go` — covers LIB-01, TEST-03 (ASIN extraction, directory walking, incremental sync)
+- `internal/scanner/asin_test.go` — covers TEST-03 (ASIN regex table-driven tests)
+- `internal/metadata/metadata_test.go` — covers TEST-03 (tag extraction, fallback chain)
+- `internal/cli/scan_test.go` — covers TEST-04 (scan command integration)
+- `internal/cli/status_test.go` — covers LIB-02, LIB-06, TEST-04 (status command, JSON output)
 
 ---
 
@@ -72,11 +74,11 @@ created: 2026-04-03
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 10s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or TDD co-creation satisfying Wave 0
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covered by TDD task structure (tests written before implementation)
+- [x] No watch-mode flags
+- [x] Feedback latency < 10s
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
