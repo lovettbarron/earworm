@@ -3,9 +3,20 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/lovettbarron/earworm/internal/cli"
+)
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
-	fmt.Println("earworm - audiobook library manager")
-	os.Exit(0)
+	cli.SetVersion(version, commit, date)
+	if err := cli.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }
