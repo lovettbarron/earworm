@@ -54,6 +54,21 @@
 - [ ] **CLI-04**: README documents installation, setup (including audible-cli dependency), and all commands
 - [ ] **CLI-05**: README is updated with each phase to reflect current capabilities
 
+### Testing
+
+- [ ] **TEST-01**: Unit tests for SQLite database layer (schema creation, CRUD operations, migrations) with table-driven tests
+- [ ] **TEST-02**: Unit tests for configuration loading and validation (config file parsing, flag binding, defaults)
+- [ ] **TEST-03**: Unit tests for local library scanner (directory walking, ASIN extraction, metadata parsing)
+- [ ] **TEST-04**: Integration tests for CLI commands (earworm scan, status, --json output correctness)
+- [ ] **TEST-05**: Unit tests for audible-cli subprocess wrapper (command construction, output parsing, error handling) using mock/fake subprocess
+- [ ] **TEST-06**: Integration tests for Audible sync flow (auth validation, library metadata sync, new book detection)
+- [ ] **TEST-07**: Unit tests for download pipeline logic (rate limiting, backoff calculation, retry state machine, progress tracking)
+- [ ] **TEST-08**: Integration tests for download fault tolerance (interrupt recovery, partial download resume, failure tracking)
+- [ ] **TEST-09**: Unit tests for file organization logic (path construction, cross-filesystem move, naming conventions)
+- [ ] **TEST-10**: Integration tests for end-to-end file organization (staging to library move, folder structure validation)
+- [ ] **TEST-11**: Integration tests for external integrations (Audiobookshelf API mock, Goodreads sync, daemon mode lifecycle)
+- [ ] **TEST-12**: All packages maintain >80% line coverage; no phase ships without passing `go test ./...`
+
 ## v2 Requirements
 
 ### Advanced Features
@@ -110,12 +125,24 @@
 | CLI-03 | Phase 2 | Pending |
 | CLI-04 | Phase 1 | Pending |
 | CLI-05 | Phase 6 | Pending |
+| TEST-01 | Phase 1 | Pending |
+| TEST-02 | Phase 1 | Pending |
+| TEST-03 | Phase 2 | Pending |
+| TEST-04 | Phase 2 | Pending |
+| TEST-05 | Phase 3 | Pending |
+| TEST-06 | Phase 3 | Pending |
+| TEST-07 | Phase 4 | Pending |
+| TEST-08 | Phase 4 | Pending |
+| TEST-09 | Phase 5 | Pending |
+| TEST-10 | Phase 5 | Pending |
+| TEST-11 | Phase 6 | Pending |
+| TEST-12 | All Phases | Pending |
 
 **Coverage:**
-- v1 requirements: 31 total
-- Mapped to phases: 31
+- v1 requirements: 43 total
+- Mapped to phases: 43
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after roadmap creation*
+*Last updated: 2026-04-03 after adding TEST-xx testing requirements*
