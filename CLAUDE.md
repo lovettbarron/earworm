@@ -28,8 +28,8 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm tracks 
 ### CLI Framework
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| spf13/cobra | v2.3.0 | Command structure & parsing | De facto standard for Go CLIs (kubectl, docker, gh all use it). Subcommand model maps directly to earworm's needs: `earworm scan`, `earworm download`, `earworm sync`. RunE pattern for proper error propagation. | HIGH |
-| spf13/viper | v1.11.0 | Configuration management | Natural companion to Cobra. Handles config file (YAML/TOML), env vars, and flag binding in one place. Needed for Audiobookshelf URL/token, library paths, audible-cli path, rate limit settings. | HIGH |
+| spf13/cobra | v1.10.2 | Command structure & parsing | De facto standard for Go CLIs (kubectl, docker, gh all use it). Subcommand model maps directly to earworm's needs: `earworm scan`, `earworm download`, `earworm sync`. RunE pattern for proper error propagation. | HIGH |
+| spf13/viper | v1.21.0 | Configuration management | Natural companion to Cobra. Handles config file (YAML/TOML), env vars, and flag binding in one place. Needed for Audiobookshelf URL/token, library paths, audible-cli path, rate limit settings. | HIGH |
 ### Database
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
@@ -63,7 +63,7 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm tracks 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
 | testing (stdlib) | Go 1.23+ | Unit and integration tests | Go's built-in testing is sufficient. Table-driven tests are idiomatic. | HIGH |
-| testify/assert | v1.9+ | Test assertions | `require` and `assert` packages reduce test boilerplate significantly. Near-universal in Go projects. | HIGH |
+| testify/assert | v1.11.1 | Test assertions | `require` and `assert` packages reduce test boilerplate significantly. Near-universal in Go projects. | HIGH |
 ### Build & Distribution
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
@@ -103,8 +103,8 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm tracks 
 - **Base URL:** User-configured (e.g., `http://nas:13378`)
 ## Key Technical Decisions
 ## Sources
-- [Cobra GitHub](https://github.com/spf13/cobra) -- v2.3.0 confirmed
-- [Viper GitHub](https://github.com/spf13/viper) -- v1.11.0 referenced in multiple 2026 sources
+- [Cobra GitHub](https://github.com/spf13/cobra) -- v1.10.2 (actual latest)
+- [Viper GitHub](https://github.com/spf13/viper) -- v1.21.0 (actual latest)
 - [modernc.org/sqlite on pkg.go.dev](https://pkg.go.dev/modernc.org/sqlite) -- v1.36+, SQLite 3.51.3
 - [dhowden/tag GitHub](https://github.com/dhowden/tag) -- 642 stars, MP4/M4A support confirmed
 - [go-resty/resty releases](https://github.com/go-resty/resty/releases) -- v2.16.5 (considered, not recommended)
@@ -120,13 +120,24 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm tracks 
 <!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
+### Established Patterns
+- **Project layout:** `cmd/earworm/` entry point, `internal/` for private packages
+- **Database:** modernc.org/sqlite with driver name "sqlite" (NOT "sqlite3"), WAL mode enabled
+- **Migrations:** Embedded SQL via `//go:embed migrations/*.sql`, sequential numbered files, schema_versions tracking table
+- **Config:** Viper with YAML, config at ~/.config/earworm/config.yaml, DB at ~/.config/earworm/earworm.db
+- **CLI:** Cobra commands in internal/cli/, one file per command, root has --quiet and --config flags
+- **Testing:** testify/assert + testify/require, in-memory SQLite for DB tests, viper.Reset() between config tests
+- **Error handling:** Cobra RunE pattern, wrap errors with fmt.Errorf("context: %w", err)
 <!-- GSD:conventions-end -->
 
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->
 ## Architecture
 
-Architecture not yet mapped. Follow existing patterns found in the codebase.
+### Package Structure
+- `cmd/earworm/` -- Binary entry point, version ldflags
+- `internal/cli/` -- Cobra command definitions (root, version, config)
+- `internal/config/` -- Viper setup, defaults, validation, path resolution
+- `internal/db/` -- SQLite database, migrations, Book CRUD
 <!-- GSD:architecture-end -->
 
 <!-- GSD:workflow-start source:GSD defaults -->
