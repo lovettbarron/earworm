@@ -49,7 +49,7 @@ Plans:
   5. Unit tests cover scanner logic (directory walking, ASIN extraction) and integration tests verify CLI commands (scan, status, --json) produce correct output
 **Plans**: 2 plans
 Plans:
-- [ ] 02-01-PLAN.md — DB schema extension, scanner package (ASIN extraction, directory walking), metadata extraction with fallback chain
+- [x] 02-01-PLAN.md — DB schema extension, scanner package (ASIN extraction, directory walking), metadata extraction with fallback chain
 - [ ] 02-02-PLAN.md — CLI commands (earworm scan, earworm status), --json output, integration tests
 
 ### Phase 3: Audible Integration
