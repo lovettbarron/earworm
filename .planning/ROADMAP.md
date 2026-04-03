@@ -31,7 +31,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. SQLite database is created automatically on first run in a local directory (never on NAS mount)
   4. README documents installation steps and audible-cli dependency setup
   5. Unit tests pass for database layer (schema, CRUD) and config system (parsing, defaults, validation) via `go test ./...`
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Go project init, SQLite database layer with embedded migrations and Book CRUD
+- [ ] 01-02-PLAN.md — Config system (Viper), CLI commands (Cobra: version, config show/set/init), tests
+- [ ] 01-03-PLAN.md — README documentation, GoReleaser config, CLAUDE.md version corrections
 
 ### Phase 2: Local Library Scanning
 **Goal**: Users can index their existing audiobook library and see what they have
@@ -100,7 +104,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Configuration | 0/0 | Not started | - |
+| 1. Foundation & Configuration | 0/3 | Planning complete | - |
 | 2. Local Library Scanning | 0/0 | Not started | - |
 | 3. Audible Integration | 0/0 | Not started | - |
 | 4. Download Pipeline | 0/0 | Not started | - |
