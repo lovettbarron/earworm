@@ -33,9 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Unit tests pass for database layer (schema, CRUD) and config system (parsing, defaults, validation) via `go test ./...`
 **Plans**: 3 plans
 Plans:
-- [ ] 01-01-PLAN.md — Go project init, SQLite database layer with embedded migrations and Book CRUD
-- [ ] 01-02-PLAN.md — Config system (Viper), CLI commands (Cobra: version, config show/set/init), tests
-- [ ] 01-03-PLAN.md — README documentation, GoReleaser config, CLAUDE.md version corrections
+- [x] 01-01-PLAN.md — Go project init, SQLite database layer with embedded migrations and Book CRUD
+- [x] 01-02-PLAN.md — Config system (Viper), CLI commands (Cobra: version, config show/set/init), tests
+- [x] 01-03-PLAN.md — README documentation, GoReleaser config, CLAUDE.md version corrections
 
 ### Phase 2: Local Library Scanning
 **Goal**: Users can index their existing audiobook library and see what they have
