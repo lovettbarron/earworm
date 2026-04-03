@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,6 +40,37 @@ func TestOpenCreatesSchemaVersions(t *testing.T) {
 	err := db.QueryRow("SELECT version FROM schema_versions WHERE version = 1").Scan(&version)
 	require.NoError(t, err)
 	assert.Equal(t, 1, version)
+}
+
+func TestMigration002Applied(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Verify migration 002 was recorded
+	var version int
+	err := db.QueryRow("SELECT version FROM schema_versions WHERE version = 2").Scan(&version)
+	require.NoError(t, err)
+	assert.Equal(t, 2, version)
+
+	// Verify new columns exist by inserting a row with them
+	_, err = db.Exec(`INSERT INTO books (asin, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count)
+		VALUES ('TEST001', 'Narrator', 'Fiction', 2024, 'Series 1', 1, 3600, 10, 'tag', 5)`)
+	require.NoError(t, err)
+
+	// Read back and verify
+	var narrator, genre, series, metadataSource string
+	var year, hasCover, duration, chapterCount, fileCount int
+	err = db.QueryRow(`SELECT narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count FROM books WHERE asin = 'TEST001'`).
+		Scan(&narrator, &genre, &year, &series, &hasCover, &duration, &chapterCount, &metadataSource, &fileCount)
+	require.NoError(t, err)
+	assert.Equal(t, "Narrator", narrator)
+	assert.Equal(t, "Fiction", genre)
+	assert.Equal(t, 2024, year)
+	assert.Equal(t, "Series 1", series)
+	assert.Equal(t, 1, hasCover)
+	assert.Equal(t, 3600, duration)
+	assert.Equal(t, 10, chapterCount)
+	assert.Equal(t, "tag", metadataSource)
+	assert.Equal(t, 5, fileCount)
 }
 
 func TestOpenIdempotent(t *testing.T) {
@@ -110,6 +142,41 @@ func TestGetBookNotFound(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestGetBookExtendedFields(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{
+		ASIN:           "B08C6YJ1LS",
+		Title:          "Project Hail Mary",
+		Author:         "Andy Weir",
+		Narrator:       "Ray Porter",
+		Genre:          "Science Fiction",
+		Year:           2021,
+		Series:         "",
+		HasCover:       true,
+		Duration:       57600,
+		ChapterCount:   30,
+		MetadataSource: "tag",
+		FileCount:      1,
+		Status:         "scanned",
+		LocalPath:      "/library/Andy Weir/Project Hail Mary [B08C6YJ1LS]",
+	}
+	err := InsertBook(db, book)
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "B08C6YJ1LS")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "Ray Porter", got.Narrator)
+	assert.Equal(t, "Science Fiction", got.Genre)
+	assert.Equal(t, 2021, got.Year)
+	assert.True(t, got.HasCover)
+	assert.Equal(t, 57600, got.Duration)
+	assert.Equal(t, 30, got.ChapterCount)
+	assert.Equal(t, "tag", got.MetadataSource)
+	assert.Equal(t, 1, got.FileCount)
+}
+
 func TestListBooks(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -125,6 +192,26 @@ func TestListBooks(t *testing.T) {
 	result, err := ListBooks(db)
 	require.NoError(t, err)
 	assert.Len(t, result, 3)
+}
+
+func TestListBooksExtendedFields(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{
+		ASIN:     "B08C6YJ1LS",
+		Title:    "Project Hail Mary",
+		Author:   "Andy Weir",
+		Narrator: "Ray Porter",
+		Genre:    "Science Fiction",
+		Status:   "scanned",
+	}
+	require.NoError(t, InsertBook(db, book))
+
+	result, err := ListBooks(db)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Equal(t, "Ray Porter", result[0].Narrator)
+	assert.Equal(t, "Science Fiction", result[0].Genre)
 }
 
 func TestListBooksEmpty(t *testing.T) {
@@ -151,6 +238,21 @@ func TestUpdateBookStatus(t *testing.T) {
 	assert.Equal(t, "downloaded", got.Status)
 }
 
+func TestUpdateBookStatusRemoved(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{ASIN: "B08C6YJ1LS", Title: "Test", Author: "Test", Status: "scanned"}
+	require.NoError(t, InsertBook(db, book))
+
+	err := UpdateBookStatus(db, "B08C6YJ1LS", "removed")
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "B08C6YJ1LS")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "removed", got.Status)
+}
+
 func TestUpdateBookStatusNotFound(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -173,6 +275,134 @@ func TestInsertBookMinimalFields(t *testing.T) {
 	assert.Equal(t, "", got.Author)
 	assert.Equal(t, "unknown", got.Status) // default applied
 	assert.Equal(t, "", got.LocalPath)
+	assert.Equal(t, "", got.Narrator)
+	assert.Equal(t, "", got.Genre)
+	assert.Equal(t, 0, got.Year)
+	assert.Equal(t, "", got.Series)
+	assert.False(t, got.HasCover)
+	assert.Equal(t, 0, got.Duration)
+	assert.Equal(t, 0, got.ChapterCount)
+	assert.Equal(t, "", got.MetadataSource)
+	assert.Equal(t, 0, got.FileCount)
 	assert.False(t, got.CreatedAt.IsZero())
 	assert.False(t, got.UpdatedAt.IsZero())
+}
+
+func TestUpsertBookInsert(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{
+		ASIN:           "B08C6YJ1LS",
+		Title:          "Project Hail Mary",
+		Author:         "Andy Weir",
+		Narrator:       "Ray Porter",
+		Genre:          "Science Fiction",
+		Year:           2021,
+		HasCover:       true,
+		Duration:       57600,
+		ChapterCount:   30,
+		MetadataSource: "tag",
+		FileCount:      1,
+		Status:         "scanned",
+		LocalPath:      "/library/Andy Weir/Project Hail Mary [B08C6YJ1LS]",
+	}
+	err := UpsertBook(db, book)
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "B08C6YJ1LS")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "Project Hail Mary", got.Title)
+	assert.Equal(t, "Andy Weir", got.Author)
+	assert.Equal(t, "Ray Porter", got.Narrator)
+	assert.Equal(t, "Science Fiction", got.Genre)
+	assert.Equal(t, 2021, got.Year)
+	assert.True(t, got.HasCover)
+	assert.Equal(t, 57600, got.Duration)
+	assert.Equal(t, 30, got.ChapterCount)
+	assert.Equal(t, "tag", got.MetadataSource)
+	assert.Equal(t, 1, got.FileCount)
+	assert.Equal(t, "scanned", got.Status)
+}
+
+func TestUpsertBookUpdate(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Insert initial version
+	book := Book{
+		ASIN:   "B08C6YJ1LS",
+		Title:  "Project Hail Mary",
+		Author: "Andy Weir",
+		Status: "scanned",
+	}
+	err := UpsertBook(db, book)
+	require.NoError(t, err)
+
+	// Get original created_at
+	got, err := GetBook(db, "B08C6YJ1LS")
+	require.NoError(t, err)
+	originalCreatedAt := got.CreatedAt
+	originalUpdatedAt := got.UpdatedAt
+
+	// Small delay to ensure updated_at changes
+	time.Sleep(10 * time.Millisecond)
+
+	// Upsert with updated metadata
+	updated := Book{
+		ASIN:           "B08C6YJ1LS",
+		Title:          "Project Hail Mary (Updated)",
+		Author:         "Andy Weir",
+		Narrator:       "Ray Porter",
+		Genre:          "Sci-Fi",
+		Year:           2021,
+		MetadataSource: "tag",
+		Status:         "scanned",
+	}
+	err = UpsertBook(db, updated)
+	require.NoError(t, err)
+
+	got, err = GetBook(db, "B08C6YJ1LS")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	// Verify metadata was updated
+	assert.Equal(t, "Project Hail Mary (Updated)", got.Title)
+	assert.Equal(t, "Ray Porter", got.Narrator)
+	assert.Equal(t, "Sci-Fi", got.Genre)
+	assert.Equal(t, 2021, got.Year)
+	assert.Equal(t, "tag", got.MetadataSource)
+
+	// created_at should be preserved
+	assert.Equal(t, originalCreatedAt.Unix(), got.CreatedAt.Unix())
+
+	// updated_at should change (or at least not be before original)
+	assert.True(t, got.UpdatedAt.Unix() >= originalUpdatedAt.Unix())
+}
+
+func TestUpsertBookPreservesCreatedAt(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{
+		ASIN:   "B08C6YJ1LS",
+		Title:  "Original",
+		Author: "Author",
+		Status: "scanned",
+	}
+	err := UpsertBook(db, book)
+	require.NoError(t, err)
+
+	got1, err := GetBook(db, "B08C6YJ1LS")
+	require.NoError(t, err)
+	createdAt1 := got1.CreatedAt
+
+	// Upsert again
+	book.Title = "Updated"
+	err = UpsertBook(db, book)
+	require.NoError(t, err)
+
+	got2, err := GetBook(db, "B08C6YJ1LS")
+	require.NoError(t, err)
+
+	// created_at must be preserved
+	assert.Equal(t, createdAt1.Unix(), got2.CreatedAt.Unix())
 }
