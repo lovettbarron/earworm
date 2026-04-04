@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-04-04T12:33:09.543Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-04-04T17:26:58.494Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 14
-  completed_plans: 12
+  completed_plans: 13
   percent: 66
 ---
 
@@ -64,6 +64,7 @@ Progress: [██████▓░░░] 66%
 | Phase 04-download-pipeline P01 | 5min | 2 tasks | 7 files |
 | Phase 04 P03 | 3min | 1 tasks | 2 files |
 | Phase 04 P04 | 2min | 1 tasks | 4 files |
+| Phase 05 P01 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Auth errors abort batch immediately; rate limit errors double backoff delay
 - [Phase 04]: Reuse newAudibleClient var from sync.go for consistent CLI test injection pattern
 - [Phase 04]: Filter and limit applied in both dry-run and pipeline config for consistent behavior
+- [Phase 05]: Illegal chars regex covers all 9 filesystem-unsafe characters; BuildBookPath validates before and after sanitization
+- [Phase 05]: MoveFile creates parent directories automatically; EXDEV fallback with size verification before source deletion
 
 ### Pending Todos
 
@@ -113,8 +116,8 @@ None yet.
 ## Session Continuity
 
 <<<<<<< HEAD
-Last session: 2026-04-04T12:33:09.539Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-04-04T17:26:58.491Z
+Stopped at: Completed 05-01-PLAN.md
 =======
 Last session: 2026-04-04T08:28:54.878Z
 Stopped at: Completed 03-02-PLAN.md

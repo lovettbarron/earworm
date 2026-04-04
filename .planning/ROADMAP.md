@@ -97,7 +97,7 @@ Plans:
   4. Unit tests cover path construction and naming logic; integration tests verify staging-to-library moves including cross-filesystem boundary handling
 **Plans**: 2 plans
 Plans:
-- [ ] 05-01-PLAN.md — Path construction (sanitization, first-author, BuildBookPath) and cross-filesystem file mover with size verification (TDD)
+- [x] 05-01-PLAN.md — Path construction (sanitization, first-author, BuildBookPath) and cross-filesystem file mover with size verification (TDD)
 - [ ] 05-02-PLAN.md — Organizer orchestrator, DB functions (ListOrganizable), earworm organize CLI command, integration tests
 
 ### Phase 6: Integrations & Polish
