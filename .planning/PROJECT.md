@@ -14,12 +14,12 @@ Reliably download and organize Audible audiobooks into a local library with zero
 
 - [x] Scan and index an existing local audiobook library (M4A files in Libation-compatible folder structure) — Validated in Phase 02: local-library-scanning
 - [x] Track library state in SQLite (books, metadata, download status) — Validated in Phase 02: local-library-scanning
+- [x] Authenticate with Audible via wrapped `audible-cli` subprocess — Validated in Phase 03: audible-integration
+- [x] Check for newly available audiobooks in the Audible account — Validated in Phase 03: audible-integration
 
 ### Active
-- [ ] Authenticate with Audible via wrapped `audible-cli` subprocess
 - [ ] Download new audiobooks with fault-tolerant retry, rate limiting, and graceful recovery
 - [ ] Organize downloaded files in Libation-compatible structure (cover art, metadata, M4A)
-- [ ] Check for newly available audiobooks in the Audible account
 - [ ] Polling capability for new book detection (future frontend integration)
 - [ ] Trigger Audiobookshelf library scan via API after downloads
 - [ ] Goodreads integration via existing CLI tooling
@@ -58,7 +58,7 @@ Reliably download and organize Audible audiobooks into a local library with zero
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Go for language | Single binary, good CLI ecosystem, cross-platform | ✓ Validated Phase 01 |
-| Wrap audible-cli as subprocess | Clean license boundary (permissive wrapper around Python tool), proven Audible auth | — Pending |
+| Wrap audible-cli as subprocess | Clean license boundary (permissive wrapper around Python tool), proven Audible auth | ✓ Validated Phase 03 |
 | MIT/Apache license | Avoid GPL constraints; no Libation code copied, only file structure observed | — Pending |
 | SQLite for library state | Embedded, queryable, crash-resilient, standard for CLI tools | ✓ Validated Phase 01-02 |
 | Libation-compatible file structure | Maximum compatibility with existing libraries and workflows | ✓ Validated Phase 02 |
@@ -82,4 +82,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after Phase 2 (Local Library Scanning) complete — ASIN extraction, directory scanning (two-level + recursive), metadata fallback chain (tag/ffprobe/folder), incremental sync, `earworm scan` and `earworm status` CLI commands, all tests passing*
+*Last updated: 2026-04-04 after Phase 3 (Audible Integration) complete — audible-cli subprocess wrapper, `earworm auth`/`sync`/`download --dry-run` commands, SyncRemoteBook with local field preservation, new book detection, all tests passing*
