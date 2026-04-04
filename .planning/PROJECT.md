@@ -16,9 +16,9 @@ Reliably download and organize Audible audiobooks into a local library with zero
 - [x] Track library state in SQLite (books, metadata, download status) — Validated in Phase 02: local-library-scanning
 - [x] Authenticate with Audible via wrapped `audible-cli` subprocess — Validated in Phase 03: audible-integration
 - [x] Check for newly available audiobooks in the Audible account — Validated in Phase 03: audible-integration
+- [x] Download new audiobooks with fault-tolerant retry, rate limiting, and graceful recovery — Validated in Phase 04: download-pipeline
 
 ### Active
-- [ ] Download new audiobooks with fault-tolerant retry, rate limiting, and graceful recovery
 - [ ] Organize downloaded files in Libation-compatible structure (cover art, metadata, M4A)
 - [ ] Polling capability for new book detection (future frontend integration)
 - [ ] Trigger Audiobookshelf library scan via API after downloads
