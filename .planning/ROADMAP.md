@@ -66,7 +66,7 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — DB migration 003 (Audible metadata columns), SyncRemoteBook upsert, ListNewBooks query
 - [x] 03-02-PLAN.md — audible-cli subprocess wrapper package (interface, auth, library export, parsing, errors, tests)
-- [ ] 03-03-PLAN.md — CLI commands (earworm auth, sync, download --dry-run), integration tests
+- [x] 03-03-PLAN.md — CLI commands (earworm auth, sync, download --dry-run), integration tests
 
 ### Phase 4: Download Pipeline
 **Goal**: Users can reliably download their Audible library with fault tolerance -- the core differentiator over Libation
