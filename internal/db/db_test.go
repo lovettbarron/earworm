@@ -463,3 +463,233 @@ func TestUpsertBookPreservesCreatedAt(t *testing.T) {
 	// created_at must be preserved
 	assert.Equal(t, createdAt1.Unix(), got2.CreatedAt.Unix())
 }
+
+func TestSyncRemoteBook_NewBook(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{
+		ASIN:           "B09REMOTE1",
+		Title:          "Remote Only Book",
+		Author:         "Remote Author",
+		Narrator:       "Remote Narrator",
+		Genre:          "Fantasy",
+		Year:           2023,
+		Series:         "Remote Series",
+		AudibleStatus:  "finished",
+		PurchaseDate:   "2023-06-15",
+		RuntimeMinutes: 600,
+		Narrators:      "Narrator A, Narrator B",
+		SeriesName:     "Epic Fantasy",
+		SeriesPosition: "3",
+	}
+	err := SyncRemoteBook(db, book)
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "B09REMOTE1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	// Remote fields should be set
+	assert.Equal(t, "Remote Only Book", got.Title)
+	assert.Equal(t, "Remote Author", got.Author)
+	assert.Equal(t, "finished", got.AudibleStatus)
+	assert.Equal(t, "2023-06-15", got.PurchaseDate)
+	assert.Equal(t, 600, got.RuntimeMinutes)
+	assert.Equal(t, "Narrator A, Narrator B", got.Narrators)
+	assert.Equal(t, "Epic Fantasy", got.SeriesName)
+	assert.Equal(t, "3", got.SeriesPosition)
+
+	// Local-only fields should have defaults for new book
+	assert.Equal(t, "unknown", got.Status)
+	assert.Equal(t, "", got.LocalPath)
+	assert.Equal(t, "", got.MetadataSource)
+	assert.Equal(t, 0, got.FileCount)
+}
+
+func TestSyncRemoteBook_PreservesLocalFields(t *testing.T) {
+	db := setupTestDB(t)
+
+	// First, insert a locally scanned book
+	localBook := Book{
+		ASIN:           "B09LOCAL1",
+		Title:          "Local Title",
+		Author:         "Local Author",
+		Narrator:       "Local Narrator",
+		Status:         "scanned",
+		LocalPath:      "/library/Local Author/Local Title [B09LOCAL1]",
+		MetadataSource: "tag",
+		FileCount:      3,
+		HasCover:       true,
+		Duration:       36000,
+		ChapterCount:   15,
+	}
+	err := InsertBook(db, localBook)
+	require.NoError(t, err)
+
+	// Now sync remote metadata over the same ASIN
+	remoteBook := Book{
+		ASIN:           "B09LOCAL1",
+		Title:          "Updated Remote Title",
+		Author:         "Updated Remote Author",
+		Narrator:       "Updated Remote Narrator",
+		Genre:          "Thriller",
+		Year:           2024,
+		Series:         "Updated Series",
+		AudibleStatus:  "in_progress",
+		PurchaseDate:   "2024-01-10",
+		RuntimeMinutes: 720,
+		Narrators:      "Narrator X",
+		SeriesName:     "Thriller Series",
+		SeriesPosition: "1",
+	}
+	err = SyncRemoteBook(db, remoteBook)
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "B09LOCAL1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	// Remote fields should be updated
+	assert.Equal(t, "Updated Remote Title", got.Title)
+	assert.Equal(t, "Updated Remote Author", got.Author)
+	assert.Equal(t, "Updated Remote Narrator", got.Narrator)
+	assert.Equal(t, "Thriller", got.Genre)
+	assert.Equal(t, 2024, got.Year)
+	assert.Equal(t, "Updated Series", got.Series)
+	assert.Equal(t, "in_progress", got.AudibleStatus)
+	assert.Equal(t, "2024-01-10", got.PurchaseDate)
+	assert.Equal(t, 720, got.RuntimeMinutes)
+	assert.Equal(t, "Narrator X", got.Narrators)
+	assert.Equal(t, "Thriller Series", got.SeriesName)
+	assert.Equal(t, "1", got.SeriesPosition)
+
+	// Local-only fields should be PRESERVED
+	assert.Equal(t, "scanned", got.Status)
+	assert.Equal(t, "/library/Local Author/Local Title [B09LOCAL1]", got.LocalPath)
+	assert.Equal(t, "tag", got.MetadataSource)
+	assert.Equal(t, 3, got.FileCount)
+	assert.True(t, got.HasCover)
+	assert.Equal(t, 36000, got.Duration)
+	assert.Equal(t, 15, got.ChapterCount)
+}
+
+func TestListNewBooks(t *testing.T) {
+	db := setupTestDB(t)
+
+	tests := []struct {
+		name     string
+		book     Book
+		expected bool // should appear in ListNewBooks
+	}{
+		{
+			name: "remote only, no local path - should appear",
+			book: Book{
+				ASIN:          "NEW001",
+				Title:         "New Remote Book",
+				Author:        "Author",
+				Status:        "unknown",
+				AudibleStatus: "new",
+			},
+			expected: true,
+		},
+		{
+			name: "downloaded with local path - should NOT appear",
+			book: Book{
+				ASIN:          "DL001",
+				Title:         "Downloaded Book",
+				Author:        "Author",
+				Status:        "downloaded",
+				LocalPath:     "/library/Author/Downloaded Book [DL001]",
+				AudibleStatus: "finished",
+			},
+			expected: false,
+		},
+		{
+			name: "organized with local path - should NOT appear",
+			book: Book{
+				ASIN:          "ORG001",
+				Title:         "Organized Book",
+				Author:        "Author",
+				Status:        "organized",
+				LocalPath:     "/library/Author/Organized Book [ORG001]",
+				AudibleStatus: "finished",
+			},
+			expected: false,
+		},
+		{
+			name: "scanned with local path - SHOULD appear (scanned != downloaded)",
+			book: Book{
+				ASIN:          "SCAN001",
+				Title:         "Scanned Book",
+				Author:        "Author",
+				Status:        "scanned",
+				LocalPath:     "/library/Author/Scanned Book [SCAN001]",
+				AudibleStatus: "in_progress",
+			},
+			expected: true,
+		},
+		{
+			name: "no audible_status - should NOT appear",
+			book: Book{
+				ASIN:   "LOCAL001",
+				Title:  "Local Only Book",
+				Author: "Author",
+				Status: "scanned",
+			},
+			expected: false,
+		},
+		{
+			name: "error status with audible_status - should appear",
+			book: Book{
+				ASIN:          "ERR001",
+				Title:         "Error Book",
+				Author:        "Author",
+				Status:        "error",
+				AudibleStatus: "finished",
+			},
+			expected: true,
+		},
+	}
+
+	// Insert all test books
+	for _, tt := range tests {
+		if tt.book.Status == "" {
+			tt.book.Status = "unknown"
+		}
+		err := InsertBook(db, tt.book)
+		require.NoError(t, err, "inserting %s", tt.name)
+	}
+
+	// Get new books
+	newBooks, err := ListNewBooks(db)
+	require.NoError(t, err)
+
+	// Build a set of ASINs returned
+	gotASINs := make(map[string]bool)
+	for _, b := range newBooks {
+		gotASINs[b.ASIN] = true
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.expected {
+				assert.True(t, gotASINs[tt.book.ASIN], "expected %s to be in new books", tt.book.ASIN)
+			} else {
+				assert.False(t, gotASINs[tt.book.ASIN], "expected %s to NOT be in new books", tt.book.ASIN)
+			}
+		})
+	}
+}
+
+func TestListNewBooks_Empty(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Insert a book with no audible_status
+	err := InsertBook(db, Book{ASIN: "LOCAL001", Title: "Local", Author: "A", Status: "scanned"})
+	require.NoError(t, err)
+
+	newBooks, err := ListNewBooks(db)
+	require.NoError(t, err)
+	assert.NotNil(t, newBooks)
+	assert.Empty(t, newBooks)
+}
