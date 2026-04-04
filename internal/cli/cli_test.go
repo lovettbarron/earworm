@@ -22,6 +22,7 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	filterAuthor = ""
 	filterStatus = ""
 	scanRecursive = false
+	syncJSON = false
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)

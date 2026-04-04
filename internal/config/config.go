@@ -22,6 +22,7 @@ func SetDefaults() {
 	viper.SetDefault("download.max_retries", 3)
 	viper.SetDefault("download.backoff_multiplier", 2.0)
 	viper.SetDefault("scan.recursive", false)
+	viper.SetDefault("audible.profile_path", "")
 }
 
 // InitConfig initializes the configuration system. If cfgFile is provided, it
@@ -88,6 +89,7 @@ func ValidKeys() []string {
 		"download.max_retries",
 		"download.rate_limit_seconds",
 		"library_path",
+		"audible.profile_path",
 		"scan.recursive",
 		"staging_path",
 	}
