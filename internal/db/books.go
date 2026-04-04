@@ -339,6 +339,62 @@ func ListDownloadable(db *sql.DB) ([]Book, error) {
 	return books, nil
 }
 
+// ListOrganizable returns books that are ready to be organized into the library:
+// books with 'downloaded' status, ordered by updated_at ascending (oldest first).
+// Returns an empty slice (not nil) when no books match.
+func ListOrganizable(db *sql.DB) ([]Book, error) {
+	rows, err := db.Query(
+		`SELECT `+allColumns+` FROM books WHERE status = 'downloaded' ORDER BY updated_at ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list organizable: %w", err)
+	}
+	defer rows.Close()
+
+	var books []Book
+	for rows.Next() {
+		b, err := scanBook(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan organizable row: %w", err)
+		}
+		books = append(books, *b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate organizable: %w", err)
+	}
+
+	if books == nil {
+		books = []Book{}
+	}
+	return books, nil
+}
+
+// UpdateOrganizeResult updates a book's status, local_path, and last_error atomically.
+// Used after organize attempts to record success (status="organized") or failure (status="error").
+// Returns an error if the ASIN does not exist or if the status is invalid.
+func UpdateOrganizeResult(db *sql.DB, asin, status, localPath, lastError string) error {
+	if !isValidStatus(status) {
+		return fmt.Errorf("invalid status %q", status)
+	}
+
+	result, err := db.Exec(
+		`UPDATE books SET status = ?, local_path = ?, last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE asin = ?`,
+		status, localPath, lastError, asin,
+	)
+	if err != nil {
+		return fmt.Errorf("update organize result %s: %w", asin, err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("book %s not found", asin)
+	}
+	return nil
+}
+
 // ListNewBooks returns books that exist in Audible (audible_status is set)
 // but are not yet downloaded locally. This includes books with no local_path,
 // or books whose status is not yet 'downloaded' or 'organized'.

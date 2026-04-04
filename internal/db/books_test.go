@@ -232,6 +232,114 @@ func TestScanBookNewColumns(t *testing.T) {
 	assert.Nil(t, got.DownloadCompletedAt)
 }
 
+func TestListOrganizable(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Insert books with various statuses
+	books := []Book{
+		{ASIN: "ORG001", Title: "Downloaded Book 1", Author: "Author A", Status: "downloaded", AudibleStatus: "finished"},
+		{ASIN: "ORG002", Title: "Downloaded Book 2", Author: "Author B", Status: "downloaded", AudibleStatus: "new"},
+		{ASIN: "ORG003", Title: "Scanned Book", Author: "Author C", Status: "scanned"},
+		{ASIN: "ORG004", Title: "Organized Book", Author: "Author D", Status: "organized", AudibleStatus: "finished"},
+		{ASIN: "ORG005", Title: "Error Book", Author: "Author E", Status: "error", AudibleStatus: "finished"},
+		{ASIN: "ORG006", Title: "Downloading Book", Author: "Author F", Status: "downloading", AudibleStatus: "new"},
+	}
+	for _, b := range books {
+		err := InsertBook(db, b)
+		require.NoError(t, err)
+	}
+
+	result, err := ListOrganizable(db)
+	require.NoError(t, err)
+	assert.Len(t, result, 2, "should return only 'downloaded' books")
+
+	asins := make(map[string]bool)
+	for _, b := range result {
+		asins[b.ASIN] = true
+	}
+	assert.True(t, asins["ORG001"])
+	assert.True(t, asins["ORG002"])
+}
+
+func TestListOrganizable_Empty(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Insert only non-downloaded books
+	err := InsertBook(db, Book{ASIN: "ORG010", Title: "Scanned", Author: "A", Status: "scanned"})
+	require.NoError(t, err)
+
+	result, err := ListOrganizable(db)
+	require.NoError(t, err)
+	assert.NotNil(t, result, "should return empty slice, not nil")
+	assert.Empty(t, result)
+}
+
+func TestUpdateOrganizeResult(t *testing.T) {
+	db := setupTestDB(t)
+
+	err := InsertBook(db, Book{
+		ASIN:          "UOR001",
+		Title:         "Organize Me",
+		Author:        "Author",
+		Status:        "downloaded",
+		AudibleStatus: "finished",
+	})
+	require.NoError(t, err)
+
+	// Update to organized with local path
+	err = UpdateOrganizeResult(db, "UOR001", "organized", "/library/Author/Organize Me [UOR001]", "")
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "UOR001")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "organized", got.Status)
+	assert.Equal(t, "/library/Author/Organize Me [UOR001]", got.LocalPath)
+	assert.Equal(t, "", got.LastError)
+}
+
+func TestUpdateOrganizeResult_Error(t *testing.T) {
+	db := setupTestDB(t)
+
+	err := InsertBook(db, Book{
+		ASIN:   "UOR002",
+		Title:  "Fail Book",
+		Author: "Author",
+		Status: "downloaded",
+	})
+	require.NoError(t, err)
+
+	// Update to error with message
+	err = UpdateOrganizeResult(db, "UOR002", "error", "", "author is required")
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "UOR002")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "error", got.Status)
+	assert.Equal(t, "", got.LocalPath)
+	assert.Equal(t, "author is required", got.LastError)
+}
+
+func TestUpdateOrganizeResult_InvalidStatus(t *testing.T) {
+	db := setupTestDB(t)
+
+	err := InsertBook(db, Book{ASIN: "UOR003", Title: "Test", Author: "A", Status: "downloaded"})
+	require.NoError(t, err)
+
+	err = UpdateOrganizeResult(db, "UOR003", "invalid_status", "", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid status")
+}
+
+func TestUpdateOrganizeResult_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+
+	err := UpdateOrganizeResult(db, "NONEXISTENT", "organized", "/path", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
 func TestMigration004Applied(t *testing.T) {
 	db := setupTestDB(t)
 
