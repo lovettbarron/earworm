@@ -14,7 +14,6 @@ type AudibleClient interface {
 	// LibraryExport exports the full Audible library as structured data.
 	LibraryExport(ctx context.Context) ([]LibraryItem, error)
 	// Download downloads a book by ASIN to the given output directory.
-	// Stubbed for Phase 4 -- returns ErrNotImplemented.
 	Download(ctx context.Context, asin string, outputDir string) error
 }
 

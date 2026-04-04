@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,6 +61,10 @@ func TestHelperProcess(t *testing.T) {
 	case "library_export_fail":
 		fmt.Fprint(os.Stderr, "Error: unauthorized")
 		os.Exit(1)
+	case "slow":
+		// Sleep long enough for context cancellation to take effect
+		time.Sleep(10 * time.Second)
+		os.Exit(0)
 	}
 	os.Exit(0)
 }
@@ -69,7 +74,7 @@ func fakeCommand(scenario string) func(ctx context.Context, name string, args ..
 	return func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		cs := []string{"-test.run=TestHelperProcess", "--"}
 		cs = append(cs, args...)
-		cmd := exec.Command(os.Args[0], cs...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cs...)
 		cmd.Env = append(os.Environ(),
 			"GO_WANT_HELPER_PROCESS=1",
 			"GO_HELPER_SCENARIO="+scenario,
@@ -130,12 +135,6 @@ func TestLibraryExport_AuthFailure(t *testing.T) {
 
 	var authErr *AuthError
 	assert.True(t, errors.As(err, &authErr), "expected *AuthError, got %T", err)
-}
-
-func TestDownload_NotImplemented(t *testing.T) {
-	c := NewClient("audible")
-	err := c.Download(context.Background(), "B08C6YJ1LS", "/tmp/output")
-	assert.ErrorIs(t, err, ErrNotImplemented)
 }
 
 func TestClassifyError(t *testing.T) {
