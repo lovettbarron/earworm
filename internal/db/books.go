@@ -36,6 +36,12 @@ type Book struct {
 	LocalPath      string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	AudibleStatus  string // "finished", "in_progress", "new", or ""
+	PurchaseDate   string // ISO date string from Audible
+	RuntimeMinutes int    // runtime in minutes from Audible
+	Narrators      string // comma-separated narrator names from Audible
+	SeriesName     string // series title from Audible
+	SeriesPosition string // position in series (e.g., "1", "2.5")
 }
 
 // isValidStatus checks whether a status string is in the allowed set.
@@ -67,11 +73,13 @@ func InsertBook(db *sql.DB, book Book) error {
 	}
 
 	_, err := db.Exec(
-		`INSERT INTO books (asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO books (asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		book.ASIN, book.Title, book.Author, book.Narrator, book.Genre, book.Year,
 		book.Series, hasCoverToInt(book.HasCover), book.Duration, book.ChapterCount,
 		book.MetadataSource, book.FileCount, book.Status, book.LocalPath,
+		book.AudibleStatus, book.PurchaseDate, book.RuntimeMinutes, book.Narrators,
+		book.SeriesName, book.SeriesPosition,
 	)
 	if err != nil {
 		return fmt.Errorf("insert book %s: %w", book.ASIN, err)
@@ -90,8 +98,8 @@ func UpsertBook(db *sql.DB, book Book) error {
 	}
 
 	_, err := db.Exec(
-		`INSERT INTO books (asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO books (asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(asin) DO UPDATE SET
 			title = excluded.title,
 			author = excluded.author,
@@ -106,10 +114,18 @@ func UpsertBook(db *sql.DB, book Book) error {
 			file_count = excluded.file_count,
 			status = excluded.status,
 			local_path = excluded.local_path,
+			audible_status = excluded.audible_status,
+			purchase_date = excluded.purchase_date,
+			runtime_minutes = excluded.runtime_minutes,
+			narrators = excluded.narrators,
+			series_name = excluded.series_name,
+			series_position = excluded.series_position,
 			updated_at = CURRENT_TIMESTAMP`,
 		book.ASIN, book.Title, book.Author, book.Narrator, book.Genre, book.Year,
 		book.Series, hasCoverToInt(book.HasCover), book.Duration, book.ChapterCount,
 		book.MetadataSource, book.FileCount, book.Status, book.LocalPath,
+		book.AudibleStatus, book.PurchaseDate, book.RuntimeMinutes, book.Narrators,
+		book.SeriesName, book.SeriesPosition,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert book %s: %w", book.ASIN, err)
@@ -125,6 +141,8 @@ func scanBook(scanner interface{ Scan(dest ...any) error }) (*Book, error) {
 		&b.ASIN, &b.Title, &b.Author, &b.Narrator, &b.Genre, &b.Year,
 		&b.Series, &hasCover, &b.Duration, &b.ChapterCount, &b.MetadataSource,
 		&b.FileCount, &b.Status, &b.LocalPath, &b.CreatedAt, &b.UpdatedAt,
+		&b.AudibleStatus, &b.PurchaseDate, &b.RuntimeMinutes, &b.Narrators,
+		&b.SeriesName, &b.SeriesPosition,
 	)
 	if err != nil {
 		return nil, err
@@ -134,7 +152,7 @@ func scanBook(scanner interface{ Scan(dest ...any) error }) (*Book, error) {
 }
 
 // allColumns is the shared column list for SELECT queries.
-const allColumns = `asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, created_at, updated_at`
+const allColumns = `asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, created_at, updated_at, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position`
 
 // GetBook retrieves a book by ASIN. Returns nil and no error if not found.
 func GetBook(db *sql.DB, asin string) (*Book, error) {
@@ -204,4 +222,71 @@ func UpdateBookStatus(db *sql.DB, asin string, status string) error {
 		return fmt.Errorf("book %s not found", asin)
 	}
 	return nil
+}
+
+// SyncRemoteBook upserts a book from Audible remote metadata.
+// On insert, sets local-only fields to defaults (status="unknown", local_path="", metadata_source="", file_count=0).
+// On conflict, updates remote metadata fields but preserves local-only fields
+// (status, local_path, metadata_source, file_count, has_cover, duration, chapter_count).
+func SyncRemoteBook(db *sql.DB, book Book) error {
+	_, err := db.Exec(
+		`INSERT INTO books (asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, 'unknown', '', ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(asin) DO UPDATE SET
+			title = excluded.title,
+			author = excluded.author,
+			narrator = excluded.narrator,
+			genre = excluded.genre,
+			year = excluded.year,
+			series = excluded.series,
+			audible_status = excluded.audible_status,
+			purchase_date = excluded.purchase_date,
+			runtime_minutes = excluded.runtime_minutes,
+			narrators = excluded.narrators,
+			series_name = excluded.series_name,
+			series_position = excluded.series_position,
+			updated_at = CURRENT_TIMESTAMP`,
+		book.ASIN, book.Title, book.Author, book.Narrator, book.Genre, book.Year,
+		book.Series, hasCoverToInt(book.HasCover), book.Duration, book.ChapterCount,
+		book.AudibleStatus, book.PurchaseDate, book.RuntimeMinutes, book.Narrators,
+		book.SeriesName, book.SeriesPosition,
+	)
+	if err != nil {
+		return fmt.Errorf("sync remote book %s: %w", book.ASIN, err)
+	}
+	return nil
+}
+
+// ListNewBooks returns books that exist in Audible (audible_status is set)
+// but are not yet downloaded locally. This includes books with no local_path,
+// or books whose status is not yet 'downloaded' or 'organized'.
+// Returns an empty slice (not nil) when no new books exist.
+func ListNewBooks(db *sql.DB) ([]Book, error) {
+	rows, err := db.Query(
+		`SELECT `+allColumns+` FROM books
+		WHERE audible_status != ''
+		  AND (local_path = '' OR status NOT IN ('downloaded', 'organized'))
+		ORDER BY purchase_date DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list new books: %w", err)
+	}
+	defer rows.Close()
+
+	var books []Book
+	for rows.Next() {
+		b, err := scanBook(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan new book row: %w", err)
+		}
+		books = append(books, *b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate new books: %w", err)
+	}
+
+	if books == nil {
+		books = []Book{}
+	}
+	return books, nil
 }

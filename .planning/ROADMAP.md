@@ -64,7 +64,7 @@ Plans:
   5. Unit tests cover audible-cli wrapper (command building, output parsing, error mapping) using fake subprocess; integration tests verify sync and new-book detection flows
 **Plans**: 3 plans
 Plans:
-- [ ] 03-01-PLAN.md — DB migration 003 (Audible metadata columns), SyncRemoteBook upsert, ListNewBooks query
+- [x] 03-01-PLAN.md — DB migration 003 (Audible metadata columns), SyncRemoteBook upsert, ListNewBooks query
 - [ ] 03-02-PLAN.md — audible-cli subprocess wrapper package (interface, auth, library export, parsing, errors, tests)
 - [ ] 03-03-PLAN.md — CLI commands (earworm auth, sync, download --dry-run), integration tests
 
@@ -113,7 +113,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Foundation & Configuration | 0/3 | Planning complete | - |
 | 2. Local Library Scanning | 0/2 | Planning complete | - |
-| 3. Audible Integration | 0/3 | Planning complete | - |
+| 3. Audible Integration | 1/3 | Executing | - |
 | 4. Download Pipeline | 0/0 | Not started | - |
 | 5. File Organization | 0/0 | Not started | - |
 | 6. Integrations & Polish | 0/0 | Not started | - |
