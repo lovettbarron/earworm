@@ -16,6 +16,13 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	viper.Reset()
 	t.Cleanup(func() { viper.Reset() })
 
+	// Reset package-level flag variables to prevent cross-test contamination.
+	// Cobra flags bind to package vars which persist across tests.
+	jsonOutput = false
+	filterAuthor = ""
+	filterStatus = ""
+	scanRecursive = false
+
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
