@@ -8,11 +8,11 @@
 ### Library Management
 
 - [x] **LIB-01**: User can scan an existing local audiobook directory and index discovered books by ASIN
-- [ ] **LIB-02**: User can view the current state of their library (books, download status, metadata)
+- [x] **LIB-02**: User can view the current state of their library (books, download status, metadata)
 - [x] **LIB-03**: Library state persists in a local SQLite database (not on NAS mount)
 - [ ] **LIB-04**: User can configure the library root path (NAS mount or local directory)
 - [ ] **LIB-05**: User can preview what would be downloaded without downloading (dry-run mode)
-- [ ] **LIB-06**: User can get machine-readable JSON output from all list/status commands
+- [x] **LIB-06**: User can get machine-readable JSON output from all list/status commands
 
 ### Audible Integration
 
@@ -50,7 +50,7 @@
 
 - [ ] **CLI-01**: User interacts via clear CLI commands (auth, sync, download, status, scan)
 - [ ] **CLI-02**: User can configure all settings via config file and/or CLI flags
-- [ ] **CLI-03**: Error messages clearly communicate what went wrong and how to recover
+- [x] **CLI-03**: Error messages clearly communicate what went wrong and how to recover
 - [ ] **CLI-04**: README documents installation, setup (including audible-cli dependency), and all commands
 - [ ] **CLI-05**: README is updated with each phase to reflect current capabilities
 
@@ -59,7 +59,7 @@
 - [x] **TEST-01**: Unit tests for SQLite database layer (schema creation, CRUD operations, migrations) with table-driven tests
 - [ ] **TEST-02**: Unit tests for configuration loading and validation (config file parsing, flag binding, defaults)
 - [x] **TEST-03**: Unit tests for local library scanner (directory walking, ASIN extraction, metadata parsing)
-- [ ] **TEST-04**: Integration tests for CLI commands (earworm scan, status, --json output correctness)
+- [x] **TEST-04**: Integration tests for CLI commands (earworm scan, status, --json output correctness)
 - [ ] **TEST-05**: Unit tests for audible-cli subprocess wrapper (command construction, output parsing, error handling) using mock/fake subprocess
 - [ ] **TEST-06**: Integration tests for Audible sync flow (auth validation, library metadata sync, new book detection)
 - [ ] **TEST-07**: Unit tests for download pipeline logic (rate limiting, backoff calculation, retry state machine, progress tracking)
@@ -95,11 +95,11 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | LIB-01 | Phase 2 | Complete |
-| LIB-02 | Phase 2 | Pending |
+| LIB-02 | Phase 2 | Complete |
 | LIB-03 | Phase 1 | Complete |
 | LIB-04 | Phase 1 | Pending |
 | LIB-05 | Phase 3 | Pending |
-| LIB-06 | Phase 2 | Pending |
+| LIB-06 | Phase 2 | Complete |
 | AUD-01 | Phase 3 | Pending |
 | AUD-02 | Phase 3 | Pending |
 | AUD-03 | Phase 3 | Pending |
@@ -122,13 +122,13 @@
 | INT-04 | Phase 6 | Pending |
 | CLI-01 | Phase 1 | Pending |
 | CLI-02 | Phase 1 | Pending |
-| CLI-03 | Phase 2 | Pending |
+| CLI-03 | Phase 2 | Complete |
 | CLI-04 | Phase 1 | Pending |
 | CLI-05 | Phase 6 | Pending |
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Pending |
 | TEST-03 | Phase 2 | Complete |
-| TEST-04 | Phase 2 | Pending |
+| TEST-04 | Phase 2 | Complete |
 | TEST-05 | Phase 3 | Pending |
 | TEST-06 | Phase 3 | Pending |
 | TEST-07 | Phase 4 | Pending |

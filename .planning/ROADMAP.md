@@ -50,7 +50,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 02-01-PLAN.md — DB schema extension, scanner package (ASIN extraction, directory walking), metadata extraction with fallback chain
-- [ ] 02-02-PLAN.md — CLI commands (earworm scan, earworm status), --json output, integration tests
+- [x] 02-02-PLAN.md — CLI commands (earworm scan, earworm status), --json output, integration tests
 
 ### Phase 3: Audible Integration
 **Goal**: Users can connect to their Audible account, see what books they own remotely, and identify what is new
