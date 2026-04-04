@@ -95,7 +95,10 @@ Plans:
   2. Each book folder contains the M4A audio file, cover art, and chapter metadata in their correct locations
   3. File moves from staging to library work correctly across filesystem boundaries (local to NAS mount)
   4. Unit tests cover path construction and naming logic; integration tests verify staging-to-library moves including cross-filesystem boundary handling
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 05-01-PLAN.md — Path construction (sanitization, first-author, BuildBookPath) and cross-filesystem file mover with size verification (TDD)
+- [ ] 05-02-PLAN.md — Organizer orchestrator, DB functions (ListOrganizable), earworm organize CLI command, integration tests
 
 ### Phase 6: Integrations & Polish
 **Goal**: Users have a complete audiobook workflow with Audiobookshelf scan triggers, Goodreads sync, and unattended operation
@@ -120,5 +123,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Local Library Scanning | 0/2 | Planning complete | - |
 | 3. Audible Integration | 1/3 | Executing | - |
 | 4. Download Pipeline | 0/4 | Planning complete | - |
-| 5. File Organization | 0/0 | Not started | - |
+| 5. File Organization | 0/2 | Planning complete | - |
 | 6. Integrations & Polish | 0/0 | Not started | - |
