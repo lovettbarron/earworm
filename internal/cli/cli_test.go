@@ -18,11 +18,15 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 
 	// Reset package-level flag variables to prevent cross-test contamination.
 	// Cobra flags bind to package vars which persist across tests.
+	cfgFile = ""
+	quiet = false
 	jsonOutput = false
 	filterAuthor = ""
 	filterStatus = ""
 	scanRecursive = false
 	syncJSON = false
+	dryRun = false
+	downloadJSON = false
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)

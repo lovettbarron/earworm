@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lovettbarron/earworm/internal/audible"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var authCmd = &cobra.Command{
@@ -23,12 +21,7 @@ func init() {
 }
 
 func runAuth(cmd *cobra.Command, args []string) error {
-	cliPath := viper.GetString("audible_cli_path")
-	var opts []audible.ClientOption
-	if profilePath := viper.GetString("audible.profile_path"); profilePath != "" {
-		opts = append(opts, audible.WithProfilePath(profilePath))
-	}
-	client := audible.NewClient(cliPath, opts...)
+	client := newAudibleClient()
 
 	fmt.Fprintln(cmd.OutOrStdout(), "Starting Audible authentication...")
 	fmt.Fprintln(cmd.OutOrStdout(), "You will be guided through the login process by audible-cli.")
