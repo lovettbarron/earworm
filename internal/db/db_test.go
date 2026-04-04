@@ -379,6 +379,63 @@ func TestUpsertBookUpdate(t *testing.T) {
 	assert.True(t, got.UpdatedAt.Unix() >= originalUpdatedAt.Unix())
 }
 
+func TestMigration003Applied(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Verify migration 003 was recorded
+	var version int
+	err := db.QueryRow("SELECT version FROM schema_versions WHERE version = 3").Scan(&version)
+	require.NoError(t, err)
+	assert.Equal(t, 3, version)
+
+	// Verify new columns exist by inserting a row with them
+	_, err = db.Exec(`INSERT INTO books (asin, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position)
+		VALUES ('MIGTEST003', 'finished', '2024-01-15', 720, 'Ray Porter, Wil Wheaton', 'Bobiverse', '1')`)
+	require.NoError(t, err)
+
+	// Read back and verify
+	var audibleStatus, purchaseDate, narrators, seriesName, seriesPosition string
+	var runtimeMinutes int
+	err = db.QueryRow(`SELECT audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position FROM books WHERE asin = 'MIGTEST003'`).
+		Scan(&audibleStatus, &purchaseDate, &runtimeMinutes, &narrators, &seriesName, &seriesPosition)
+	require.NoError(t, err)
+	assert.Equal(t, "finished", audibleStatus)
+	assert.Equal(t, "2024-01-15", purchaseDate)
+	assert.Equal(t, 720, runtimeMinutes)
+	assert.Equal(t, "Ray Porter, Wil Wheaton", narrators)
+	assert.Equal(t, "Bobiverse", seriesName)
+	assert.Equal(t, "1", seriesPosition)
+}
+
+func TestInsertBookWithAudibleFields(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{
+		ASIN:           "B08AUDIBLE1",
+		Title:          "Test Audible Book",
+		Author:         "Test Author",
+		Status:         "unknown",
+		AudibleStatus:  "finished",
+		PurchaseDate:   "2024-03-20",
+		RuntimeMinutes: 480,
+		Narrators:      "Narrator One",
+		SeriesName:     "Test Series",
+		SeriesPosition: "2.5",
+	}
+	err := InsertBook(db, book)
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "B08AUDIBLE1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "finished", got.AudibleStatus)
+	assert.Equal(t, "2024-03-20", got.PurchaseDate)
+	assert.Equal(t, 480, got.RuntimeMinutes)
+	assert.Equal(t, "Narrator One", got.Narrators)
+	assert.Equal(t, "Test Series", got.SeriesName)
+	assert.Equal(t, "2.5", got.SeriesPosition)
+}
+
 func TestUpsertBookPreservesCreatedAt(t *testing.T) {
 	db := setupTestDB(t)
 
