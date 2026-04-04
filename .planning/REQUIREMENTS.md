@@ -26,12 +26,12 @@
 - [ ] **DL-01**: User can download audiobooks from Audible in M4A format via audible-cli
 - [ ] **DL-02**: Downloads include cover art saved alongside audio files
 - [ ] **DL-03**: Downloads include chapter metadata JSON alongside audio files
-- [ ] **DL-04**: Downloads are rate-limited with configurable delays between requests
-- [ ] **DL-05**: Downloads use exponential backoff on errors to avoid Audible throttling
-- [ ] **DL-06**: User sees per-book and overall progress during batch downloads
+- [x] **DL-04**: Downloads are rate-limited with configurable delays between requests
+- [x] **DL-05**: Downloads use exponential backoff on errors to avoid Audible throttling
+- [x] **DL-06**: User sees per-book and overall progress during batch downloads
 - [ ] **DL-07**: Batch downloads survive process interruptions and resume from the last incomplete book
 - [ ] **DL-08**: Failed downloads are tracked and can be retried without re-downloading successful books
-- [ ] **DL-09**: Downloads go to a local staging directory first, then move to the library location
+- [x] **DL-09**: Downloads go to a local staging directory first, then move to the library location
 
 ### File Organization
 
@@ -62,7 +62,7 @@
 - [x] **TEST-04**: Integration tests for CLI commands (earworm scan, status, --json output correctness)
 - [x] **TEST-05**: Unit tests for audible-cli subprocess wrapper (command construction, output parsing, error handling) using mock/fake subprocess
 - [ ] **TEST-06**: Integration tests for Audible sync flow (auth validation, library metadata sync, new book detection)
-- [ ] **TEST-07**: Unit tests for download pipeline logic (rate limiting, backoff calculation, retry state machine, progress tracking)
+- [x] **TEST-07**: Unit tests for download pipeline logic (rate limiting, backoff calculation, retry state machine, progress tracking)
 - [ ] **TEST-08**: Integration tests for download fault tolerance (interrupt recovery, partial download resume, failure tracking)
 - [ ] **TEST-09**: Unit tests for file organization logic (path construction, cross-filesystem move, naming conventions)
 - [ ] **TEST-10**: Integration tests for end-to-end file organization (staging to library move, folder structure validation)
@@ -107,12 +107,12 @@
 | DL-01 | Phase 4 | Pending |
 | DL-02 | Phase 4 | Pending |
 | DL-03 | Phase 4 | Pending |
-| DL-04 | Phase 4 | Pending |
-| DL-05 | Phase 4 | Pending |
-| DL-06 | Phase 4 | Pending |
+| DL-04 | Phase 4 | Complete |
+| DL-05 | Phase 4 | Complete |
+| DL-06 | Phase 4 | Complete |
 | DL-07 | Phase 4 | Pending |
 | DL-08 | Phase 4 | Pending |
-| DL-09 | Phase 4 | Pending |
+| DL-09 | Phase 4 | Complete |
 | ORG-01 | Phase 5 | Pending |
 | ORG-02 | Phase 5 | Pending |
 | ORG-03 | Phase 5 | Pending |
@@ -131,7 +131,7 @@
 | TEST-04 | Phase 2 | Complete |
 | TEST-05 | Phase 3 | Complete |
 | TEST-06 | Phase 3 | Pending |
-| TEST-07 | Phase 4 | Pending |
+| TEST-07 | Phase 4 | Complete |
 | TEST-08 | Phase 4 | Pending |
 | TEST-09 | Phase 5 | Pending |
 | TEST-10 | Phase 5 | Pending |
