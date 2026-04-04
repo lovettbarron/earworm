@@ -65,7 +65,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 03-01-PLAN.md — DB migration 003 (Audible metadata columns), SyncRemoteBook upsert, ListNewBooks query
-- [ ] 03-02-PLAN.md — audible-cli subprocess wrapper package (interface, auth, library export, parsing, errors, tests)
+- [x] 03-02-PLAN.md — audible-cli subprocess wrapper package (interface, auth, library export, parsing, errors, tests)
 - [ ] 03-03-PLAN.md — CLI commands (earworm auth, sync, download --dry-run), integration tests
 
 ### Phase 4: Download Pipeline

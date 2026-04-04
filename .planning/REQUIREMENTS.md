@@ -16,8 +16,8 @@
 
 ### Audible Integration
 
-- [ ] **AUD-01**: User can authenticate with Audible via wrapped audible-cli subprocess
-- [ ] **AUD-02**: User can list all books in their Audible account
+- [x] **AUD-01**: User can authenticate with Audible via wrapped audible-cli subprocess
+- [x] **AUD-02**: User can list all books in their Audible account
 - [ ] **AUD-03**: User can sync their Audible library metadata to the local database
 - [ ] **AUD-04**: User can detect new books available in Audible but not yet downloaded locally
 
@@ -60,7 +60,7 @@
 - [ ] **TEST-02**: Unit tests for configuration loading and validation (config file parsing, flag binding, defaults)
 - [x] **TEST-03**: Unit tests for local library scanner (directory walking, ASIN extraction, metadata parsing)
 - [x] **TEST-04**: Integration tests for CLI commands (earworm scan, status, --json output correctness)
-- [ ] **TEST-05**: Unit tests for audible-cli subprocess wrapper (command construction, output parsing, error handling) using mock/fake subprocess
+- [x] **TEST-05**: Unit tests for audible-cli subprocess wrapper (command construction, output parsing, error handling) using mock/fake subprocess
 - [ ] **TEST-06**: Integration tests for Audible sync flow (auth validation, library metadata sync, new book detection)
 - [ ] **TEST-07**: Unit tests for download pipeline logic (rate limiting, backoff calculation, retry state machine, progress tracking)
 - [ ] **TEST-08**: Integration tests for download fault tolerance (interrupt recovery, partial download resume, failure tracking)
@@ -100,8 +100,8 @@
 | LIB-04 | Phase 1 | Pending |
 | LIB-05 | Phase 3 | Pending |
 | LIB-06 | Phase 2 | Complete |
-| AUD-01 | Phase 3 | Pending |
-| AUD-02 | Phase 3 | Pending |
+| AUD-01 | Phase 3 | Complete |
+| AUD-02 | Phase 3 | Complete |
 | AUD-03 | Phase 3 | Pending |
 | AUD-04 | Phase 3 | Pending |
 | DL-01 | Phase 4 | Pending |
@@ -129,7 +129,7 @@
 | TEST-02 | Phase 1 | Pending |
 | TEST-03 | Phase 2 | Complete |
 | TEST-04 | Phase 2 | Complete |
-| TEST-05 | Phase 3 | Pending |
+| TEST-05 | Phase 3 | Complete |
 | TEST-06 | Phase 3 | Pending |
 | TEST-07 | Phase 4 | Pending |
 | TEST-08 | Phase 4 | Pending |
