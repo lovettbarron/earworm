@@ -223,3 +223,70 @@ func UpdateBookStatus(db *sql.DB, asin string, status string) error {
 	}
 	return nil
 }
+
+// SyncRemoteBook upserts a book from Audible remote metadata.
+// On insert, sets local-only fields to defaults (status="unknown", local_path="", metadata_source="", file_count=0).
+// On conflict, updates remote metadata fields but preserves local-only fields
+// (status, local_path, metadata_source, file_count, has_cover, duration, chapter_count).
+func SyncRemoteBook(db *sql.DB, book Book) error {
+	_, err := db.Exec(
+		`INSERT INTO books (asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, 'unknown', '', ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(asin) DO UPDATE SET
+			title = excluded.title,
+			author = excluded.author,
+			narrator = excluded.narrator,
+			genre = excluded.genre,
+			year = excluded.year,
+			series = excluded.series,
+			audible_status = excluded.audible_status,
+			purchase_date = excluded.purchase_date,
+			runtime_minutes = excluded.runtime_minutes,
+			narrators = excluded.narrators,
+			series_name = excluded.series_name,
+			series_position = excluded.series_position,
+			updated_at = CURRENT_TIMESTAMP`,
+		book.ASIN, book.Title, book.Author, book.Narrator, book.Genre, book.Year,
+		book.Series, hasCoverToInt(book.HasCover), book.Duration, book.ChapterCount,
+		book.AudibleStatus, book.PurchaseDate, book.RuntimeMinutes, book.Narrators,
+		book.SeriesName, book.SeriesPosition,
+	)
+	if err != nil {
+		return fmt.Errorf("sync remote book %s: %w", book.ASIN, err)
+	}
+	return nil
+}
+
+// ListNewBooks returns books that exist in Audible (audible_status is set)
+// but are not yet downloaded locally. This includes books with no local_path,
+// or books whose status is not yet 'downloaded' or 'organized'.
+// Returns an empty slice (not nil) when no new books exist.
+func ListNewBooks(db *sql.DB) ([]Book, error) {
+	rows, err := db.Query(
+		`SELECT `+allColumns+` FROM books
+		WHERE audible_status != ''
+		  AND (local_path = '' OR status NOT IN ('downloaded', 'organized'))
+		ORDER BY purchase_date DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list new books: %w", err)
+	}
+	defer rows.Close()
+
+	var books []Book
+	for rows.Next() {
+		b, err := scanBook(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan new book row: %w", err)
+		}
+		books = append(books, *b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate new books: %w", err)
+	}
+
+	if books == nil {
+		books = []Book{}
+	}
+	return books, nil
+}
