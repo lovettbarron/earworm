@@ -109,10 +109,103 @@ func TestDryRun_JSON(t *testing.T) {
 	assert.Equal(t, "1", result[0].SeriesPosition)
 }
 
-func TestDownload_NoFlag(t *testing.T) {
-	cfgPath := setupDownloadDB(t, nil)
+func TestDownload_NoLibraryPath(t *testing.T) {
+	// Setup with no library_path in config
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	t.Cleanup(func() { os.Setenv("HOME", origHome) })
+
+	cfgDir := filepath.Join(tmpHome, ".config", "earworm")
+	require.NoError(t, os.MkdirAll(cfgDir, 0755))
+
+	cfgPath := filepath.Join(cfgDir, "config.yaml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte("audible_cli_path: audible\n"), 0644))
 
 	_, err := executeCommand(t, "--config", cfgPath, "download")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not yet implemented")
+	assert.Contains(t, err.Error(), "library_path not configured")
+	assert.Contains(t, err.Error(), "earworm config set library_path")
+}
+
+func TestDownload_LimitFlagRegistered(t *testing.T) {
+	flag := downloadCmd.Flags().Lookup("limit")
+	require.NotNil(t, flag)
+	assert.Equal(t, "0", flag.DefValue)
+	assert.Contains(t, flag.Usage, "maximum")
+}
+
+func TestDownload_ASINFlagRegistered(t *testing.T) {
+	flag := downloadCmd.Flags().Lookup("asin")
+	require.NotNil(t, flag)
+	assert.Contains(t, flag.Usage, "ASIN")
+}
+
+func TestDryRun_WithLimit(t *testing.T) {
+	books := []db.Book{
+		{
+			ASIN:           "B001",
+			Title:          "Book One",
+			Author:         "Author A",
+			Narrators:      "Narrator",
+			RuntimeMinutes: 120,
+			AudibleStatus:  "new",
+			PurchaseDate:   "2024-01-01",
+		},
+		{
+			ASIN:           "B002",
+			Title:          "Book Two",
+			Author:         "Author B",
+			Narrators:      "Narrator",
+			RuntimeMinutes: 180,
+			AudibleStatus:  "new",
+			PurchaseDate:   "2024-02-01",
+		},
+		{
+			ASIN:           "B003",
+			Title:          "Book Three",
+			Author:         "Author C",
+			Narrators:      "Narrator",
+			RuntimeMinutes: 240,
+			AudibleStatus:  "new",
+			PurchaseDate:   "2024-03-01",
+		},
+	}
+
+	cfgPath := setupDownloadDB(t, books)
+
+	out, err := executeCommand(t, "--config", cfgPath, "download", "--dry-run", "--limit", "2")
+	require.NoError(t, err)
+	assert.Contains(t, out, "2 books to download")
+}
+
+func TestDryRun_WithASINFilter(t *testing.T) {
+	books := []db.Book{
+		{
+			ASIN:           "B001",
+			Title:          "Book One",
+			Author:         "Author A",
+			Narrators:      "Narrator",
+			RuntimeMinutes: 120,
+			AudibleStatus:  "new",
+			PurchaseDate:   "2024-01-01",
+		},
+		{
+			ASIN:           "B002",
+			Title:          "Book Two",
+			Author:         "Author B",
+			Narrators:      "Narrator",
+			RuntimeMinutes: 180,
+			AudibleStatus:  "new",
+			PurchaseDate:   "2024-02-01",
+		},
+	}
+
+	cfgPath := setupDownloadDB(t, books)
+
+	out, err := executeCommand(t, "--config", cfgPath, "download", "--dry-run", "--asin", "B001")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Book One")
+	assert.NotContains(t, out, "Book Two")
+	assert.Contains(t, out, "1 books to download")
 }

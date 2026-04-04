@@ -27,6 +27,8 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	syncJSON = false
 	dryRun = false
 	downloadJSON = false
+	limitN = 0
+	filterASINs = nil
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)

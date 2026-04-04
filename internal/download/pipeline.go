@@ -23,6 +23,8 @@ type PipelineConfig struct {
 	MaxRetries        int
 	BackoffMultiplier float64
 	Quiet             bool
+	Limit             int      // 0 means no limit
+	FilterASINs       []string // empty means all books
 }
 
 // Summary holds the results of a pipeline run.
@@ -110,6 +112,26 @@ func (p *Pipeline) Run(ctx context.Context) (*Summary, error) {
 	if err != nil {
 		summary.Elapsed = time.Since(start)
 		return summary, fmt.Errorf("listing downloadable books: %w", err)
+	}
+
+	// Apply ASIN filter if specified.
+	if len(p.config.FilterASINs) > 0 {
+		asinSet := make(map[string]bool, len(p.config.FilterASINs))
+		for _, a := range p.config.FilterASINs {
+			asinSet[a] = true
+		}
+		var filtered []db.Book
+		for _, b := range books {
+			if asinSet[b.ASIN] {
+				filtered = append(filtered, b)
+			}
+		}
+		books = filtered
+	}
+
+	// Apply limit if specified.
+	if p.config.Limit > 0 && len(books) > p.config.Limit {
+		books = books[:p.config.Limit]
 	}
 
 	summary.Total = len(books)
