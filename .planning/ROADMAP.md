@@ -98,7 +98,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 05-01-PLAN.md — Path construction (sanitization, first-author, BuildBookPath) and cross-filesystem file mover with size verification (TDD)
-- [ ] 05-02-PLAN.md — Organizer orchestrator, DB functions (ListOrganizable), earworm organize CLI command, integration tests
+- [x] 05-02-PLAN.md — Organizer orchestrator, DB functions (ListOrganizable), earworm organize CLI command, integration tests
 
 ### Phase 6: Integrations & Polish
 **Goal**: Users have a complete audiobook workflow with Audiobookshelf scan triggers, Goodreads sync, and unattended operation

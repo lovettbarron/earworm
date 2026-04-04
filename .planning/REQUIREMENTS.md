@@ -36,7 +36,7 @@
 ### File Organization
 
 - [x] **ORG-01**: Downloaded books are organized in Libation-compatible folder structure (Author/Title [ASIN]/)
-- [ ] **ORG-02**: Cover art, chapter metadata, and audio files are placed in the correct locations within each book folder
+- [x] **ORG-02**: Cover art, chapter metadata, and audio files are placed in the correct locations within each book folder
 - [x] **ORG-03**: File moves from staging to library handle cross-filesystem boundaries (copy-then-delete)
 
 ### Integrations
@@ -65,7 +65,7 @@
 - [x] **TEST-07**: Unit tests for download pipeline logic (rate limiting, backoff calculation, retry state machine, progress tracking)
 - [x] **TEST-08**: Integration tests for download fault tolerance (interrupt recovery, partial download resume, failure tracking)
 - [x] **TEST-09**: Unit tests for file organization logic (path construction, cross-filesystem move, naming conventions)
-- [ ] **TEST-10**: Integration tests for end-to-end file organization (staging to library move, folder structure validation)
+- [x] **TEST-10**: Integration tests for end-to-end file organization (staging to library move, folder structure validation)
 - [ ] **TEST-11**: Integration tests for external integrations (Audiobookshelf API mock, Goodreads sync, daemon mode lifecycle)
 - [ ] **TEST-12**: All packages maintain >80% line coverage; no phase ships without passing `go test ./...`
 
@@ -114,7 +114,7 @@
 | DL-08 | Phase 4 | Complete |
 | DL-09 | Phase 4 | Complete |
 | ORG-01 | Phase 5 | Complete |
-| ORG-02 | Phase 5 | Pending |
+| ORG-02 | Phase 5 | Complete |
 | ORG-03 | Phase 5 | Complete |
 | INT-01 | Phase 6 | Pending |
 | INT-02 | Phase 6 | Pending |
@@ -134,7 +134,7 @@
 | TEST-07 | Phase 4 | Complete |
 | TEST-08 | Phase 4 | Complete |
 | TEST-09 | Phase 5 | Complete |
-| TEST-10 | Phase 5 | Pending |
+| TEST-10 | Phase 5 | Complete |
 | TEST-11 | Phase 6 | Pending |
 | TEST-12 | All Phases | Pending |
 
