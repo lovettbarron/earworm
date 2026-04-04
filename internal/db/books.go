@@ -20,28 +20,32 @@ var ValidStatuses = []string{
 
 // Book represents an audiobook in the library.
 type Book struct {
-	ASIN           string
-	Title          string
-	Author         string
-	Narrator       string
-	Genre          string
-	Year           int
-	Series         string
-	HasCover       bool
-	Duration       int    // seconds
-	ChapterCount   int
-	MetadataSource string // "tag", "ffprobe", "folder"
-	FileCount      int
-	Status         string
-	LocalPath      string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	AudibleStatus  string // "finished", "in_progress", "new", or ""
-	PurchaseDate   string // ISO date string from Audible
-	RuntimeMinutes int    // runtime in minutes from Audible
-	Narrators      string // comma-separated narrator names from Audible
-	SeriesName     string // series title from Audible
-	SeriesPosition string // position in series (e.g., "1", "2.5")
+	ASIN                string
+	Title               string
+	Author              string
+	Narrator            string
+	Genre               string
+	Year                int
+	Series              string
+	HasCover            bool
+	Duration            int    // seconds
+	ChapterCount        int
+	MetadataSource      string // "tag", "ffprobe", "folder"
+	FileCount           int
+	Status              string
+	LocalPath           string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	AudibleStatus       string // "finished", "in_progress", "new", or ""
+	PurchaseDate        string // ISO date string from Audible
+	RuntimeMinutes      int    // runtime in minutes from Audible
+	Narrators           string // comma-separated narrator names from Audible
+	SeriesName          string // series title from Audible
+	SeriesPosition      string // position in series (e.g., "1", "2.5")
+	RetryCount          int
+	LastError           string
+	DownloadStartedAt   *time.Time // nullable
+	DownloadCompletedAt *time.Time // nullable
 }
 
 // isValidStatus checks whether a status string is in the allowed set.
@@ -133,26 +137,36 @@ func UpsertBook(db *sql.DB, book Book) error {
 	return nil
 }
 
-// scanBook scans a row into a Book struct, handling has_cover int->bool conversion.
+// scanBook scans a row into a Book struct, handling has_cover int->bool conversion
+// and nullable datetime columns.
 func scanBook(scanner interface{ Scan(dest ...any) error }) (*Book, error) {
 	var b Book
 	var hasCover int
+	var downloadStartedAt sql.NullTime
+	var downloadCompletedAt sql.NullTime
 	err := scanner.Scan(
 		&b.ASIN, &b.Title, &b.Author, &b.Narrator, &b.Genre, &b.Year,
 		&b.Series, &hasCover, &b.Duration, &b.ChapterCount, &b.MetadataSource,
 		&b.FileCount, &b.Status, &b.LocalPath, &b.CreatedAt, &b.UpdatedAt,
 		&b.AudibleStatus, &b.PurchaseDate, &b.RuntimeMinutes, &b.Narrators,
 		&b.SeriesName, &b.SeriesPosition,
+		&b.RetryCount, &b.LastError, &downloadStartedAt, &downloadCompletedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	b.HasCover = hasCover != 0
+	if downloadStartedAt.Valid {
+		b.DownloadStartedAt = &downloadStartedAt.Time
+	}
+	if downloadCompletedAt.Valid {
+		b.DownloadCompletedAt = &downloadCompletedAt.Time
+	}
 	return &b, nil
 }
 
 // allColumns is the shared column list for SELECT queries.
-const allColumns = `asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, created_at, updated_at, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position`
+const allColumns = `asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, created_at, updated_at, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position, retry_count, last_error, download_started_at, download_completed_at`
 
 // GetBook retrieves a book by ASIN. Returns nil and no error if not found.
 func GetBook(db *sql.DB, asin string) (*Book, error) {
@@ -255,6 +269,74 @@ func SyncRemoteBook(db *sql.DB, book Book) error {
 		return fmt.Errorf("sync remote book %s: %w", book.ASIN, err)
 	}
 	return nil
+}
+
+// UpdateDownloadStart marks a book as downloading and sets download_started_at.
+func UpdateDownloadStart(db *sql.DB, asin string) error {
+	_, err := db.Exec(`UPDATE books SET status = 'downloading',
+		download_started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+		WHERE asin = ?`, asin)
+	if err != nil {
+		return fmt.Errorf("update download start %s: %w", asin, err)
+	}
+	return nil
+}
+
+// UpdateDownloadComplete marks a book as downloaded, sets local_path and download_completed_at,
+// and clears retry_count and last_error.
+func UpdateDownloadComplete(db *sql.DB, asin string, localPath string) error {
+	_, err := db.Exec(`UPDATE books SET status = 'downloaded',
+		local_path = ?, retry_count = 0, last_error = '',
+		download_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+		WHERE asin = ?`, localPath, asin)
+	if err != nil {
+		return fmt.Errorf("update download complete %s: %w", asin, err)
+	}
+	return nil
+}
+
+// UpdateDownloadError marks a book as error with retry count and error message.
+func UpdateDownloadError(db *sql.DB, asin string, retryCount int, errMsg string) error {
+	_, err := db.Exec(`UPDATE books SET status = 'error',
+		retry_count = ?, last_error = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE asin = ?`, retryCount, errMsg, asin)
+	if err != nil {
+		return fmt.Errorf("update download error %s: %w", asin, err)
+	}
+	return nil
+}
+
+// ListDownloadable returns books that are eligible for download:
+// books with audible_status set and not yet downloaded/organized, plus books in error state.
+// Returns an empty slice (not nil) when no books match.
+func ListDownloadable(db *sql.DB) ([]Book, error) {
+	rows, err := db.Query(
+		`SELECT `+allColumns+` FROM books
+		WHERE (audible_status != '' AND status NOT IN ('downloaded', 'organized'))
+		   OR status = 'error'
+		ORDER BY purchase_date DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list downloadable: %w", err)
+	}
+	defer rows.Close()
+
+	var books []Book
+	for rows.Next() {
+		b, err := scanBook(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan downloadable row: %w", err)
+		}
+		books = append(books, *b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate downloadable: %w", err)
+	}
+
+	if books == nil {
+		books = []Book{}
+	}
+	return books, nil
 }
 
 // ListNewBooks returns books that exist in Audible (audible_status is set)
