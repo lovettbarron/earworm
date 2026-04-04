@@ -62,7 +62,11 @@ Plans:
   3. User can see which Audible books are not yet downloaded locally (new book detection)
   4. User can preview what would be downloaded with a dry-run flag before committing to downloads
   5. Unit tests cover audible-cli wrapper (command building, output parsing, error mapping) using fake subprocess; integration tests verify sync and new-book detection flows
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — DB migration 003 (Audible metadata columns), SyncRemoteBook upsert, ListNewBooks query
+- [ ] 03-02-PLAN.md — audible-cli subprocess wrapper package (interface, auth, library export, parsing, errors, tests)
+- [ ] 03-03-PLAN.md — CLI commands (earworm auth, sync, download --dry-run), integration tests
 
 ### Phase 4: Download Pipeline
 **Goal**: Users can reliably download their Audible library with fault tolerance -- the core differentiator over Libation
@@ -109,7 +113,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Foundation & Configuration | 0/3 | Planning complete | - |
 | 2. Local Library Scanning | 0/2 | Planning complete | - |
-| 3. Audible Integration | 0/0 | Not started | - |
+| 3. Audible Integration | 0/3 | Planning complete | - |
 | 4. Download Pipeline | 0/0 | Not started | - |
 | 5. File Organization | 0/0 | Not started | - |
 | 6. Integrations & Polish | 0/0 | Not started | - |
