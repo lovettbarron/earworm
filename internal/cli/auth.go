@@ -28,7 +28,7 @@ func runAuth(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(cmd.OutOrStdout(), "")
 
 	if err := client.Quickstart(context.Background()); err != nil {
-		return fmt.Errorf("authentication failed: %w\n\nCheck that audible-cli is installed: pip install audible-cli", err)
+		return fmt.Errorf("authentication failed: %w\n\naudible-cli setup failed. Ensure python3 is available on PATH.", err)
 	}
 
 	fmt.Fprintln(cmd.OutOrStdout(), "")

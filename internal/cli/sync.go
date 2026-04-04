@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 
 	"github.com/lovettbarron/earworm/internal/audible"
 	"github.com/lovettbarron/earworm/internal/config"
 	"github.com/lovettbarron/earworm/internal/db"
+	"github.com/lovettbarron/earworm/internal/venv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -37,8 +40,22 @@ type syncSummary struct {
 }
 
 // newAudibleClient creates an AudibleClient from config. Extracted for testability.
+// When audible_cli_path is the default ("audible"), it auto-bootstraps a managed
+// Python venv with audible-cli installed. Custom paths bypass venv management.
 var newAudibleClient = func() audible.AudibleClient {
 	cliPath := viper.GetString("audible_cli_path")
+
+	// If user hasn't configured a custom path, use managed venv.
+	if cliPath == "audible" {
+		managed, err := venv.EnsureAudibleCLI(context.Background(), os.Stderr)
+		if err != nil {
+			slog.Warn("venv bootstrap failed, falling back to bare audible",
+				"error", err)
+		} else {
+			cliPath = managed
+		}
+	}
+
 	var opts []audible.ClientOption
 	if profilePath := viper.GetString("audible.profile_path"); profilePath != "" {
 		opts = append(opts, audible.WithProfilePath(profilePath))
