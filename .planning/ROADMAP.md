@@ -79,7 +79,12 @@ Plans:
   4. Failed downloads are tracked separately and can be retried with a single command
   5. Downloads land in a local staging directory before being moved to the library location
   6. Unit tests cover rate limiter, backoff calculator, retry state machine, and progress tracker; integration tests verify interrupt recovery and failure tracking end-to-end
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 04-01-PLAN.md — DB migration 004 (download tracking columns), download DB functions, audible-cli Download implementation
+- [ ] 04-02-PLAN.md — Download pipeline components: rate limiter, backoff calculator, progress tracker, staging module (TDD)
+- [ ] 04-03-PLAN.md — Pipeline orchestrator: batch download loop with retry, error categorization, DB state tracking
+- [ ] 04-04-PLAN.md — CLI wiring: earworm download command with signal handling, --limit, --asin flags
 
 ### Phase 5: File Organization
 **Goal**: Downloaded books are automatically organized into Audiobookshelf-compatible folder structure on the library path (including NAS mounts)
@@ -114,6 +119,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Foundation & Configuration | 0/3 | Planning complete | - |
 | 2. Local Library Scanning | 0/2 | Planning complete | - |
 | 3. Audible Integration | 1/3 | Executing | - |
-| 4. Download Pipeline | 0/0 | Not started | - |
+| 4. Download Pipeline | 0/4 | Planning complete | - |
 | 5. File Organization | 0/0 | Not started | - |
 | 6. Integrations & Polish | 0/0 | Not started | - |
