@@ -29,7 +29,7 @@
 - [x] **DL-04**: Downloads are rate-limited with configurable delays between requests
 - [x] **DL-05**: Downloads use exponential backoff on errors to avoid Audible throttling
 - [x] **DL-06**: User sees per-book and overall progress during batch downloads
-- [ ] **DL-07**: Batch downloads survive process interruptions and resume from the last incomplete book
+- [x] **DL-07**: Batch downloads survive process interruptions and resume from the last incomplete book
 - [x] **DL-08**: Failed downloads are tracked and can be retried without re-downloading successful books
 - [x] **DL-09**: Downloads go to a local staging directory first, then move to the library location
 
@@ -63,7 +63,7 @@
 - [x] **TEST-05**: Unit tests for audible-cli subprocess wrapper (command construction, output parsing, error handling) using mock/fake subprocess
 - [ ] **TEST-06**: Integration tests for Audible sync flow (auth validation, library metadata sync, new book detection)
 - [x] **TEST-07**: Unit tests for download pipeline logic (rate limiting, backoff calculation, retry state machine, progress tracking)
-- [ ] **TEST-08**: Integration tests for download fault tolerance (interrupt recovery, partial download resume, failure tracking)
+- [x] **TEST-08**: Integration tests for download fault tolerance (interrupt recovery, partial download resume, failure tracking)
 - [ ] **TEST-09**: Unit tests for file organization logic (path construction, cross-filesystem move, naming conventions)
 - [ ] **TEST-10**: Integration tests for end-to-end file organization (staging to library move, folder structure validation)
 - [ ] **TEST-11**: Integration tests for external integrations (Audiobookshelf API mock, Goodreads sync, daemon mode lifecycle)
@@ -110,7 +110,7 @@
 | DL-04 | Phase 4 | Complete |
 | DL-05 | Phase 4 | Complete |
 | DL-06 | Phase 4 | Complete |
-| DL-07 | Phase 4 | Pending |
+| DL-07 | Phase 4 | Complete |
 | DL-08 | Phase 4 | Complete |
 | DL-09 | Phase 4 | Complete |
 | ORG-01 | Phase 5 | Pending |
@@ -132,7 +132,7 @@
 | TEST-05 | Phase 3 | Complete |
 | TEST-06 | Phase 3 | Pending |
 | TEST-07 | Phase 4 | Complete |
-| TEST-08 | Phase 4 | Pending |
+| TEST-08 | Phase 4 | Complete |
 | TEST-09 | Phase 5 | Pending |
 | TEST-10 | Phase 5 | Pending |
 | TEST-11 | Phase 6 | Pending |
