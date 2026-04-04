@@ -29,6 +29,7 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	downloadJSON = false
 	limitN = 0
 	filterASINs = nil
+	organizeJSON = false
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
