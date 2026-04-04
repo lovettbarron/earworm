@@ -81,7 +81,7 @@ Plans:
   6. Unit tests cover rate limiter, backoff calculator, retry state machine, and progress tracker; integration tests verify interrupt recovery and failure tracking end-to-end
 **Plans**: 4 plans
 Plans:
-- [ ] 04-01-PLAN.md — DB migration 004 (download tracking columns), download DB functions, audible-cli Download implementation
+- [x] 04-01-PLAN.md — DB migration 004 (download tracking columns), download DB functions, audible-cli Download implementation
 - [x] 04-02-PLAN.md — Download pipeline components: rate limiter, backoff calculator, progress tracker, staging module (TDD)
 - [ ] 04-03-PLAN.md — Pipeline orchestrator: batch download loop with retry, error categorization, DB state tracking
 - [ ] 04-04-PLAN.md — CLI wiring: earworm download command with signal handling, --limit, --asin flags

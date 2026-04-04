@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-04-04T12:18:53.873Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-04-04T12:21:42.558Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 66
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 ## Current Position
 
 Phase: 04 (download-pipeline) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-04
 
@@ -61,6 +61,7 @@ Progress: [██████▓░░░] 66%
 | Phase 03 P02 | 4min | 2 tasks | 7 files |
 >>>>>>> worktree-agent-a3a34f09
 | Phase 04 P02 | 3min | 2 tasks | 8 files |
+| Phase 04-download-pipeline P01 | 5min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Recent decisions affecting current work:
 - [Phase 03]: cmdFactory injection pattern for subprocess testing instead of interface-based exec abstraction
 - [Phase 03]: Pointer types (*int) for nullable audible-cli JSON fields per Research Pitfall 6
 - [Phase 04]: ASIN pattern regex for safe orphan cleanup in staging module
+- [Phase 04]: sql.NullTime for nullable datetime columns with *time.Time in Book struct
+- [Phase 04]: Stderr captured in goroutine with pipe drain before cmd.Wait() for subprocess deadlock prevention
 
 ### Pending Todos
 
@@ -104,8 +107,8 @@ None yet.
 ## Session Continuity
 
 <<<<<<< HEAD
-Last session: 2026-04-04T12:18:53.870Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-04-04T12:21:42.554Z
+Stopped at: Completed 04-01-PLAN.md
 =======
 Last session: 2026-04-04T08:28:54.878Z
 Stopped at: Completed 03-02-PLAN.md

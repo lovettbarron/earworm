@@ -23,14 +23,14 @@
 
 ### Download Pipeline
 
-- [ ] **DL-01**: User can download audiobooks from Audible in M4A format via audible-cli
-- [ ] **DL-02**: Downloads include cover art saved alongside audio files
-- [ ] **DL-03**: Downloads include chapter metadata JSON alongside audio files
+- [x] **DL-01**: User can download audiobooks from Audible in M4A format via audible-cli
+- [x] **DL-02**: Downloads include cover art saved alongside audio files
+- [x] **DL-03**: Downloads include chapter metadata JSON alongside audio files
 - [x] **DL-04**: Downloads are rate-limited with configurable delays between requests
 - [x] **DL-05**: Downloads use exponential backoff on errors to avoid Audible throttling
 - [x] **DL-06**: User sees per-book and overall progress during batch downloads
 - [ ] **DL-07**: Batch downloads survive process interruptions and resume from the last incomplete book
-- [ ] **DL-08**: Failed downloads are tracked and can be retried without re-downloading successful books
+- [x] **DL-08**: Failed downloads are tracked and can be retried without re-downloading successful books
 - [x] **DL-09**: Downloads go to a local staging directory first, then move to the library location
 
 ### File Organization
@@ -104,14 +104,14 @@
 | AUD-02 | Phase 3 | Complete |
 | AUD-03 | Phase 3 | Pending |
 | AUD-04 | Phase 3 | Pending |
-| DL-01 | Phase 4 | Pending |
-| DL-02 | Phase 4 | Pending |
-| DL-03 | Phase 4 | Pending |
+| DL-01 | Phase 4 | Complete |
+| DL-02 | Phase 4 | Complete |
+| DL-03 | Phase 4 | Complete |
 | DL-04 | Phase 4 | Complete |
 | DL-05 | Phase 4 | Complete |
 | DL-06 | Phase 4 | Complete |
 | DL-07 | Phase 4 | Pending |
-| DL-08 | Phase 4 | Pending |
+| DL-08 | Phase 4 | Complete |
 | DL-09 | Phase 4 | Complete |
 | ORG-01 | Phase 5 | Pending |
 | ORG-02 | Phase 5 | Pending |
