@@ -341,8 +341,6 @@ func (r *rateLimitFakeDownloader) LibraryExport(ctx context.Context) ([]audible.
 
 func TestPipeline_ContextCancellation(t *testing.T) {
 	database := setupTestDB(t)
-	client := newFakeDownloader()
-	client.createFiles = true
 	staging := t.TempDir()
 	library := t.TempDir()
 	var buf bytes.Buffer
@@ -352,23 +350,49 @@ func TestPipeline_ContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	cfg := defaultConfig(staging, library)
-	p := NewPipeline(client, database, cfg, &buf)
-	p.verifyFunc = func(path string) error { return nil }
-	// Cancel after first book completes via rate limiter wait
-	p.sleepFunc = func(ctx context.Context, d time.Duration) error {
-		cancel()
-		return ctx.Err()
+	// Custom client that cancels context after first successful download
+	downloadCount := 0
+	cancelClient := &cancellingFakeDownloader{
+		downloadCount: &downloadCount,
+		cancelAfter:   1,
+		cancelFunc:    cancel,
 	}
-	// Need non-zero rate limit to trigger sleep between books
-	cfg.RateLimitSeconds = 1
-	p.config = cfg
+
+	cfg := defaultConfig(staging, library)
+	p := NewPipeline(cancelClient, database, cfg, &buf)
+	p.verifyFunc = func(path string) error { return nil }
 
 	summary, err := p.Run(ctx)
 	require.NoError(t, err)
 	assert.True(t, summary.Interrupted)
-	// First book downloaded, second not started
+	// First book downloaded, context cancelled before second starts
 	assert.Equal(t, 1, summary.Succeeded)
+}
+
+// cancellingFakeDownloader cancels the context after N successful downloads.
+type cancellingFakeDownloader struct {
+	downloadCount *int
+	cancelAfter   int
+	cancelFunc    context.CancelFunc
+}
+
+func (c *cancellingFakeDownloader) Download(ctx context.Context, asin string, outputDir string) error {
+	*c.downloadCount++
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, asin+".m4a"), []byte("fake"), 0644); err != nil {
+		return err
+	}
+	if *c.downloadCount >= c.cancelAfter {
+		c.cancelFunc()
+	}
+	return nil
+}
+func (c *cancellingFakeDownloader) Quickstart(ctx context.Context) error { return nil }
+func (c *cancellingFakeDownloader) CheckAuth(ctx context.Context) error  { return nil }
+func (c *cancellingFakeDownloader) LibraryExport(ctx context.Context) ([]audible.LibraryItem, error) {
+	return nil, nil
 }
 
 func TestPipeline_CleansOrphansBeforeStart(t *testing.T) {
