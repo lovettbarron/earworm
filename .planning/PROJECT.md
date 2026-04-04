@@ -12,12 +12,10 @@ Reliably download and organize Audible audiobooks into a local library with zero
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Scan and index an existing local audiobook library (M4A files in Libation-compatible folder structure) — Validated in Phase 02: local-library-scanning
+- [x] Track library state in SQLite (books, metadata, download status) — Validated in Phase 02: local-library-scanning
 
 ### Active
-
-- [ ] Scan and index an existing local audiobook library (M4A files in Libation-compatible folder structure)
-- [ ] Track library state in SQLite (books, metadata, download status)
 - [ ] Authenticate with Audible via wrapped `audible-cli` subprocess
 - [ ] Download new audiobooks with fault-tolerant retry, rate limiting, and graceful recovery
 - [ ] Organize downloaded files in Libation-compatible structure (cover art, metadata, M4A)
@@ -59,11 +57,11 @@ Reliably download and organize Audible audiobooks into a local library with zero
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Go for language | Single binary, good CLI ecosystem, cross-platform | — Pending |
+| Go for language | Single binary, good CLI ecosystem, cross-platform | ✓ Validated Phase 01 |
 | Wrap audible-cli as subprocess | Clean license boundary (permissive wrapper around Python tool), proven Audible auth | — Pending |
 | MIT/Apache license | Avoid GPL constraints; no Libation code copied, only file structure observed | — Pending |
-| SQLite for library state | Embedded, queryable, crash-resilient, standard for CLI tools | — Pending |
-| Libation-compatible file structure | Maximum compatibility with existing libraries and workflows | — Pending |
+| SQLite for library state | Embedded, queryable, crash-resilient, standard for CLI tools | ✓ Validated Phase 01-02 |
+| Libation-compatible file structure | Maximum compatibility with existing libraries and workflows | ✓ Validated Phase 02 |
 | API notify for Audiobookshelf | Trigger scan after downloads; Audiobookshelf handles its own metadata | — Pending |
 
 ## Evolution
@@ -84,4 +82,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-03 after Phase 1 (Foundation & Configuration) complete — Go module, SQLite DB layer, Cobra CLI, Viper config, README, GoReleaser, 33 tests passing*
+*Last updated: 2026-04-04 after Phase 2 (Local Library Scanning) complete — ASIN extraction, directory scanning (two-level + recursive), metadata fallback chain (tag/ffprobe/folder), incremental sync, `earworm scan` and `earworm status` CLI commands, all tests passing*
