@@ -113,16 +113,12 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 260404-pw1 | Auto-manage audible-cli Python dependency via embedded venv | 2026-04-04 | 1393009 | [260404-pw1-auto-manage-audible-cli-python-dependenc](./quick/260404-pw1-auto-manage-audible-cli-python-dependenc/) |
-
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
 | 260403-jqe | Ensure each roadmap phase includes comprehensive unit and integration testing | 2026-04-03 | a941094 | [260403-jqe-ensure-each-roadmap-phase-includes-compr](./quick/260403-jqe-ensure-each-roadmap-phase-includes-compr/) |
+| 260404-pw1 | Auto-manage audible-cli Python dependency via embedded venv | 2026-04-04 | 1393009 | [260404-pw1-auto-manage-audible-cli-python-dependenc](./quick/260404-pw1-auto-manage-audible-cli-python-dependenc/) |
+| 260405-m79 | AAXC-to-M4B decryption and Libation-compatible file naming | 2026-04-05 | e1c819d | [260405-m79-aaxc-to-m4b-decryption-and-libation-comp](./quick/260405-m79-aaxc-to-m4b-decryption-and-libation-comp/) |
 
 ## Session Continuity
 
-Last session: 2026-04-05T12:18:55.188Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-04-05T14:59:06.313Z
+Stopped at: Completed quick task 260405-m79: AAXC-to-M4B decryption
 Resume file: None
