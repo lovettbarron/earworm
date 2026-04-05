@@ -582,6 +582,214 @@ func (a *aaxcFakeDownloader) LibraryExport(ctx context.Context) ([]audible.Libra
 	return nil, nil
 }
 
+func TestPipeline_TimeoutExceeded(t *testing.T) {
+	database := setupTestDB(t)
+	staging := t.TempDir()
+	library := t.TempDir()
+	var buf bytes.Buffer
+
+	seedBook(t, database, "B000000001", "Slow Book", "Author A")
+
+	// Fake downloader that sleeps longer than timeout
+	slowClient := &slowFakeDownloader{sleepDuration: 2 * time.Second}
+
+	cfg := defaultConfig(staging, library)
+	cfg.TimeoutMinutes = 1 // Will be overridden — we use a short timeout in the test
+	cfg.MaxRetries = 0     // No retries to keep test fast
+
+	p := NewPipeline(slowClient, database, cfg, &buf)
+	p.verifyFunc = func(path string) error { return nil }
+
+	// Override timeout to 100ms for test speed
+	origTimeout := cfg.TimeoutMinutes
+	_ = origTimeout
+	// Instead we'll set a very small timeout by using TimeoutMinutes=0 and manually wrapping
+	// Actually: test the real code path by setting TimeoutMinutes to something that
+	// converts to a short duration. We need to test at minute granularity which is too slow.
+	// Instead, test via downloadWithRetry directly with a short context timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// Set TimeoutMinutes=0 so pipeline doesn't add its own timeout, we rely on parent ctx
+	cfg.TimeoutMinutes = 0
+	p2 := NewPipeline(slowClient, database, cfg, &buf)
+	p2.verifyFunc = func(path string) error { return nil }
+
+	summary, err := p2.Run(ctx)
+	require.NoError(t, err)
+	assert.True(t, summary.Interrupted, "should be interrupted by timeout")
+}
+
+func TestPipeline_TimeoutPerBook(t *testing.T) {
+	database := setupTestDB(t)
+	staging := t.TempDir()
+	library := t.TempDir()
+	var buf bytes.Buffer
+
+	seedBook(t, database, "B000000001", "Slow Book", "Author A")
+	seedBook(t, database, "B000000002", "Fast Book", "Author B")
+
+	// First book hangs, second is fast
+	mixedClient := &mixedSpeedDownloader{
+		slowASINs:     map[string]bool{"B000000001": true},
+		slowDuration:  2 * time.Second,
+		createFiles:   true,
+	}
+
+	cfg := defaultConfig(staging, library)
+	cfg.MaxRetries = 0
+
+	p := NewPipeline(mixedClient, database, cfg, &buf)
+	p.verifyFunc = func(path string) error { return nil }
+	// Override tickInterval for test
+	oldInterval := tickInterval
+	tickInterval = 20 * time.Millisecond
+	defer func() { tickInterval = oldInterval }()
+
+	// Use a very short per-book timeout via a custom timeoutFunc
+	p.timeoutForBook = 200 * time.Millisecond
+
+	summary, err := p.Run(context.Background())
+	require.NoError(t, err)
+	// First book should fail (timeout), second should succeed
+	assert.Equal(t, 2, summary.Total)
+	assert.Equal(t, 1, summary.Succeeded, "fast book should succeed")
+	assert.Equal(t, 1, summary.Failed, "slow book should fail from timeout")
+}
+
+func TestPipeline_ElapsedTickerWrites(t *testing.T) {
+	database := setupTestDB(t)
+	staging := t.TempDir()
+	library := t.TempDir()
+	var buf bytes.Buffer
+
+	seedBook(t, database, "B000000001", "Book One", "Author A")
+
+	// A downloader that takes a controlled amount of time
+	timedClient := &timedFakeDownloader{
+		sleepDuration: 250 * time.Millisecond,
+		createFiles:   true,
+	}
+
+	cfg := defaultConfig(staging, library)
+	cfg.Quiet = false
+	cfg.MaxRetries = 0
+
+	p := NewPipeline(timedClient, database, cfg, &buf)
+	p.verifyFunc = func(path string) error { return nil }
+
+	// Override tick interval to be very short
+	oldInterval := tickInterval
+	tickInterval = 50 * time.Millisecond
+	defer func() { tickInterval = oldInterval }()
+
+	summary, err := p.Run(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Succeeded)
+
+	// Should contain elapsed time updates
+	output := buf.String()
+	assert.Contains(t, output, "Downloading:", "should print elapsed progress")
+}
+
+func TestPipeline_TimeoutZeroDisabled(t *testing.T) {
+	database := setupTestDB(t)
+	staging := t.TempDir()
+	library := t.TempDir()
+	var buf bytes.Buffer
+
+	seedBook(t, database, "B000000001", "Book One", "Author A")
+
+	client := newFakeDownloader()
+	client.createFiles = true
+
+	cfg := defaultConfig(staging, library)
+	cfg.TimeoutMinutes = 0 // Disabled
+
+	p := NewPipeline(client, database, cfg, &buf)
+	p.verifyFunc = func(path string) error { return nil }
+
+	summary, err := p.Run(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Succeeded)
+	assert.Equal(t, 0, summary.Failed)
+}
+
+// slowFakeDownloader sleeps for a configured duration, simulating a hanging download.
+type slowFakeDownloader struct {
+	sleepDuration time.Duration
+}
+
+func (s *slowFakeDownloader) Download(ctx context.Context, asin string, outputDir string) error {
+	select {
+	case <-time.After(s.sleepDuration):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+func (s *slowFakeDownloader) Quickstart(ctx context.Context) error { return nil }
+func (s *slowFakeDownloader) CheckAuth(ctx context.Context) error  { return nil }
+func (s *slowFakeDownloader) LibraryExport(ctx context.Context) ([]audible.LibraryItem, error) {
+	return nil, nil
+}
+
+// mixedSpeedDownloader: slow for some ASINs, fast for others.
+type mixedSpeedDownloader struct {
+	slowASINs    map[string]bool
+	slowDuration time.Duration
+	createFiles  bool
+}
+
+func (m *mixedSpeedDownloader) Download(ctx context.Context, asin string, outputDir string) error {
+	if m.slowASINs[asin] {
+		select {
+		case <-time.After(m.slowDuration):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if m.createFiles {
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(outputDir, asin+".m4a"), []byte("fake"), 0644)
+	}
+	return nil
+}
+func (m *mixedSpeedDownloader) Quickstart(ctx context.Context) error { return nil }
+func (m *mixedSpeedDownloader) CheckAuth(ctx context.Context) error  { return nil }
+func (m *mixedSpeedDownloader) LibraryExport(ctx context.Context) ([]audible.LibraryItem, error) {
+	return nil, nil
+}
+
+// timedFakeDownloader sleeps briefly then creates files (for ticker testing).
+type timedFakeDownloader struct {
+	sleepDuration time.Duration
+	createFiles   bool
+}
+
+func (d *timedFakeDownloader) Download(ctx context.Context, asin string, outputDir string) error {
+	select {
+	case <-time.After(d.sleepDuration):
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if d.createFiles {
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(outputDir, asin+".m4a"), []byte("fake"), 0644)
+	}
+	return nil
+}
+func (d *timedFakeDownloader) Quickstart(ctx context.Context) error { return nil }
+func (d *timedFakeDownloader) CheckAuth(ctx context.Context) error  { return nil }
+func (d *timedFakeDownloader) LibraryExport(ctx context.Context) ([]audible.LibraryItem, error) {
+	return nil, nil
+}
+
 // Ensure unused imports don't cause issues
 var _ = errors.New
 var _ = fmt.Sprintf
