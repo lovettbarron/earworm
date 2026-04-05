@@ -68,6 +68,26 @@ func (p *ProgressTracker) PrintSummary(succeeded, total, failed int, elapsed tim
 	fmt.Fprintln(p.w, s)
 }
 
+// FormatElapsed returns the elapsed-time progress string.
+// Format: "[current/total] Downloading: Author - Title [ASIN]... Xm Ys"
+// In quiet mode, returns empty string.
+func (p *ProgressTracker) FormatElapsed(current, total int, author, title, asin string, elapsed time.Duration) string {
+	if p.quiet {
+		return ""
+	}
+	return fmt.Sprintf("[%d/%d] Downloading: %s - %s [%s]... %s", current, total, author, title, asin, formatDuration(elapsed))
+}
+
+// PrintElapsed writes the elapsed-time progress using \r for in-place update.
+// In quiet mode, does nothing.
+func (p *ProgressTracker) PrintElapsed(current, total int, author, title, asin string, elapsed time.Duration) {
+	s := p.FormatElapsed(current, total, author, title, asin, elapsed)
+	if s == "" {
+		return
+	}
+	fmt.Fprintf(p.w, "\r%s", s)
+}
+
 // formatDuration formats a duration as "Xm Ys" for human readability.
 func formatDuration(d time.Duration) string {
 	m := int(d.Minutes())

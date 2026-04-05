@@ -121,6 +121,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		Quiet:             quiet,
 		Limit:             limitN,
 		FilterASINs:       filterASINs,
+		TimeoutMinutes:    viper.GetInt("download.timeout_minutes"),
 	}
 
 	// Create audible client.

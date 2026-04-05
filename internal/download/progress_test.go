@@ -8,140 +8,61 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProgressTracker_FormatBookProgress(t *testing.T) {
+func TestFormatElapsed(t *testing.T) {
+	pt := NewProgressTracker(&bytes.Buffer{}, false)
+
 	tests := []struct {
-		name    string
-		quiet   bool
-		current int
-		total   int
-		author  string
-		title   string
-		asin    string
-		pct     int
-		want    string
+		name     string
+		elapsed  time.Duration
+		expected string
 	}{
 		{
-			name:    "basic format without percentage",
-			quiet:   false,
-			current: 3,
-			total:   12,
-			author:  "Author",
-			title:   "Title",
-			asin:    "B08ASIN",
-			pct:     -1,
-			want:    "[3/12] Downloading: Author - Title [B08ASIN]",
+			name:     "10 seconds",
+			elapsed:  10 * time.Second,
+			expected: "[1/3] Downloading: Author A - Book One [B000000001]... 10s",
 		},
 		{
-			name:    "format with percentage",
-			quiet:   false,
-			current: 3,
-			total:   12,
-			author:  "Author",
-			title:   "Title",
-			asin:    "B08ASIN",
-			pct:     45,
-			want:    "[3/12] Downloading: Author - Title [B08ASIN]... 45%",
+			name:     "25 seconds",
+			elapsed:  25 * time.Second,
+			expected: "[1/3] Downloading: Author A - Book One [B000000001]... 25s",
 		},
 		{
-			name:    "quiet mode returns empty string",
-			quiet:   true,
-			current: 3,
-			total:   12,
-			author:  "Author",
-			title:   "Title",
-			asin:    "B08ASIN",
-			pct:     -1,
-			want:    "",
+			name:     "1 minute 30 seconds",
+			elapsed:  90 * time.Second,
+			expected: "[1/3] Downloading: Author A - Book One [B000000001]... 1m 30s",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			p := NewProgressTracker(&buf, tt.quiet)
-			got := p.FormatBookProgress(tt.current, tt.total, tt.author, tt.title, tt.asin, tt.pct)
-			assert.Equal(t, tt.want, got)
+			result := pt.FormatElapsed(1, 3, "Author A", "Book One", "B000000001", tt.elapsed)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestProgressTracker_FormatSummary(t *testing.T) {
-	tests := []struct {
-		name      string
-		quiet     bool
-		succeeded int
-		total     int
-		failed    int
-		elapsed   time.Duration
-		want      string
-	}{
-		{
-			name:      "with failures",
-			quiet:     false,
-			succeeded: 10,
-			total:     12,
-			failed:    2,
-			elapsed:   47*time.Minute + 23*time.Second,
-			want:      "Downloaded 10/12 books (2 failed, 47m 23s elapsed)",
-		},
-		{
-			name:      "zero failed omits failed count",
-			quiet:     false,
-			succeeded: 12,
-			total:     12,
-			failed:    0,
-			elapsed:   5*time.Minute + 10*time.Second,
-			want:      "Downloaded 12/12 books (5m 10s elapsed)",
-		},
-		{
-			name:      "quiet mode still returns summary",
-			quiet:     true,
-			succeeded: 10,
-			total:     12,
-			failed:    2,
-			elapsed:   47*time.Minute + 23*time.Second,
-			want:      "Downloaded 10/12 books (2 failed, 47m 23s elapsed)",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			p := NewProgressTracker(&buf, tt.quiet)
-			got := p.FormatSummary(tt.succeeded, tt.total, tt.failed, tt.elapsed)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+func TestFormatElapsed_QuietMode(t *testing.T) {
+	pt := NewProgressTracker(&bytes.Buffer{}, true)
+	result := pt.FormatElapsed(1, 3, "Author A", "Book One", "B000000001", 10*time.Second)
+	assert.Empty(t, result, "quiet mode should produce no output")
 }
 
-func TestProgressTracker_FormatResume(t *testing.T) {
+func TestPrintElapsed(t *testing.T) {
 	var buf bytes.Buffer
-	p := NewProgressTracker(&buf, false)
-	got := p.FormatResume(8, 4)
-	assert.Equal(t, "Resuming: 8 of 12 remaining (4 completed previously)", got)
+	pt := NewProgressTracker(&buf, false)
+
+	pt.PrintElapsed(1, 3, "Author A", "Book One", "B000000001", 10*time.Second)
+
+	output := buf.String()
+	assert.Contains(t, output, "Downloading: Author A - Book One [B000000001]... 10s")
+	assert.Contains(t, output, "\r")
 }
 
-func TestProgressTracker_PrintBookProgress(t *testing.T) {
-	t.Run("normal mode writes to writer", func(t *testing.T) {
-		var buf bytes.Buffer
-		p := NewProgressTracker(&buf, false)
-		p.PrintBookProgress(1, 5, "Auth", "Book", "B123", -1)
-		assert.Contains(t, buf.String(), "[1/5] Downloading: Auth - Book [B123]")
-	})
+func TestPrintElapsed_QuietMode(t *testing.T) {
+	var buf bytes.Buffer
+	pt := NewProgressTracker(&buf, true)
 
-	t.Run("quiet mode writes nothing", func(t *testing.T) {
-		var buf bytes.Buffer
-		p := NewProgressTracker(&buf, true)
-		p.PrintBookProgress(1, 5, "Auth", "Book", "B123", -1)
-		assert.Empty(t, buf.String())
-	})
-}
+	pt.PrintElapsed(1, 3, "Author A", "Book One", "B000000001", 10*time.Second)
 
-func TestProgressTracker_PrintSummary(t *testing.T) {
-	t.Run("always prints even in quiet mode", func(t *testing.T) {
-		var buf bytes.Buffer
-		p := NewProgressTracker(&buf, true)
-		p.PrintSummary(5, 5, 0, 2*time.Minute)
-		assert.Contains(t, buf.String(), "Downloaded 5/5 books")
-	})
+	assert.Empty(t, buf.String(), "quiet mode should produce no output")
 }

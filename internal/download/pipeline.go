@@ -15,6 +15,10 @@ import (
 	"github.com/lovettbarron/earworm/internal/db"
 )
 
+// tickInterval controls how often the elapsed time ticker prints during download.
+// Package-level var so tests can override to a short duration.
+var tickInterval = 10 * time.Second
+
 // PipelineConfig holds all configuration for the download pipeline.
 type PipelineConfig struct {
 	StagingDir        string
@@ -25,6 +29,7 @@ type PipelineConfig struct {
 	Quiet             bool
 	Limit             int      // 0 means no limit
 	FilterASINs       []string // empty means all books
+	TimeoutMinutes    int      // per-book timeout in minutes; 0 disables
 }
 
 // Summary holds the results of a pipeline run.
@@ -69,6 +74,13 @@ type Pipeline struct {
 	sleepFunc func(ctx context.Context, d time.Duration) error
 	// decryptFunc allows overriding DecryptStaged in tests.
 	decryptFunc func(ctx context.Context, stagingDir string, cmdFactory CmdFactory) error
+	// timeoutForBook overrides the per-book timeout duration (for testing).
+	// Zero means use config.TimeoutMinutes converted to minutes.
+	timeoutForBook time.Duration
+
+	// Runtime state for progress reporting within downloadWithRetry.
+	currentIdx int // 1-based index of current book in batch
+	totalBooks int // total books in batch
 }
 
 // NewPipeline creates a new download pipeline.
@@ -173,6 +185,10 @@ func (p *Pipeline) Run(ctx context.Context) (*Summary, error) {
 		// Print progress.
 		p.progress.PrintBookProgress(i+1, summary.Total, book.Author, book.Title, book.ASIN, -1)
 
+		// Set runtime state for ticker goroutine in downloadWithRetry.
+		p.currentIdx = i + 1
+		p.totalBooks = summary.Total
+
 		// Download with retry.
 		downloadErr := p.downloadWithRetry(ctx, book, backoff)
 
@@ -218,6 +234,12 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 	var lastErr error
 	maxAttempts := 1 + p.config.MaxRetries // initial + retries
 
+	// Determine per-book timeout duration.
+	bookTimeout := p.timeoutForBook
+	if bookTimeout == 0 && p.config.TimeoutMinutes > 0 {
+		bookTimeout = time.Duration(p.config.TimeoutMinutes) * time.Minute
+	}
+
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		// Mark download started in DB.
 		if err := db.UpdateDownloadStart(p.db, book.ASIN); err != nil {
@@ -231,8 +253,54 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 			continue
 		}
 
+		// Wrap context with per-book timeout if configured.
+		dlCtx := ctx
+		var dlCancel context.CancelFunc
+		if bookTimeout > 0 {
+			dlCtx, dlCancel = context.WithTimeout(ctx, bookTimeout)
+		}
+
+		// Start elapsed time ticker goroutine.
+		downloadStart := time.Now()
+		tickStop := make(chan struct{})
+		tickDone := make(chan struct{})
+		go func() {
+			defer close(tickDone)
+			ticker := time.NewTicker(tickInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					elapsed := time.Since(downloadStart)
+					p.progress.PrintElapsed(p.currentIdx, p.totalBooks, book.Author, book.Title, book.ASIN, elapsed)
+				case <-tickStop:
+					return
+				}
+			}
+		}()
+
 		// Attempt download.
-		downloadErr := p.client.Download(ctx, book.ASIN, asinStagingDir)
+		downloadErr := p.client.Download(dlCtx, book.ASIN, asinStagingDir)
+
+		// Stop ticker goroutine and clean up timeout context.
+		close(tickStop)
+		<-tickDone
+		if dlCancel != nil {
+			dlCancel()
+		}
+
+		// Print newline to move past \r-updated line (if not quiet).
+		if !p.config.Quiet {
+			fmt.Fprintln(p.progress.w)
+		}
+
+		// Distinguish per-book timeout from parent context cancellation.
+		// If download returned DeadlineExceeded but the parent context is still OK,
+		// it's a per-book timeout — wrap WITHOUT %w so errors.Is won't match
+		// context.DeadlineExceeded in the Run loop's interrupt check.
+		if downloadErr != nil && errors.Is(downloadErr, context.DeadlineExceeded) && ctx.Err() == nil {
+			downloadErr = fmt.Errorf("download timed out after %s for %s", bookTimeout, book.ASIN)
+		}
 
 		if downloadErr == nil {
 			// Success — decrypt (if AAXC), verify, and move files.
