@@ -18,6 +18,7 @@ func SetDefaults() {
 	viper.SetDefault("audiobookshelf.url", "")
 	viper.SetDefault("audiobookshelf.token", "")
 	viper.SetDefault("audiobookshelf.library_id", "")
+	viper.SetDefault("daemon.polling_interval", "6h")
 	viper.SetDefault("download.rate_limit_seconds", 5)
 	viper.SetDefault("download.max_retries", 3)
 	viper.SetDefault("download.backoff_multiplier", 2.0)
@@ -85,6 +86,7 @@ func ValidKeys() []string {
 		"audiobookshelf.library_id",
 		"audiobookshelf.token",
 		"audiobookshelf.url",
+		"daemon.polling_interval",
 		"download.backoff_multiplier",
 		"download.max_retries",
 		"download.rate_limit_seconds",
