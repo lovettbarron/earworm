@@ -1,25 +1,24 @@
 # Earworm
 
-A CLI-driven audiobook library manager for Audible.
-
-Earworm tracks an existing local audiobook library (typically on a NAS mount), downloads new books from Audible via [audible-cli](https://github.com/mkb79/audible-cli), and organizes them in a Libation-compatible file structure. It integrates with Audiobookshelf for a complete audiobook workflow.
+A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloads new books from Audible via [audible-cli](https://github.com/mkb79/audible-cli), organizes them into an [Audiobookshelf](https://www.audiobookshelf.org/)-compatible folder structure, and triggers library scans -- all from a single binary.
 
 ## Features
 
 - SQLite-backed library state tracking
-- YAML configuration with sensible defaults
-- `earworm version` -- display build information
-- `earworm config init` -- create default configuration
-- `earworm config show` -- display current settings
-- `earworm config set <key> <value>` -- update a setting
-
-More commands coming soon: scan, sync, download.
+- Audible library sync via audible-cli
+- Fault-tolerant batch downloads with rate limiting and crash recovery
+- Automatic organization into `Author/Title [ASIN]/` folder structure
+- Audiobookshelf library scan integration
+- Goodreads CSV export
+- Daemon/polling mode for unattended operation
+- Cross-filesystem file moves (local to NAS)
 
 ## Prerequisites
 
-- Go 1.23 or later (for building from source)
-- Python 3.9+ (required by audible-cli)
-- [audible-cli](https://github.com/mkb79/audible-cli) -- install via `pip install audible-cli` or `uv pip install audible-cli`
+- **Go 1.23+** (building from source)
+- **Python 3.9+** (required by audible-cli)
+
+> **Note:** audible-cli is installed automatically into an embedded Python venv on first use. You do not need to install it manually.
 
 ## Installation
 
@@ -29,6 +28,10 @@ More commands coming soon: scan, sync, download.
 go install github.com/lovettbarron/earworm/cmd/earworm@latest
 ```
 
+### From Releases
+
+Download the latest binary for your platform from the [GitHub Releases](https://github.com/lovettbarron/earworm/releases) page.
+
 ### Build from Repository
 
 ```bash
@@ -37,19 +40,207 @@ cd earworm
 go build -o earworm ./cmd/earworm
 ```
 
+### Verify
+
+```bash
+earworm version
+```
+
 ## Quick Start
 
 ```bash
-# Initialize configuration
+# 1. Install earworm
+go install github.com/lovettbarron/earworm/cmd/earworm@latest
+
+# 2. Initialize configuration
 earworm config init
 
-# Set your library path
-earworm config set library_path /path/to/your/audiobooks
+# 3. Set your library path (where audiobooks are stored)
+earworm config set library_path /path/to/audiobooks
 
-# Verify settings
+# 4. Authenticate with Audible
+earworm auth
+
+# 5. Sync your Audible library
+earworm sync
+
+# 6. Preview what would be downloaded
+earworm download --dry-run
+
+# 7. Download new books
+earworm download
+
+# 8. Organize into library structure
+earworm organize
+```
+
+## Commands
+
+### Global Flags
+
+These flags are available on all commands:
+
+| Flag | Description |
+|------|-------------|
+| `--config <path>` | Use a custom config file path |
+| `--quiet` / `-q` | Suppress non-essential output |
+
+### `earworm auth`
+
+Authenticate with Audible via audible-cli. This is an interactive process -- you will be prompted for your Audible credentials directly by audible-cli.
+
+```bash
+earworm auth
+```
+
+### `earworm sync`
+
+Sync Audible library metadata to the local database. Each sync is a full refresh -- all books are upserted. Local-only data (download status, file paths) is preserved.
+
+```bash
+earworm sync
+earworm sync --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output sync summary in JSON format |
+
+### `earworm scan`
+
+Scan a local library directory for existing audiobooks. The library is expected to follow the structure: `Author Name/Book Title [ASIN]/book.m4a`.
+
+```bash
+earworm scan
+earworm scan --recursive
+```
+
+| Flag | Description |
+|------|-------------|
+| `--recursive` / `-r` | Recursively scan nested directories |
+
+### `earworm status`
+
+Display the current state of your audiobook library including book metadata and download status.
+
+```bash
+earworm status
+earworm status --author "Sanderson"
+earworm status --status downloaded --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
+| `--author <name>` | Filter by author (substring match) |
+| `--status <status>` | Filter by status (exact match: `scanned`, `downloaded`, `organized`, `error`) |
+
+### `earworm download`
+
+Download audiobooks that are in your Audible library but not yet downloaded locally. Includes rate limiting, exponential backoff, and crash recovery.
+
+```bash
+earworm download
+earworm download --dry-run
+earworm download --limit 5
+earworm download --asin B08G9PRS1K --asin B09FKZQ843
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview downloads without downloading |
+| `--json` | Output in JSON format (dry-run mode) |
+| `--limit <N>` | Maximum number of books to download (0 = no limit) |
+| `--asin <ASIN>` | Download specific books by ASIN (repeatable) |
+
+**Signal handling:** Press Ctrl+C once to finish the current book and stop. Press Ctrl+C twice to force exit immediately.
+
+### `earworm organize`
+
+Move downloaded audiobooks from the staging directory into the library in Audiobookshelf-compatible `Author/Title [ASIN]/` folder structure. Operates on all books with `downloaded` status.
+
+```bash
+earworm organize
+earworm organize --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output results in JSON format |
+
+### `earworm notify`
+
+Trigger an Audiobookshelf library scan via the API. Requires Audiobookshelf configuration (see [Audiobookshelf Integration](#audiobookshelf-integration)).
+
+```bash
+earworm notify
+earworm notify --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output result in JSON format |
+
+### `earworm goodreads`
+
+Export your library to a Goodreads-compatible CSV file for import into your Goodreads shelves.
+
+```bash
+earworm goodreads -o library.csv
+earworm goodreads --output ~/exports/earworm.csv
+```
+
+| Flag | Description |
+|------|-------------|
+| `--output` / `-o` | Output file path (required) |
+
+### `earworm daemon`
+
+Run earworm in polling mode for unattended operation. Periodically runs the full sync, download, organize, and notify cycle.
+
+```bash
+earworm daemon
+earworm daemon --interval 4h
+earworm daemon --once --verbose
+```
+
+| Flag | Description |
+|------|-------------|
+| `--interval <duration>` | Polling interval (default: `6h`) |
+| `--verbose` | Enable verbose logging |
+| `--once` | Run one cycle and exit |
+
+### `earworm config init`
+
+Create the default configuration file at `~/.config/earworm/config.yaml`.
+
+```bash
+earworm config init
+```
+
+### `earworm config show`
+
+Display the current configuration with all values.
+
+```bash
 earworm config show
+```
 
-# Check version
+### `earworm config set`
+
+Update a configuration setting.
+
+```bash
+earworm config set library_path /mnt/nas/audiobooks
+earworm config set download.rate_limit_seconds 10
+earworm config set audiobookshelf.url http://nas:13378
+```
+
+### `earworm version`
+
+Display build version, commit hash, and build date.
+
+```bash
 earworm version
 ```
 
@@ -57,38 +248,121 @@ earworm version
 
 Config file location: `~/.config/earworm/config.yaml`
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `library_path` | Path to audiobook library (can be NAS mount) | (empty) |
-| `staging_path` | Temporary download directory | (empty, uses system temp) |
-| `audible_cli_path` | Path to audible-cli binary | `audible` |
-| `audiobookshelf.url` | Audiobookshelf server URL | (empty) |
-| `audiobookshelf.token` | Audiobookshelf API token | (empty) |
-| `audiobookshelf.library_id` | Audiobookshelf library ID | (empty) |
-| `download.rate_limit_seconds` | Seconds between downloads | `5` |
-| `download.max_retries` | Max retry attempts per book | `3` |
-| `download.backoff_multiplier` | Exponential backoff multiplier | `2.0` |
+| Key | Default | Description |
+|-----|---------|-------------|
+| `library_path` | *(none)* | Path to audiobook library -- can be a NAS mount (required) |
+| `staging_path` | `~/.config/earworm/staging` | Temporary download directory |
+| `audible_cli_path` | `audible` | Path to audible-cli binary (default uses managed venv) |
+| `audible.profile_path` | *(none)* | Path to audible-cli profile directory |
+| `audiobookshelf.url` | *(none)* | Audiobookshelf server URL |
+| `audiobookshelf.token` | *(none)* | Audiobookshelf API token |
+| `audiobookshelf.library_id` | *(none)* | Audiobookshelf library ID |
+| `daemon.polling_interval` | `6h` | Polling interval for daemon mode |
+| `download.rate_limit_seconds` | `5` | Seconds between download requests |
+| `download.max_retries` | `3` | Maximum retry attempts per book |
+| `download.backoff_multiplier` | `2.0` | Exponential backoff multiplier for retries |
+| `scan.recursive` | `false` | Scan subdirectories recursively |
 
-## Global Flags
+## Audiobookshelf Integration
 
-| Flag | Description |
-|------|-------------|
-| `--config <path>` | Use a custom config file path |
-| `--quiet` / `-q` | Suppress non-essential output |
+Earworm can trigger an [Audiobookshelf](https://www.audiobookshelf.org/) library scan after organizing downloads, so new books appear automatically in your media server.
 
-## Setting Up audible-cli
+### Setup
 
-1. Install: `pip install audible-cli`
-2. Authenticate: `audible quickstart` (follow prompts for Audible credentials)
-3. Verify: `audible library list` should show your library
+1. **Get your API token:** In Audiobookshelf, go to **Settings > Users > (your user) > API Token**. Copy the token.
 
-Earworm wraps audible-cli as a subprocess. Authentication is handled by audible-cli directly.
+2. **Get your library ID:** Check the URL when viewing your library in Audiobookshelf -- the ID is in the path (e.g., `http://nas:13378/library/abc123` -- the ID is `abc123`).
+
+3. **Configure earworm:**
+
+```yaml
+# ~/.config/earworm/config.yaml
+audiobookshelf:
+  url: http://your-server:13378
+  token: your-api-token
+  library_id: your-library-id
+```
+
+Or via CLI:
+
+```bash
+earworm config set audiobookshelf.url http://your-server:13378
+earworm config set audiobookshelf.token your-api-token
+earworm config set audiobookshelf.library_id your-library-id
+```
+
+### Usage
+
+After downloads are organized, trigger a scan manually:
+
+```bash
+earworm notify
+```
+
+In daemon mode, the scan is triggered automatically after each organize cycle.
+
+## Daemon Mode
+
+Run earworm in the background for fully unattended audiobook management. The daemon runs a full cycle (sync, download, organize, notify) at a configurable interval.
+
+### Basic Usage
+
+```bash
+earworm daemon                    # Poll every 6 hours (default)
+earworm daemon --interval 4h     # Poll every 4 hours
+earworm daemon --once             # Run one cycle and exit
+```
+
+### systemd Service
+
+Create `/etc/systemd/system/earworm.service`:
+
+```ini
+[Unit]
+Description=Earworm audiobook library manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=your-user
+ExecStart=/usr/local/bin/earworm daemon
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl enable earworm
+sudo systemctl start earworm
+sudo systemctl status earworm
+```
+
+### launchd (macOS)
+
+Create a plist at `~/Library/LaunchAgents/com.earworm.daemon.plist` with the `earworm daemon` command. Load with `launchctl load`.
+
+## Goodreads Export
+
+Export your audiobook library to a CSV file compatible with Goodreads import.
+
+```bash
+earworm goodreads -o library.csv
+```
+
+Then import the CSV at [goodreads.com/review/import](https://www.goodreads.com/review/import). Books are placed on the "read" shelf.
 
 ## Data Storage
 
-- Configuration: `~/.config/earworm/config.yaml`
-- Database: `~/.config/earworm/earworm.db` (SQLite, always local -- never on NAS)
-- The database stores library state. It is safe to delete and will be recreated on next run.
+- **Configuration:** `~/.config/earworm/config.yaml`
+- **Database:** `~/.config/earworm/earworm.db` (SQLite, always local -- never on NAS)
+- **Staging:** `~/.config/earworm/staging/` (temporary download directory)
+
+The database stores library state. It is safe to delete and will be recreated on next scan or sync.
 
 ## License
 
