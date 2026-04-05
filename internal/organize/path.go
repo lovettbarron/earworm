@@ -81,15 +81,22 @@ func BuildBookPath(author, title, asin string) (string, error) {
 	return filepath.Join(sanitizedAuthor, sanitizedTitle), nil
 }
 
-// RenameM4AFile constructs an M4A filename from the book title. It sanitizes
-// the title, falls back to "audiobook" if empty, and truncates to ensure the
-// total filename (including .m4a extension) does not exceed 255 bytes.
-func RenameM4AFile(title string) string {
+// RenameAudioFile constructs an audio filename from the book title with the
+// given extension (e.g., ".m4b", ".m4a"). It sanitizes the title, falls back
+// to "audiobook" if empty, and truncates to ensure the total filename does
+// not exceed 255 bytes.
+func RenameAudioFile(title, ext string) string {
 	name := SanitizeName(title)
 	if name == "" {
 		name = "audiobook"
 	}
-	// Reserve 4 bytes for ".m4a"
-	name = truncateToBytes(name, maxNameBytes-4)
-	return name + ".m4a"
+	name = truncateToBytes(name, maxNameBytes-len(ext))
+	return name + ext
+}
+
+// RenameM4AFile constructs an M4A filename from the book title. It sanitizes
+// the title, falls back to "audiobook" if empty, and truncates to ensure the
+// total filename (including .m4a extension) does not exceed 255 bytes.
+func RenameM4AFile(title string) string {
+	return RenameAudioFile(title, ".m4a")
 }

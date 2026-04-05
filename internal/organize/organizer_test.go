@@ -169,6 +169,67 @@ func TestOrganizeBook_ExtraFiles(t *testing.T) {
 	assert.FileExists(t, filepath.Join(destDir, "readme.txt"))
 }
 
+func TestOrganizeBook_M4B(t *testing.T) {
+	stagingDir := t.TempDir()
+	libraryDir := t.TempDir()
+
+	// Create staging directory with M4B file (decrypted from AAXC)
+	asinDir := filepath.Join(stagingDir, "B000000010")
+	require.NoError(t, os.MkdirAll(asinDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "Book_Title-AAX_44_128.m4b"), []byte("m4b audio"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "cover(500).jpg"), []byte("cover"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "chapters.json"), []byte("{}"), 0644))
+
+	book := db.Book{
+		ASIN:   "B000000010",
+		Author: "Matt Dinniman",
+		Title:  "Dungeon Crawler Carl",
+	}
+
+	destDir, err := OrganizeBook(book, stagingDir, libraryDir)
+	require.NoError(t, err)
+
+	expectedDir := filepath.Join(libraryDir, "Matt Dinniman", "Dungeon Crawler Carl [B000000010]")
+	assert.Equal(t, expectedDir, destDir)
+
+	// M4B file should be renamed with title
+	assert.FileExists(t, filepath.Join(expectedDir, "Dungeon Crawler Carl.m4b"))
+	assert.FileExists(t, filepath.Join(expectedDir, "cover.jpg"))
+	assert.FileExists(t, filepath.Join(expectedDir, "chapters.json"))
+
+	// Verify content
+	data, err := os.ReadFile(filepath.Join(expectedDir, "Dungeon Crawler Carl.m4b"))
+	require.NoError(t, err)
+	assert.Equal(t, "m4b audio", string(data))
+}
+
+func TestOrganizeBook_SkipsVoucherAndAAXC(t *testing.T) {
+	stagingDir := t.TempDir()
+	libraryDir := t.TempDir()
+
+	// Simulate a staging dir where decrypt artifacts remain
+	asinDir := filepath.Join(stagingDir, "B000000011")
+	require.NoError(t, os.MkdirAll(asinDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "book.m4b"), []byte("audio"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "book.aaxc"), []byte("encrypted"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "book.voucher"), []byte("{}"), 0644))
+
+	book := db.Book{
+		ASIN:   "B000000011",
+		Author: "Author",
+		Title:  "Title",
+	}
+
+	destDir, err := OrganizeBook(book, stagingDir, libraryDir)
+	require.NoError(t, err)
+
+	// M4B should be moved
+	assert.FileExists(t, filepath.Join(destDir, "Title.m4b"))
+	// AAXC and voucher should NOT be in destination
+	assert.NoFileExists(t, filepath.Join(destDir, "book.aaxc"))
+	assert.NoFileExists(t, filepath.Join(destDir, "book.voucher"))
+}
+
 func TestOrganizeAll_Integration(t *testing.T) {
 	database := setupTestDB(t)
 	stagingDir := t.TempDir()
@@ -295,6 +356,9 @@ func TestDestinationFilename(t *testing.T) {
 		{"jpeg becomes cover.jpg", "photo.jpeg", "Title", "cover.jpg"},
 		{"png becomes cover.jpg", "image.png", "Title", "cover.jpg"},
 		{"json becomes chapters.json", "metadata.json", "Title", "chapters.json"},
+		{"m4b renamed to title", "book.m4b", "The Shining", "The Shining.m4b"},
+		{"aaxc skipped", "book.aaxc", "Title", ""},
+		{"voucher skipped", "book.voucher", "Title", ""},
 		{"txt keeps name", "readme.txt", "Title", "readme.txt"},
 		{"unknown keeps name", "data.bin", "Title", "data.bin"},
 	}
