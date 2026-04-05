@@ -6,9 +6,26 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/dhowden/tag"
 )
+
+// sanitizeFolderName removes characters illegal in file/folder names across platforms.
+func sanitizeFolderName(name string) string {
+	// Replace characters illegal on Windows/macOS/Linux
+	replacer := strings.NewReplacer(
+		"/", "-", "\\", "-", ":", " -", "*", "", "?", "", "\"", "'",
+		"<", "", ">", "", "|", "-",
+	)
+	result := replacer.Replace(name)
+	result = strings.TrimSpace(result)
+	// Collapse multiple spaces
+	for strings.Contains(result, "  ") {
+		result = strings.ReplaceAll(result, "  ", " ")
+	}
+	return result
+}
 
 // asinPattern matches ASIN-like directory names: 10 alphanumeric characters
 // starting with B (standard Audible ASIN format).
@@ -38,12 +55,17 @@ func VerifyM4A(filePath string) error {
 	return nil
 }
 
-// MoveToLibrary moves all files from stagingDir/asin/ to libraryDir/asin/.
+// MoveToLibrary moves all files from stagingDir/asin/ to libraryDir/Title [ASIN]/.
 // Uses os.Rename with copy+delete fallback for cross-filesystem moves (Pitfall 1).
-// Creates destination directory if needed.
-func MoveToLibrary(stagingDir, libraryDir, asin string) error {
+// Creates destination directory if needed. Title is used for the Libation-compatible
+// folder name; if empty, falls back to bare ASIN.
+func MoveToLibrary(stagingDir, libraryDir, asin, title string) error {
 	src := filepath.Join(stagingDir, asin)
-	dst := filepath.Join(libraryDir, asin)
+	folderName := asin
+	if title != "" {
+		folderName = fmt.Sprintf("%s [%s]", sanitizeFolderName(title), asin)
+	}
+	dst := filepath.Join(libraryDir, folderName)
 
 	// Ensure destination directory exists
 	if err := os.MkdirAll(dst, 0755); err != nil {

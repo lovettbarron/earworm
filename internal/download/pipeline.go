@@ -79,8 +79,11 @@ type Pipeline struct {
 	timeoutForBook time.Duration
 
 	// Runtime state for progress reporting within downloadWithRetry.
-	currentIdx int // 1-based index of current book in batch
-	totalBooks int // total books in batch
+	currentIdx  int // 1-based index of current book in batch
+	totalBooks  int // total books in batch
+	lastPercent int // last reported download percent (-1 = no data)
+	lastRate    string
+	w           io.Writer // output writer for progress
 }
 
 // NewPipeline creates a new download pipeline.
@@ -93,6 +96,8 @@ func NewPipeline(client audible.AudibleClient, database *sql.DB, cfg PipelineCon
 		verifyFunc:  VerifyM4A,
 		sleepFunc:   defaultSleep,
 		decryptFunc: DecryptStaged,
+		lastPercent: -1,
+		w:           w,
 	}
 }
 
@@ -260,7 +265,10 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 			dlCtx, dlCancel = context.WithTimeout(ctx, bookTimeout)
 		}
 
-		// Start elapsed time ticker goroutine.
+		// Reset progress state and set up progress callback on client.
+		p.lastPercent = -1
+		p.lastRate = ""
+		// Start ticker goroutine — shows % + rate when available, falls back to elapsed time.
 		downloadStart := time.Now()
 		tickStop := make(chan struct{})
 		tickDone := make(chan struct{})
@@ -271,13 +279,31 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 			for {
 				select {
 				case <-ticker.C:
-					elapsed := time.Since(downloadStart)
-					p.progress.PrintElapsed(p.currentIdx, p.totalBooks, book.Author, book.Title, book.ASIN, elapsed)
+					if p.config.Quiet {
+						continue
+					}
+					if p.lastPercent >= 0 {
+						fmt.Fprintf(p.w, "\r  %d%% @ %-12s", p.lastPercent, p.lastRate)
+					} else {
+						elapsed := time.Since(downloadStart)
+						fmt.Fprintf(p.w, "\r  %s elapsed", formatDuration(elapsed))
+					}
 				case <-tickStop:
 					return
 				}
 			}
 		}()
+
+		// Set progress callback if client supports it.
+		type progressSetter interface {
+			SetProgressFunc(func(audible.DownloadProgress))
+		}
+		if ps, ok := p.client.(progressSetter); ok {
+			ps.SetProgressFunc(func(prog audible.DownloadProgress) {
+				p.lastPercent = prog.Percent
+				p.lastRate = prog.Rate
+			})
+		}
 
 		// Attempt download.
 		downloadErr := p.client.Download(dlCtx, book.ASIN, asinStagingDir)
@@ -304,7 +330,7 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 
 		if downloadErr == nil {
 			// Success — decrypt (if AAXC), verify, and move files.
-			if err := p.verifyAndMove(ctx, book.ASIN, asinStagingDir); err != nil {
+			if err := p.verifyAndMove(ctx, book.ASIN, book.Title, asinStagingDir); err != nil {
 				lastErr = err
 				// Retry on verify/move failure
 				if attempt < maxAttempts-1 {
@@ -317,7 +343,11 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 			}
 
 			// Mark complete in DB.
-			localPath := filepath.Join(p.config.LibraryDir, book.ASIN)
+			folderName := book.ASIN
+			if book.Title != "" {
+				folderName = fmt.Sprintf("%s [%s]", sanitizeFolderName(book.Title), book.ASIN)
+			}
+			localPath := filepath.Join(p.config.LibraryDir, folderName)
 			if err := db.UpdateDownloadComplete(p.db, book.ASIN, localPath); err != nil {
 				slog.Warn("failed to mark download complete", "asin", book.ASIN, "error", err)
 			}
@@ -368,8 +398,11 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 
 // verifyAndMove decrypts AAXC files (if present), verifies audio files,
 // and moves them to the library.
-func (p *Pipeline) verifyAndMove(ctx context.Context, asin string, stagingDir string) error {
+func (p *Pipeline) verifyAndMove(ctx context.Context, asin string, title string, stagingDir string) error {
 	// Step 1: Decrypt AAXC to M4B if applicable.
+	if !p.config.Quiet {
+		fmt.Fprintf(p.w, "  Decrypting...\n")
+	}
 	if err := p.decryptFunc(ctx, stagingDir, nil); err != nil {
 		return fmt.Errorf("decrypting AAXC for %s: %w", asin, err)
 	}
@@ -388,6 +421,9 @@ func (p *Pipeline) verifyAndMove(ctx context.Context, asin string, stagingDir st
 	}
 
 	// Step 3: Verify each audio file.
+	if !p.config.Quiet {
+		fmt.Fprintf(p.w, "  Verifying...\n")
+	}
 	for _, f := range matches {
 		if err := p.verifyFunc(f); err != nil {
 			return fmt.Errorf("verifying %s: %w", filepath.Base(f), err)
@@ -395,7 +431,10 @@ func (p *Pipeline) verifyAndMove(ctx context.Context, asin string, stagingDir st
 	}
 
 	// Step 4: Move to library.
-	if err := MoveToLibrary(p.config.StagingDir, p.config.LibraryDir, asin); err != nil {
+	if !p.config.Quiet {
+		fmt.Fprintf(p.w, "  Moving to library...\n")
+	}
+	if err := MoveToLibrary(p.config.StagingDir, p.config.LibraryDir, asin, title); err != nil {
 		return fmt.Errorf("moving %s to library: %w", asin, err)
 	}
 

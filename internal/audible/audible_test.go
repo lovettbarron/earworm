@@ -197,6 +197,54 @@ func TestClassifyError(t *testing.T) {
 	}
 }
 
+func TestParseTqdmProgress(t *testing.T) {
+	tests := []struct {
+		line     string
+		wantOK   bool
+		wantPct  int
+		wantRate string
+	}{
+		{
+			line:     "file.aaxc:  44%|████▍     | 437M/998M [01:02<01:17, 7.65MB/s]",
+			wantOK:   true,
+			wantPct:  44,
+			wantRate: "7.65MB/s",
+		},
+		{
+			line:     "100%|██████████| 998M/998M [02:07<00:00, 8.12MB/s]",
+			wantOK:   true,
+			wantPct:  100,
+			wantRate: "8.12MB/s",
+		},
+		{
+			line:     "  3%|▎         | 30M/998M [00:04<02:10, 7.42MB/s]",
+			wantOK:   true,
+			wantPct:  3,
+			wantRate: "7.42MB/s",
+		},
+		{line: "some random text", wantOK: false},
+		{line: "", wantOK: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			p, ok := parseTqdmProgress([]byte(tt.line))
+			if ok != tt.wantOK {
+				t.Fatalf("parseTqdmProgress(%q) ok=%v, want %v", tt.line, ok, tt.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if p.Percent != tt.wantPct {
+				t.Errorf("Percent=%d, want %d", p.Percent, tt.wantPct)
+			}
+			if p.Rate != tt.wantRate {
+				t.Errorf("Rate=%q, want %q", p.Rate, tt.wantRate)
+			}
+		})
+	}
+}
+
 func TestParseLibraryExport_ValidJSON(t *testing.T) {
 	data := []byte(`[{"asin":"B001","title":"Test Book","runtime_length_min":120}]`)
 	items, err := ParseLibraryExport(data)

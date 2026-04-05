@@ -544,8 +544,8 @@ func TestPipeline_AAXCDecryptIntegration(t *testing.T) {
 	assert.Equal(t, 1, summary.Succeeded)
 	assert.Equal(t, 0, summary.Failed)
 
-	// Verify M4B file ends up in library
-	libraryASIN := filepath.Join(library, "B000000001")
+	// Verify M4B file ends up in library with Title [ASIN] folder
+	libraryASIN := filepath.Join(library, "Book One [B000000001]")
 	entries, err := os.ReadDir(libraryASIN)
 	require.NoError(t, err)
 	var hasM4B bool

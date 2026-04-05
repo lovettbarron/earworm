@@ -52,14 +52,14 @@ func (p *ProgressTracker) FormatResume(remaining, previouslyDone int) string {
 	return fmt.Sprintf("Resuming: %d of %d remaining (%d completed previously)", remaining, total, previouslyDone)
 }
 
-// PrintBookProgress writes progress to writer, using \r for in-place update.
+// PrintBookProgress writes progress to writer on its own line.
 // In quiet mode, does nothing (per D-03).
 func (p *ProgressTracker) PrintBookProgress(current, total int, author, title, asin string, pct int) {
 	s := p.FormatBookProgress(current, total, author, title, asin, pct)
 	if s == "" {
 		return
 	}
-	fmt.Fprintf(p.w, "\r%s", s)
+	fmt.Fprintln(p.w, s)
 }
 
 // PrintSummary writes summary to writer. Always prints, even in quiet mode (per D-04).

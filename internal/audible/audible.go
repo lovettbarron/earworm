@@ -14,7 +14,14 @@ type AudibleClient interface {
 	// LibraryExport exports the full Audible library as structured data.
 	LibraryExport(ctx context.Context) ([]LibraryItem, error)
 	// Download downloads a book by ASIN to the given output directory.
+	// If progressFunc is set via WithProgressFunc, it receives real-time progress updates.
 	Download(ctx context.Context, asin string, outputDir string) error
+}
+
+// DownloadProgress holds parsed progress from audible-cli's tqdm output.
+type DownloadProgress struct {
+	Percent int    // 0-100
+	Rate    string // e.g. "7.65MB/s"
 }
 
 // ClientOption configures the audible client.
@@ -30,6 +37,11 @@ func WithCmdFactory(f func(ctx context.Context, name string, args ...string) *ex
 	return func(c *client) { c.cmdFactory = f }
 }
 
+// WithProgressFunc sets a callback for download progress updates.
+func WithProgressFunc(f func(DownloadProgress)) ClientOption {
+	return func(c *client) { c.progressFunc = f }
+}
+
 // NewClient creates a new audible-cli wrapper client.
 // audiblePath is the path to the audible-cli binary (e.g., "audible").
 func NewClient(audiblePath string, opts ...ClientOption) AudibleClient {
@@ -43,9 +55,16 @@ func NewClient(audiblePath string, opts ...ClientOption) AudibleClient {
 }
 
 type client struct {
-	audiblePath string
-	profilePath string // optional, passed as --profile-dir flag if set
-	cmdFactory  func(ctx context.Context, name string, args ...string) *exec.Cmd // for testing
+	audiblePath  string
+	profilePath  string // optional, passed as --profile-dir flag if set
+	cmdFactory   func(ctx context.Context, name string, args ...string) *exec.Cmd // for testing
+	progressFunc func(DownloadProgress)                                           // optional progress callback
+}
+
+// SetProgressFunc sets a callback for download progress updates.
+// This allows callers to set/change the callback after construction.
+func (c *client) SetProgressFunc(f func(DownloadProgress)) {
+	c.progressFunc = f
 }
 
 // command builds an exec.Cmd using the command factory if set, otherwise os/exec.
