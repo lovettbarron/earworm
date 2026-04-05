@@ -52,7 +52,7 @@
 - [ ] **CLI-02**: User can configure all settings via config file and/or CLI flags
 - [x] **CLI-03**: Error messages clearly communicate what went wrong and how to recover
 - [ ] **CLI-04**: README documents installation, setup (including audible-cli dependency), and all commands
-- [ ] **CLI-05**: README is updated with each phase to reflect current capabilities
+- [x] **CLI-05**: README is updated with each phase to reflect current capabilities
 
 ### Testing
 
@@ -124,7 +124,7 @@
 | CLI-02 | Phase 1 | Pending |
 | CLI-03 | Phase 2 | Complete |
 | CLI-04 | Phase 1 | Pending |
-| CLI-05 | Phase 6 | Pending |
+| CLI-05 | Phase 6 | Complete |
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Pending |
 | TEST-03 | Phase 2 | Complete |
