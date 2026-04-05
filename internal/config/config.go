@@ -25,6 +25,7 @@ func SetDefaults() {
 	viper.SetDefault("download.rate_limit_seconds", 5)
 	viper.SetDefault("download.max_retries", 3)
 	viper.SetDefault("download.backoff_multiplier", 2.0)
+	viper.SetDefault("download.timeout_minutes", 30)
 	viper.SetDefault("scan.recursive", false)
 	viper.SetDefault("audible.profile_path", "")
 }
@@ -79,6 +80,10 @@ func Validate() error {
 		return fmt.Errorf("download.max_retries must be >= 0, got %d", viper.GetInt("download.max_retries"))
 	}
 
+	if viper.GetInt("download.timeout_minutes") < 0 {
+		return fmt.Errorf("download.timeout_minutes must be >= 0, got %d", viper.GetInt("download.timeout_minutes"))
+	}
+
 	return nil
 }
 
@@ -93,6 +98,7 @@ func ValidKeys() []string {
 		"download.backoff_multiplier",
 		"download.max_retries",
 		"download.rate_limit_seconds",
+		"download.timeout_minutes",
 		"library_path",
 		"audible.profile_path",
 		"scan.recursive",
