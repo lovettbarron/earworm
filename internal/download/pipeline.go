@@ -67,17 +67,20 @@ type Pipeline struct {
 	verifyFunc func(path string) error
 	// sleepFunc allows overriding time-based sleeps in tests.
 	sleepFunc func(ctx context.Context, d time.Duration) error
+	// decryptFunc allows overriding DecryptStaged in tests.
+	decryptFunc func(ctx context.Context, stagingDir string, cmdFactory CmdFactory) error
 }
 
 // NewPipeline creates a new download pipeline.
 func NewPipeline(client audible.AudibleClient, database *sql.DB, cfg PipelineConfig, w io.Writer) *Pipeline {
 	return &Pipeline{
-		client:     client,
-		db:         database,
-		config:     cfg,
-		progress:   NewProgressTracker(w, cfg.Quiet),
-		verifyFunc: VerifyM4A,
-		sleepFunc:  defaultSleep,
+		client:      client,
+		db:          database,
+		config:      cfg,
+		progress:    NewProgressTracker(w, cfg.Quiet),
+		verifyFunc:  VerifyM4A,
+		sleepFunc:   defaultSleep,
+		decryptFunc: DecryptStaged,
 	}
 }
 
@@ -232,8 +235,8 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 		downloadErr := p.client.Download(ctx, book.ASIN, asinStagingDir)
 
 		if downloadErr == nil {
-			// Success — verify and move files.
-			if err := p.verifyAndMove(book.ASIN, asinStagingDir); err != nil {
+			// Success — decrypt (if AAXC), verify, and move files.
+			if err := p.verifyAndMove(ctx, book.ASIN, asinStagingDir); err != nil {
 				lastErr = err
 				// Retry on verify/move failure
 				if attempt < maxAttempts-1 {
@@ -295,25 +298,35 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 	return lastErr
 }
 
-// verifyAndMove verifies downloaded M4A files and moves them to the library.
-func (p *Pipeline) verifyAndMove(asin string, stagingDir string) error {
-	// Glob for audio files in staging.
-	matches, err := filepath.Glob(filepath.Join(stagingDir, "*.m4a"))
-	if err != nil {
-		return fmt.Errorf("globbing staging dir for %s: %w", asin, err)
-	}
-	if len(matches) == 0 {
-		return fmt.Errorf("no M4A files found in staging for %s", asin)
+// verifyAndMove decrypts AAXC files (if present), verifies audio files,
+// and moves them to the library.
+func (p *Pipeline) verifyAndMove(ctx context.Context, asin string, stagingDir string) error {
+	// Step 1: Decrypt AAXC to M4B if applicable.
+	if err := p.decryptFunc(ctx, stagingDir, nil); err != nil {
+		return fmt.Errorf("decrypting AAXC for %s: %w", asin, err)
 	}
 
-	// Verify each file.
+	// Step 2: Glob for audio files in staging (.m4b first, then .m4a).
+	var matches []string
+	for _, ext := range []string{"*.m4b", "*.m4a"} {
+		found, err := filepath.Glob(filepath.Join(stagingDir, ext))
+		if err != nil {
+			return fmt.Errorf("globbing staging dir for %s: %w", asin, err)
+		}
+		matches = append(matches, found...)
+	}
+	if len(matches) == 0 {
+		return fmt.Errorf("no audio files (.m4b/.m4a) found in staging for %s", asin)
+	}
+
+	// Step 3: Verify each audio file.
 	for _, f := range matches {
 		if err := p.verifyFunc(f); err != nil {
 			return fmt.Errorf("verifying %s: %w", filepath.Base(f), err)
 		}
 	}
 
-	// Move to library.
+	// Step 4: Move to library.
 	if err := MoveToLibrary(p.config.StagingDir, p.config.LibraryDir, asin); err != nil {
 		return fmt.Errorf("moving %s to library: %w", asin, err)
 	}

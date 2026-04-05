@@ -52,6 +52,9 @@ func OrganizeBook(book db.Book, stagingDir, libraryDir string) (string, error) {
 
 		srcFile := filepath.Join(srcDir, entry.Name())
 		dstName := destinationFilename(entry.Name(), book.Title)
+		if dstName == "" {
+			continue // skip files that should not be organized (e.g., decrypt artifacts)
+		}
 		dstFile := filepath.Join(destDir, dstName)
 
 		if err := MoveFile(srcFile, dstFile); err != nil {
@@ -72,12 +75,16 @@ func destinationFilename(name, title string) string {
 	ext := strings.ToLower(filepath.Ext(name))
 
 	switch ext {
+	case ".m4b":
+		return RenameAudioFile(title, ".m4b")
 	case ".m4a":
-		return RenameM4AFile(title)
+		return RenameAudioFile(title, ".m4a")
 	case ".jpg", ".jpeg", ".png":
 		return "cover.jpg"
 	case ".json":
 		return "chapters.json"
+	case ".voucher", ".aaxc":
+		return "" // skip decrypt artifacts (should already be removed)
 	default:
 		return name
 	}

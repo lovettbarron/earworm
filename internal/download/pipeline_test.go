@@ -497,6 +497,91 @@ func TestSummary_String(t *testing.T) {
 	}
 }
 
+func TestPipeline_AAXCDecryptIntegration(t *testing.T) {
+	database := setupTestDB(t)
+	staging := t.TempDir()
+	library := t.TempDir()
+	var buf bytes.Buffer
+
+	seedBook(t, database, "B000000001", "Book One", "Author A")
+
+	// Create a fake downloader that produces AAXC + voucher files instead of M4A
+	aaxcClient := &aaxcFakeDownloader{}
+
+	cfg := defaultConfig(staging, library)
+	p := NewPipeline(aaxcClient, database, cfg, &buf)
+	p.verifyFunc = func(path string) error { return nil }
+	// Override decrypt to simulate converting .aaxc to .m4b
+	p.decryptFunc = func(ctx context.Context, stagingDir string, cmdFactory CmdFactory) error {
+		// Find AAXC file and "decrypt" it by renaming to .m4b
+		aaxcFiles, _ := filepath.Glob(filepath.Join(stagingDir, "*.aaxc"))
+		if len(aaxcFiles) == 0 {
+			return nil
+		}
+		aaxcPath := aaxcFiles[0]
+		ext := filepath.Ext(aaxcPath)
+		m4bPath := strings.TrimSuffix(aaxcPath, ext) + ".m4b"
+		// Copy content to m4b
+		data, err := os.ReadFile(aaxcPath)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(m4bPath, data, 0644); err != nil {
+			return err
+		}
+		// Remove originals
+		os.Remove(aaxcPath)
+		voucherFiles, _ := filepath.Glob(filepath.Join(stagingDir, "*.voucher"))
+		for _, v := range voucherFiles {
+			os.Remove(v)
+		}
+		return nil
+	}
+
+	summary, err := p.Run(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Total)
+	assert.Equal(t, 1, summary.Succeeded)
+	assert.Equal(t, 0, summary.Failed)
+
+	// Verify M4B file ends up in library
+	libraryASIN := filepath.Join(library, "B000000001")
+	entries, err := os.ReadDir(libraryASIN)
+	require.NoError(t, err)
+	var hasM4B bool
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".m4b" {
+			hasM4B = true
+		}
+	}
+	assert.True(t, hasM4B, "library should contain .m4b file")
+}
+
+// aaxcFakeDownloader creates AAXC + voucher files instead of M4A.
+type aaxcFakeDownloader struct{}
+
+func (a *aaxcFakeDownloader) Download(ctx context.Context, asin string, outputDir string) error {
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return err
+	}
+	// Create AAXC file
+	if err := os.WriteFile(filepath.Join(outputDir, asin+"-AAX_44_128.aaxc"), []byte("encrypted-audio"), 0644); err != nil {
+		return err
+	}
+	// Create voucher file
+	voucher := `{"content_license":{"asin":"` + asin + `","license_response":{"key":"abc123","iv":"def456"}}}`
+	if err := os.WriteFile(filepath.Join(outputDir, asin+"-AAX_44_128.voucher"), []byte(voucher), 0644); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *aaxcFakeDownloader) Quickstart(ctx context.Context) error { return nil }
+func (a *aaxcFakeDownloader) CheckAuth(ctx context.Context) error  { return nil }
+func (a *aaxcFakeDownloader) LibraryExport(ctx context.Context) ([]audible.LibraryItem, error) {
+	return nil, nil
+}
+
 // Ensure unused imports don't cause issues
 var _ = errors.New
 var _ = fmt.Sprintf
