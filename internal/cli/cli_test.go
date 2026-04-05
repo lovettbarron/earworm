@@ -30,6 +30,11 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	limitN = 0
 	filterASINs = nil
 	organizeJSON = false
+	notifyJSON = false
+	goodreadsOutput = ""
+	daemonVerbose = false
+	daemonOnce = false
+	daemonInterval = ""
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -94,4 +99,34 @@ func TestConfigSetInvalidKey(t *testing.T) {
 	_, err := executeCommand(t, "config", "set", "nonexistent_key", "value")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown config key")
+}
+
+func TestNotifyCommand_Unconfigured(t *testing.T) {
+	out, err := executeCommand(t, "notify")
+	assert.NoError(t, err)
+	assert.Contains(t, out, "not configured")
+}
+
+func TestGoodreadsCommand_EmptyDB(t *testing.T) {
+	tmpDir := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	t.Cleanup(func() { os.Setenv("HOME", origHome) })
+
+	// Create config dir so DB can be opened.
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".config", "earworm"), 0755))
+
+	out, err := executeCommand(t, "goodreads")
+	assert.NoError(t, err)
+	// Should contain CSV header even with empty DB.
+	assert.Contains(t, out, "Title")
+	assert.Contains(t, out, "Author")
+	assert.Contains(t, out, "Exclusive Shelf")
+}
+
+func TestDaemonCommand_Help(t *testing.T) {
+	out, err := executeCommand(t, "daemon", "--help")
+	assert.NoError(t, err)
+	assert.Contains(t, out, "polling")
+	assert.Contains(t, out, "--interval")
 }

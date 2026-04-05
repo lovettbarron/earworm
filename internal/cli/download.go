@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/lovettbarron/earworm/internal/audiobookshelf"
 	"github.com/lovettbarron/earworm/internal/config"
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/download"
@@ -127,6 +128,23 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		}
 		if summary.AuthFailed {
 			fmt.Fprintln(cmd.OutOrStdout(), "\nRun `earworm auth` to re-authenticate.")
+		}
+	}
+
+	// Trigger Audiobookshelf library scan after successful batch (D-01).
+	// Silent skip if unconfigured (D-03). Warn and continue on failure (D-02).
+	if summary != nil && summary.Succeeded > 0 {
+		if absURL := viper.GetString("audiobookshelf.url"); absURL != "" {
+			abs := audiobookshelf.NewClient(
+				absURL,
+				viper.GetString("audiobookshelf.token"),
+				viper.GetString("audiobookshelf.library_id"),
+			)
+			if scanErr := abs.ScanLibrary(); scanErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: Audiobookshelf scan failed: %v\n", scanErr)
+			} else if !quiet {
+				fmt.Fprintln(cmd.OutOrStdout(), "Audiobookshelf library scan triggered.")
+			}
 		}
 	}
 
