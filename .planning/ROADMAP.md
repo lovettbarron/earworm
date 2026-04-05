@@ -112,8 +112,8 @@ Plans:
   5. Integration tests cover Audiobookshelf API calls (using HTTP mock), Goodreads sync trigger, and daemon mode start/stop lifecycle
 **Plans**: 3 plans
 Plans:
-- [ ] 06-01-PLAN.md — Audiobookshelf API client and Goodreads CSV export packages with tests
-- [x] 06-02-PLAN.md — CLI commands (notify, goodreads, daemon), daemon package, ABS hook in download pipeline
+- [x] 06-01-PLAN.md — Audiobookshelf API client and Goodreads CSV export packages with tests
+- [ ] 06-02-PLAN.md — CLI commands (notify, goodreads, daemon), daemon package, ABS hook in download pipeline
 - [ ] 06-03-PLAN.md — README rewrite with full v1 documentation
 
 ## Progress
