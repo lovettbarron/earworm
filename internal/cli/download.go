@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/lovettbarron/earworm/internal/audiobookshelf"
@@ -53,6 +55,17 @@ type dryRunBook struct {
 func runDownload(cmd *cobra.Command, args []string) error {
 	if dryRun {
 		return runDryRun(cmd)
+	}
+
+	// Check ffmpeg is available (required for AAXC decryption).
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		hint := "Install ffmpeg to enable audiobook decryption:\n\n"
+		if runtime.GOOS == "darwin" {
+			hint += "  brew install ffmpeg"
+		} else {
+			hint += "  sudo apt install ffmpeg   # Debian/Ubuntu\n  sudo dnf install ffmpeg   # Fedora"
+		}
+		return fmt.Errorf("ffmpeg not found on PATH\n\n%s", hint)
 	}
 
 	// Validate library_path is configured.
