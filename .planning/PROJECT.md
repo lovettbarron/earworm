@@ -20,11 +20,15 @@ Reliably download and organize Audible audiobooks into a local library with zero
 - [x] Organize downloaded files in Libation-compatible structure (cover art, metadata, M4A) — Validated in Phase 05: file-organization
 
 ### Active
-- [ ] Polling capability for new book detection (future frontend integration)
-- [ ] Trigger Audiobookshelf library scan via API after downloads
-- [ ] Goodreads integration via existing CLI tooling
-- [ ] Clear CLI interface with good user communication during downloads
-- [ ] Documentation updated with each phase
+
+(No active requirements — all v1 requirements validated)
+
+### Recently Validated (Phase 06)
+- [x] Polling capability for new book detection — Validated in Phase 06: integrations-polish (daemon mode)
+- [x] Trigger Audiobookshelf library scan via API after downloads — Validated in Phase 06: integrations-polish
+- [x] Goodreads integration via CSV export — Validated in Phase 06: integrations-polish
+- [x] Clear CLI interface with good user communication during downloads — Validated in Phase 06: integrations-polish (README)
+- [x] Documentation updated with each phase — Validated in Phase 06: integrations-polish (full README rewrite)
 
 ### Out of Scope
 
