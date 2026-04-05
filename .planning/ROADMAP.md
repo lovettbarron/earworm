@@ -116,6 +116,31 @@ Plans:
 - [ ] 06-02-PLAN.md — CLI commands (notify, goodreads, daemon), daemon package, ABS hook in download pipeline
 - [x] 06-03-PLAN.md — README rewrite with full v1 documentation
 
+### Phase 7: Fix Download→Organize Pipeline Integration
+**Goal**: Fix the broken download→organize pipeline so books are correctly organized into Libation-compatible structure after download
+**Depends on**: Phase 4, Phase 5
+**Requirements**: ORG-01, ORG-02
+**Gap Closure**: Closes gaps from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. After `earworm download` completes, files remain in staging (not moved to library by download pipeline)
+  2. `earworm organize` successfully moves files from staging to library in Author/Title [ASIN]/ structure with correct file naming
+  3. Full pipeline flow (download → organize → notify) completes end-to-end without errors
+  4. Daemon cycle (sync → download → organize → ABS scan) succeeds with books reaching 'OK' status
+  5. Integration tests verify the download→organize handoff with real staging directory state
+**Plans**: 0 plans
+
+### Phase 8: Test Coverage & Documentation Cleanup
+**Goal**: Establish >80% test coverage measurement and fix stale documentation artifacts for clean milestone close
+**Depends on**: Phase 7
+**Requirements**: TEST-12
+**Gap Closure**: Closes gaps from v1.0 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. `go test ./... -coverprofile` runs and reports line coverage per package
+  2. Overall line coverage exceeds 80% (or gaps are identified and addressed)
+  3. REQUIREMENTS.md traceability table accurately reflects completion status for all 43 requirements
+  4. ROADMAP.md progress table and phase checkboxes reflect actual completion state
+**Plans**: 0 plans
+
 ## Progress
 
 **Execution Order:**
@@ -129,3 +154,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 4. Download Pipeline | 0/4 | Planning complete | - |
 | 5. File Organization | 0/2 | Planning complete | - |
 | 6. Integrations & Polish | 1/3 | In Progress|  |
+| 7. Fix Download→Organize Pipeline | 0/0 | Not started | - |
+| 8. Test Coverage & Doc Cleanup | 0/0 | Not started | - |
