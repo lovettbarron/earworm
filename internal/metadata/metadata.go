@@ -34,7 +34,7 @@ type BookMetadata struct {
 // ExtractMetadata extracts metadata for a book directory using the fallback chain:
 // dhowden/tag -> ffprobe -> folder name parsing.
 func ExtractMetadata(bookDir string) (*BookMetadata, error) {
-	m4aFiles := FindM4AFiles(bookDir)
+	m4aFiles := FindAudioFiles(bookDir)
 
 	if len(m4aFiles) == 0 {
 		meta := extractFromFolderName(bookDir)
@@ -61,9 +61,9 @@ func ExtractMetadata(bookDir string) (*BookMetadata, error) {
 	return meta, nil
 }
 
-// FindM4AFiles returns sorted absolute paths to .m4a files in a directory.
+// FindAudioFiles returns sorted absolute paths to .m4a/.m4b files in a directory.
 // Case-insensitive extension matching.
-func FindM4AFiles(dir string) []string {
+func FindAudioFiles(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -74,7 +74,8 @@ func FindM4AFiles(dir string) []string {
 		if entry.IsDir() {
 			continue
 		}
-		if strings.EqualFold(filepath.Ext(entry.Name()), ".m4a") {
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext == ".m4a" || ext == ".m4b" {
 			files = append(files, filepath.Join(dir, entry.Name()))
 		}
 	}

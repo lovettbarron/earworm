@@ -13,7 +13,10 @@ import (
 // SetDefaults configures all default values for the earworm configuration.
 func SetDefaults() {
 	viper.SetDefault("library_path", "")
-	viper.SetDefault("staging_path", "")
+	// staging_path defaults to ~/.config/earworm/staging
+	if defaultStaging, err := DefaultStagingPath(); err == nil {
+		viper.SetDefault("staging_path", defaultStaging)
+	}
 	viper.SetDefault("audible_cli_path", "audible")
 	viper.SetDefault("audiobookshelf.url", "")
 	viper.SetDefault("audiobookshelf.token", "")

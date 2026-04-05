@@ -3,40 +3,42 @@ package metadata
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestFindM4AFiles(t *testing.T) {
+func TestFindAudioFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create test files
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "book.m4a"), []byte("fake"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "UPPER.M4A"), []byte("fake"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "audiobook.m4b"), []byte("fake"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "cover.jpg"), []byte("fake"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("fake"), 0644))
 
-	files := FindM4AFiles(dir)
-	assert.Len(t, files, 2)
+	files := FindAudioFiles(dir)
+	assert.Len(t, files, 3)
 
-	// Verify paths are absolute and end with .m4a/.M4A
+	// Verify paths are absolute and end with audio extensions
 	for _, f := range files {
 		assert.True(t, filepath.IsAbs(f))
-		ext := filepath.Ext(f)
-		assert.True(t, ext == ".m4a" || ext == ".M4A", "unexpected extension: %s", ext)
+		ext := strings.ToLower(filepath.Ext(f))
+		assert.True(t, ext == ".m4a" || ext == ".m4b", "unexpected extension: %s", ext)
 	}
 }
 
-func TestFindM4AFilesEmptyDir(t *testing.T) {
+func TestFindAudioFilesEmptyDir(t *testing.T) {
 	dir := t.TempDir()
-	files := FindM4AFiles(dir)
+	files := FindAudioFiles(dir)
 	assert.Empty(t, files)
 }
 
-func TestFindM4AFilesNonexistent(t *testing.T) {
-	files := FindM4AFiles("/nonexistent/path")
+func TestFindAudioFilesNonexistent(t *testing.T) {
+	files := FindAudioFiles("/nonexistent/path")
 	assert.Nil(t, files)
 }
 

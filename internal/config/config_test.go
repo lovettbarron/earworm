@@ -21,7 +21,7 @@ func TestSetDefaults(t *testing.T) {
 	SetDefaults()
 	assert.Equal(t, "audible", viper.GetString("audible_cli_path"))
 	assert.Equal(t, "", viper.GetString("library_path"))
-	assert.Equal(t, "", viper.GetString("staging_path"))
+	assert.Contains(t, viper.GetString("staging_path"), filepath.Join(".config", "earworm", "staging"))
 }
 
 func TestSetDefaultsRateLimit(t *testing.T) {

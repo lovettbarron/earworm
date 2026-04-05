@@ -396,14 +396,15 @@ func UpdateOrganizeResult(db *sql.DB, asin, status, localPath, lastError string)
 }
 
 // ListNewBooks returns books that exist in Audible (audible_status is set)
-// but are not yet downloaded locally. This includes books with no local_path,
-// or books whose status is not yet 'downloaded' or 'organized'.
+// but are not yet present locally. A book is "new" if it has no local_path
+// and its status doesn't indicate it's already been scanned, downloaded, or organized.
 // Returns an empty slice (not nil) when no new books exist.
 func ListNewBooks(db *sql.DB) ([]Book, error) {
 	rows, err := db.Query(
 		`SELECT `+allColumns+` FROM books
 		WHERE audible_status != ''
-		  AND (local_path = '' OR status NOT IN ('downloaded', 'organized'))
+		  AND (local_path = '' OR local_path IS NULL)
+		  AND status NOT IN ('scanned', 'downloaded', 'organized')
 		ORDER BY purchase_date DESC`,
 	)
 	if err != nil {

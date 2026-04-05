@@ -23,7 +23,7 @@ func (c *client) Quickstart(ctx context.Context) error {
 // CheckAuth verifies auth is valid by running `audible library list --bunch-size 1`.
 // This makes a real API call to verify the token works.
 func (c *client) CheckAuth(ctx context.Context) error {
-	args := c.buildArgs("library", "list", "--bunch-size", "1")
+	args := c.buildArgs("library", "list", "--bunch-size", "10")
 	cmd := c.command(ctx, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

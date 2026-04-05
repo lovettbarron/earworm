@@ -48,13 +48,13 @@ func TestScanTwoLevel(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "Project Hail Mary", book1.Title)
 	assert.Equal(t, "Andy Weir", book1.Author)
-	assert.Len(t, book1.M4AFiles, 1)
+	assert.Len(t, book1.AudioFiles, 1)
 
 	book2, ok := asinMap["B09ABCDEF1"]
 	require.True(t, ok)
 	assert.Equal(t, "Mistborn", book2.Title)
 	assert.Equal(t, "Brandon Sanderson", book2.Author)
-	assert.Len(t, book2.M4AFiles, 2)
+	assert.Len(t, book2.AudioFiles, 2)
 }
 
 func TestScanTwoLevelSkipsNoASIN(t *testing.T) {
@@ -113,6 +113,36 @@ func TestScanPermissionError(t *testing.T) {
 	_ = skipped
 }
 
+func TestScanFlatLayout(t *testing.T) {
+	root := t.TempDir()
+
+	// Flat layout: Title [ASIN]/ directly in root (no author subdirectory)
+	dir1 := filepath.Join(root, "1Q84 [B005XZM7R6]")
+	require.NoError(t, os.MkdirAll(dir1, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir1, "1Q84 [B005XZM7R6].m4b"), []byte("fake"), 0644))
+
+	dir2 := filepath.Join(root, "Abundance [B0C7YLL2T3]")
+	require.NoError(t, os.MkdirAll(dir2, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir2, "Abundance [B0C7YLL2T3].m4b"), []byte("fake"), 0644))
+
+	discovered, skipped, err := ScanLibrary(root, false)
+	require.NoError(t, err)
+
+	assert.Len(t, discovered, 2)
+	assert.Empty(t, skipped)
+
+	asinMap := make(map[string]DiscoveredBook)
+	for _, d := range discovered {
+		asinMap[d.ASIN] = d
+	}
+
+	book1, ok := asinMap["B005XZM7R6"]
+	require.True(t, ok)
+	assert.Equal(t, "1Q84", book1.Title)
+	assert.Equal(t, "", book1.Author) // flat layout has no author
+	assert.Len(t, book1.AudioFiles, 1)
+}
+
 func TestScanTwoLevelEmptyRoot(t *testing.T) {
 	root := t.TempDir()
 
@@ -152,14 +182,14 @@ func TestIncrementalSync(t *testing.T) {
 			Title:     "Project Hail Mary",
 			Author:    "Andy Weir",
 			LocalPath: "/library/Andy Weir/Project Hail Mary [B08C6YJ1LS]",
-			M4AFiles:  []string{"/library/Andy Weir/Project Hail Mary [B08C6YJ1LS]/book.m4a"},
+			AudioFiles:  []string{"/library/Andy Weir/Project Hail Mary [B08C6YJ1LS]/book.m4a"},
 		},
 		{
 			ASIN:      "B09NEWBOOK1",
 			Title:     "New Book",
 			Author:    "New Author",
 			LocalPath: "/library/New Author/New Book [B09NEWBOOK1]",
-			M4AFiles:  []string{"/library/New Author/New Book [B09NEWBOOK1]/audio.m4a"},
+			AudioFiles:  []string{"/library/New Author/New Book [B09NEWBOOK1]/audio.m4a"},
 		},
 	}
 

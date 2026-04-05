@@ -33,3 +33,12 @@ func DBPath() (string, error) {
 	}
 	return filepath.Join(dir, "earworm.db"), nil
 }
+
+// DefaultStagingPath returns ~/.config/earworm/staging
+func DefaultStagingPath() (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "staging"), nil
+}

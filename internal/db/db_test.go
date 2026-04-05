@@ -617,7 +617,7 @@ func TestListNewBooks(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "scanned with local path - SHOULD appear (scanned != downloaded)",
+			name: "scanned with local path - should NOT appear (already local)",
 			book: Book{
 				ASIN:          "SCAN001",
 				Title:         "Scanned Book",
@@ -626,7 +626,7 @@ func TestListNewBooks(t *testing.T) {
 				LocalPath:     "/library/Author/Scanned Book [SCAN001]",
 				AudibleStatus: "in_progress",
 			},
-			expected: true,
+			expected: false,
 		},
 		{
 			name: "no audible_status - should NOT appear",

@@ -34,7 +34,7 @@ type DiscoveredBook struct {
 	Title     string   // parsed from folder name (ASIN stripped)
 	Author    string   // parent directory name
 	LocalPath string   // absolute path to book directory
-	M4AFiles  []string // absolute paths to .m4a files in directory
+	AudioFiles []string // absolute paths to .m4a/.m4b files in directory
 }
 
 // SkippedDir represents a directory that was skipped during scanning.
@@ -60,33 +60,51 @@ func ScanLibrary(root string, recursive bool) ([]DiscoveredBook, []SkippedDir, e
 	return scanTwoLevel(root)
 }
 
-// scanTwoLevel scans exactly two levels: root/Author/Title.
+// scanTwoLevel scans one or two levels: root/Title [ASIN]/ (flat) or root/Author/Title [ASIN]/.
+// It auto-detects the layout by checking if top-level directories contain ASINs.
 func scanTwoLevel(root string) ([]DiscoveredBook, []SkippedDir, error) {
 	var discovered []DiscoveredBook
 	var skipped []SkippedDir
 
-	authorEntries, err := os.ReadDir(root)
+	topEntries, err := os.ReadDir(root)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read library root %s: %w", root, err)
 	}
 
-	for _, authorEntry := range authorEntries {
-		if !authorEntry.IsDir() {
+	for _, entry := range topEntries {
+		if !entry.IsDir() {
 			continue
 		}
 
-		authorPath := filepath.Join(root, authorEntry.Name())
-		titleEntries, err := os.ReadDir(authorPath)
+		entryPath := filepath.Join(root, entry.Name())
+
+		// Check if this top-level dir itself has an ASIN (flat layout)
+		if asin, ok := ExtractASIN(entry.Name()); ok {
+			title := stripASIN(entry.Name())
+			audioFiles := findAudioFiles(entryPath)
+
+			discovered = append(discovered, DiscoveredBook{
+				ASIN:       asin,
+				Title:      title,
+				Author:     "", // no author directory in flat layout
+				LocalPath:  entryPath,
+				AudioFiles: audioFiles,
+			})
+			continue
+		}
+
+		// Otherwise treat as Author directory — scan one level deeper
+		titleEntries, err := os.ReadDir(entryPath)
 		if err != nil {
 			if os.IsPermission(err) {
 				skipped = append(skipped, SkippedDir{
-					Path:   authorPath,
+					Path:   entryPath,
 					Reason: "permission_denied",
 				})
-				slog.Warn("permission denied reading directory", "path", authorPath)
+				slog.Warn("permission denied reading directory", "path", entryPath)
 				continue
 			}
-			return nil, nil, fmt.Errorf("read author dir %s: %w", authorPath, err)
+			return nil, nil, fmt.Errorf("read author dir %s: %w", entryPath, err)
 		}
 
 		for _, titleEntry := range titleEntries {
@@ -94,7 +112,7 @@ func scanTwoLevel(root string) ([]DiscoveredBook, []SkippedDir, error) {
 				continue
 			}
 
-			titlePath := filepath.Join(authorPath, titleEntry.Name())
+			titlePath := filepath.Join(entryPath, titleEntry.Name())
 			asin, ok := ExtractASIN(titleEntry.Name())
 			if !ok {
 				skipped = append(skipped, SkippedDir{
@@ -105,14 +123,14 @@ func scanTwoLevel(root string) ([]DiscoveredBook, []SkippedDir, error) {
 			}
 
 			title := stripASIN(titleEntry.Name())
-			m4aFiles := findM4AFiles(titlePath)
+			audioFiles := findAudioFiles(titlePath)
 
 			discovered = append(discovered, DiscoveredBook{
-				ASIN:      asin,
-				Title:     title,
-				Author:    authorEntry.Name(),
-				LocalPath: titlePath,
-				M4AFiles:  m4aFiles,
+				ASIN:       asin,
+				Title:      title,
+				Author:     entry.Name(),
+				LocalPath:  titlePath,
+				AudioFiles: audioFiles,
 			})
 		}
 	}
@@ -154,14 +172,14 @@ func scanRecursive(root string) ([]DiscoveredBook, []SkippedDir, error) {
 
 		title := stripASIN(d.Name())
 		author := filepath.Base(filepath.Dir(path))
-		m4aFiles := findM4AFiles(path)
+		m4aFiles := findAudioFiles(path)
 
 		discovered = append(discovered, DiscoveredBook{
 			ASIN:      asin,
 			Title:     title,
 			Author:    author,
 			LocalPath: path,
-			M4AFiles:  m4aFiles,
+			AudioFiles:  m4aFiles,
 		})
 
 		// Don't descend into this directory; we've already processed it
@@ -187,8 +205,8 @@ func stripASIN(name string) string {
 	return result
 }
 
-// findM4AFiles returns sorted absolute paths to .m4a files in a directory.
-func findM4AFiles(dir string) []string {
+// findAudioFiles returns sorted absolute paths to .m4a/.m4b files in a directory.
+func findAudioFiles(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -199,7 +217,8 @@ func findM4AFiles(dir string) []string {
 		if entry.IsDir() {
 			continue
 		}
-		if strings.EqualFold(filepath.Ext(entry.Name()), ".m4a") {
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext == ".m4a" || ext == ".m4b" {
 			files = append(files, filepath.Join(dir, entry.Name()))
 		}
 	}
@@ -264,7 +283,7 @@ func IncrementalSync(database *sql.DB, discovered []DiscoveredBook, metadataFn f
 			Duration:       meta.Duration,
 			ChapterCount:   meta.ChapterCount,
 			MetadataSource: meta.Source,
-			FileCount:      len(d.M4AFiles),
+			FileCount:      len(d.AudioFiles),
 			Status:         "scanned",
 			LocalPath:      d.LocalPath,
 		}
