@@ -300,9 +300,16 @@ func IncrementalSync(database *sql.DB, discovered []DiscoveredBook, metadataFn f
 		}
 	}
 
-	// Mark books not seen in scan as "removed"
+	// Mark books not seen in scan as "removed" — but preserve user-set statuses
+	preserveStatuses := map[string]bool{
+		"removed":     true,
+		"skipped":     true,
+		"unavailable": true,
+		"downloaded":  true,
+		"organized":   true,
+	}
 	for _, b := range existing {
-		if !seenASINs[b.ASIN] && b.Status != "removed" {
+		if !seenASINs[b.ASIN] && !preserveStatuses[b.Status] {
 			if err := db.UpdateBookStatus(database, b.ASIN, "removed"); err != nil {
 				return nil, fmt.Errorf("mark book %s as removed: %w", b.ASIN, err)
 			}
