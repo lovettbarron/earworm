@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-02-PLAN.md
+stopped_at: Completed 08-01-PLAN.md
 last_updated: "2026-04-06T08:59:57.918Z"
 last_activity: 2026-04-06
 progress:
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Reliably download and organize Audible audiobooks into a local library with zero manual intervention
-**Current focus:** Phase 07 — pipeline-integration-fix
+**Current focus:** Phase 08 — coverage-doc-cleanup
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
-Status: Executing Phase 07
-Last activity: 2026-04-06
+Phase: 08 (coverage-doc-cleanup) — EXECUTING
+Plan: 1 of 3 complete
+Status: Executing Phase 08
+Last activity: 2026-04-06 -- Plan 08-01 complete (test coverage for 6 packages)
 
 Progress: [██████▓░░░] 66%
 
@@ -65,6 +65,7 @@ Progress: [██████▓░░░] 66%
 | Phase 05 P02 | 5min | 2 tasks | 7 files |
 | Phase 06 P03 | 1min | 1 tasks | 1 files |
 | Phase 07 P01 | 4min | 2 tasks | 5 files |
+| Phase 08 P01 | 8min | 2 tasks | 10 files |
 | Phase 07 P02 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
@@ -104,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase quick]: Per-book timeout wraps context.WithTimeout; timeout errors unwrapped to prevent batch abort
 - [Phase 07]: MoveToLibrary fully removed from download package; organize is sole move path
 - [Phase 07]: ABS scan removed from download command; daemon cycle handles it after organize step
+- [Phase 08]: Test seams (lookPathFn, execCommandCtx) added to ffprobe.go for subprocess mocking
+- [Phase 08]: Minimal MP4 builder in tests for extractWithTag success path without real audio files
 - [Phase 07]: ABS scan in organize command mirrors daemon cycle pattern for standalone usage
 
 ### Pending Todos
