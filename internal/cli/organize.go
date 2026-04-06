@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/lovettbarron/earworm/internal/audiobookshelf"
 	"github.com/lovettbarron/earworm/internal/config"
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/organize"
@@ -104,6 +105,23 @@ func runOrganize(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Organized %d books, %d errors\n", successCount, errorCount)
+
+	// Trigger Audiobookshelf library scan after successful organization.
+	// Silent skip if unconfigured. Warn and continue on failure.
+	if successCount > 0 {
+		if absURL := viper.GetString("audiobookshelf.url"); absURL != "" {
+			abs := audiobookshelf.NewClient(
+				absURL,
+				viper.GetString("audiobookshelf.token"),
+				viper.GetString("audiobookshelf.library_id"),
+			)
+			if scanErr := abs.ScanLibrary(); scanErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: Audiobookshelf scan failed: %v\n", scanErr)
+			} else if !quiet {
+				fmt.Fprintln(cmd.OutOrStdout(), "Audiobookshelf library scan triggered.")
+			}
+		}
+	}
 
 	return nil
 }
