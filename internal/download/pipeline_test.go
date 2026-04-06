@@ -799,3 +799,26 @@ func (d *timedFakeDownloader) LibraryExport(ctx context.Context) ([]audible.Libr
 var _ = errors.New
 var _ = fmt.Sprintf
 var _ = strings.Contains
+
+func TestDefaultSleep_ZeroDuration(t *testing.T) {
+	err := defaultSleep(context.Background(), 0)
+	assert.NoError(t, err)
+}
+
+func TestDefaultSleep_NegativeDuration(t *testing.T) {
+	err := defaultSleep(context.Background(), -1*time.Second)
+	assert.NoError(t, err)
+}
+
+func TestDefaultSleep_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+	err := defaultSleep(ctx, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestDefaultSleep_ShortDuration(t *testing.T) {
+	err := defaultSleep(context.Background(), 1*time.Millisecond)
+	assert.NoError(t, err)
+}

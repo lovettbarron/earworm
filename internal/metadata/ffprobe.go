@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+// Test seams for subprocess mocking.
+var lookPathFn = exec.LookPath
+var execCommandCtx = exec.CommandContext
+
 // ffprobeOutput represents the JSON output from ffprobe.
 type ffprobeOutput struct {
 	Format   ffprobeFormat    `json:"format"`
@@ -29,7 +33,7 @@ type ffprobeChapter struct {
 // extractWithFFprobe extracts metadata from an M4A file using ffprobe subprocess.
 func extractWithFFprobe(filePath string) (*BookMetadata, error) {
 	// Check if ffprobe is available
-	ffprobePath, err := exec.LookPath("ffprobe")
+	ffprobePath, err := lookPathFn("ffprobe")
 	if err != nil {
 		return nil, fmt.Errorf("ffprobe not found: %w", err)
 	}
@@ -37,7 +41,7 @@ func extractWithFFprobe(filePath string) (*BookMetadata, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, ffprobePath,
+	cmd := execCommandCtx(ctx, ffprobePath,
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_format",

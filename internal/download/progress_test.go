@@ -66,3 +66,60 @@ func TestPrintElapsed_QuietMode(t *testing.T) {
 
 	assert.Empty(t, buf.String(), "quiet mode should produce no output")
 }
+
+func TestFormatBookProgress(t *testing.T) {
+	pt := NewProgressTracker(&bytes.Buffer{}, false)
+	result := pt.FormatBookProgress(2, 5, "Author", "Title", "B001", 50)
+	assert.Contains(t, result, "[2/5]")
+	assert.Contains(t, result, "Author")
+	assert.Contains(t, result, "Title")
+	assert.Contains(t, result, "50%")
+}
+
+func TestFormatBookProgress_NoPct(t *testing.T) {
+	pt := NewProgressTracker(&bytes.Buffer{}, false)
+	result := pt.FormatBookProgress(1, 3, "Author", "Title", "B001", -1)
+	assert.Contains(t, result, "Author")
+	assert.NotContains(t, result, "%")
+}
+
+func TestFormatBookProgress_QuietMode(t *testing.T) {
+	pt := NewProgressTracker(&bytes.Buffer{}, true)
+	result := pt.FormatBookProgress(1, 3, "Author", "Title", "B001", 50)
+	assert.Empty(t, result)
+}
+
+func TestFormatSummary(t *testing.T) {
+	pt := NewProgressTracker(&bytes.Buffer{}, false)
+	result := pt.FormatSummary(5, 6, 1, 10*time.Minute)
+	assert.Contains(t, result, "5/6")
+	assert.Contains(t, result, "1 failed")
+}
+
+func TestFormatSummary_NoFailures(t *testing.T) {
+	pt := NewProgressTracker(&bytes.Buffer{}, false)
+	result := pt.FormatSummary(3, 3, 0, 5*time.Minute)
+	assert.Contains(t, result, "3/3")
+	assert.NotContains(t, result, "failed")
+}
+
+func TestFormatResume(t *testing.T) {
+	pt := NewProgressTracker(&bytes.Buffer{}, false)
+	result := pt.FormatResume(5, 3)
+	assert.Contains(t, result, "5 of 8 remaining")
+	assert.Contains(t, result, "3 completed previously")
+}
+
+func TestPrintBookProgress(t *testing.T) {
+	var buf bytes.Buffer
+	pt := NewProgressTracker(&buf, false)
+	pt.PrintBookProgress(1, 3, "Author", "Title", "B001", 75)
+	assert.NotEmpty(t, buf.String())
+}
+
+func TestPrintSummary(t *testing.T) {
+	var buf bytes.Buffer
+	pt := NewProgressTracker(&buf, false)
+	pt.PrintSummary(3, 4, 1, 5*time.Minute)
+	assert.NotEmpty(t, buf.String())
+}

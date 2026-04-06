@@ -199,6 +199,14 @@ func TestDecryptStaged_WithAAXC(t *testing.T) {
 	assert.NoFileExists(t, voucherPath)
 }
 
+func TestDefaultCmdFactory(t *testing.T) {
+	cmd := DefaultCmdFactory(context.Background(), "echo", "hello")
+	assert.NotNil(t, cmd)
+	output, err := cmd.Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(output), "hello")
+}
+
 func TestDecryptStaged_NoAAXC_Noop(t *testing.T) {
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "book.m4a"), []byte("audio"), 0644))
