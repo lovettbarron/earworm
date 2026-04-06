@@ -1,64 +1,56 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-04-06T16:15:02.187Z"
+milestone_name: MVP
+status: completed
+stopped_at: Milestone v1.0 shipped
+last_updated: "2026-04-06T20:15:00.000Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 8
   completed_phases: 8
   total_plans: 22
   completed_plans: 22
-  percent: 66
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-03)
+See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** Reliably download and organize Audible audiobooks into a local library with zero manual intervention
-**Current focus:** Phase 08 — coverage-doc-cleanup
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
-Status: Ready to execute
+Phase: Complete
+Plan: N/A
+Status: v1.0 shipped
 Last activity: 2026-04-06
 
-Progress: [██████▓░░░] 66%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Total plans completed: 22
+- Total phases: 8
+- Timeline: 4 days (2026-04-03 → 2026-04-06)
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: -
-- Trend: -
-
-*Updated after each plan completion*
 | Phase 01 P01 | 5min | 2 tasks | 7 files |
 | Phase 02 P01 | 6min | 3 tasks | 14 files |
 | Phase 02 P02 | 4min | 2 tasks | 7 files |
 | Phase 03 P01 | 4min | 2 tasks | 3 files |
 | Phase 03 P02 | 4min | 2 tasks | 7 files |
 | Phase 04 P02 | 3min | 2 tasks | 8 files |
-| Phase 04-download-pipeline P01 | 5min | 2 tasks | 7 files |
+| Phase 04 P01 | 5min | 2 tasks | 7 files |
 | Phase 04 P03 | 3min | 1 tasks | 2 files |
 | Phase 04 P04 | 2min | 1 tasks | 4 files |
 | Phase 05 P01 | 3min | 2 tasks | 4 files |
@@ -75,47 +67,10 @@ Progress: [██████▓░░░] 66%
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Go language, Cobra/Viper CLI, modernc.org/sqlite (pure Go, no CGo)
-- SQLite DB must live on local filesystem, never on NAS mount
-- Wrap audible-cli as subprocess (clean license boundary)
-- [Phase quick]: TEST-12 coverage requirement mapped to All Phases (cross-cutting)
-- [Phase 01]: Used modernc.org/sqlite with driver name 'sqlite' for pure Go SQLite
-- [Phase 01]: WAL mode enabled on Open; status validation in Go code not DB constraints
-- [Phase 02]: UpsertBook uses INSERT ON CONFLICT for safe incremental scanning
-- [Phase 02]: Metadata fallback chain: dhowden/tag -> ffprobe -> folder name parsing
-- [Phase 02]: Metadata adapter bridges scanner.BookMetadata and metadata.BookMetadata types
-- [Phase 02]: Package-level Cobra flag vars reset in test helper to prevent cross-test contamination
-
-- [Phase 03]: SyncRemoteBook preserves local-only fields (status, local_path, metadata_source, file_count, has_cover, duration, chapter_count) on upsert
-- [Phase 03]: ListNewBooks identifies books by audible_status presence and download status exclusion
-- [Phase 03]: cmdFactory injection pattern for subprocess testing instead of interface-based exec abstraction
-- [Phase 03]: Pointer types (*int) for nullable audible-cli JSON fields per Research Pitfall 6
-- [Phase 04]: ASIN pattern regex for safe orphan cleanup in staging module
-- [Phase 04]: sql.NullTime for nullable datetime columns with *time.Time in Book struct
-- [Phase 04]: Stderr captured in goroutine with pipe drain before cmd.Wait() for subprocess deadlock prevention
-- [Phase 04]: verifyFunc/sleepFunc function fields on Pipeline struct for test seam injection
-- [Phase 04]: Auth errors abort batch immediately; rate limit errors double backoff delay
-- [Phase 04]: Reuse newAudibleClient var from sync.go for consistent CLI test injection pattern
-- [Phase 04]: Filter and limit applied in both dry-run and pipeline config for consistent behavior
-- [Phase 05]: Illegal chars regex covers all 9 filesystem-unsafe characters; BuildBookPath validates before and after sanitization
-- [Phase 05]: MoveFile creates parent directories automatically; EXDEV fallback with size verification before source deletion
-- [Phase 05]: OrganizeAll continues processing remaining books when one fails (per-book error isolation)
-- [Phase 05]: Cover images (.jpg/.jpeg/.png) all renamed to cover.jpg; chapter JSON to chapters.json
-- [Phase 06]: Documented Phase 6 commands based on plan spec since Plan 02 builds them in parallel
-- [Phase quick]: Per-book timeout wraps context.WithTimeout; timeout errors unwrapped to prevent batch abort
-- [Phase 07]: MoveToLibrary fully removed from download package; organize is sole move path
-- [Phase 07]: ABS scan removed from download command; daemon cycle handles it after organize step
-- [Phase 08]: Test seams (lookPathFn, execCommandCtx) added to ffprobe.go for subprocess mocking
-- [Phase 08]: Minimal MP4 builder in tests for extractWithTag success path without real audio files
-- [Phase 07]: ABS scan in organize command mirrors daemon cycle pattern for standalone usage
-- [Phase 08]: Reset cobra help flag value and Changed state in executeCommand to prevent cross-test contamination
-- [Phase 08]: Overall coverage 83.2% verified, all 12 non-cmd packages above 80%
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -133,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-06T16:10:31.049Z
-Stopped at: Completed 08-03-PLAN.md
+Last session: 2026-04-06
+Stopped at: Milestone v1.0 shipped
 Resume file: None
