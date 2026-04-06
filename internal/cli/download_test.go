@@ -209,3 +209,37 @@ func TestDryRun_WithASINFilter(t *testing.T) {
 	assert.NotContains(t, out, "Book Two")
 	assert.Contains(t, out, "1 books to download")
 }
+
+func TestFormatRuntime(t *testing.T) {
+	tests := []struct {
+		minutes  int
+		expected string
+	}{
+		{0, "unknown"},
+		{45, "45m"},
+		{60, "1h 0m"},
+		{90, "1h 30m"},
+		{420, "7h 0m"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			assert.Equal(t, tt.expected, formatRuntime(tt.minutes))
+		})
+	}
+}
+
+func TestDownloadCommand_NoASINsFound(t *testing.T) {
+	cfgPath := setupDownloadDB(t, nil)
+
+	out, err := executeCommand(t, "--config", cfgPath, "download", "--dry-run")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No new books to download")
+}
+
+func TestDownloadCommand_JSONDryRunEmpty(t *testing.T) {
+	cfgPath := setupDownloadDB(t, nil)
+
+	out, err := executeCommand(t, "--config", cfgPath, "download", "--dry-run", "--json")
+	require.NoError(t, err)
+	assert.Contains(t, out, "[]")
+}
