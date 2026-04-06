@@ -27,6 +27,15 @@ type RateLimitError struct {
 func (e *RateLimitError) Error() string { return "audible rate limit: " + e.Message }
 func (e *RateLimitError) Unwrap() error { return e.Err }
 
+// NotAvailableError indicates a book is no longer accessible (e.g., expired subscription).
+type NotAvailableError struct {
+	Message string
+	Err     error
+}
+
+func (e *NotAvailableError) Error() string { return "audible not available: " + e.Message }
+func (e *NotAvailableError) Unwrap() error { return e.Err }
+
 // CommandError wraps a failed audible-cli subprocess execution.
 type CommandError struct {
 	Command  string
@@ -49,6 +58,11 @@ func classifyError(command string, stderr string, exitCode int, err error) error
 	}
 	if strings.Contains(lower, "rate limit") || strings.Contains(lower, "too many requests") {
 		return &RateLimitError{Message: stderr, Err: err}
+	}
+	if strings.Contains(lower, "not available") || strings.Contains(lower, "no longer available") ||
+		strings.Contains(lower, "access denied") || strings.Contains(lower, "not owned") ||
+		strings.Contains(lower, "license denied") || strings.Contains(lower, "not in library") {
+		return &NotAvailableError{Message: stderr, Err: err}
 	}
 	return &CommandError{Command: command, Stderr: stderr, ExitCode: exitCode, Err: err}
 }

@@ -127,7 +127,10 @@ Plans:
   3. Full pipeline flow (download → organize → notify) completes end-to-end without errors
   4. Daemon cycle (sync → download → organize → ABS scan) succeeds with books reaching 'OK' status
   5. Integration tests verify the download→organize handoff with real staging directory state
-**Plans**: 0 plans
+**Plans**: 2 plans
+Plans:
+- [ ] 07-01-PLAN.md — Remove MoveToLibrary from download pipeline, update verifyAndMove to verifyStaged, remove ABS scan from download command
+- [ ] 07-02-PLAN.md — Download-to-organize handoff integration tests, ABS scan trigger in organize command
 
 ### Phase 8: Test Coverage & Documentation Cleanup
 **Goal**: Establish >80% test coverage measurement and fix stale documentation artifacts for clean milestone close
@@ -154,5 +157,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 4. Download Pipeline | 0/4 | Planning complete | - |
 | 5. File Organization | 0/2 | Planning complete | - |
 | 6. Integrations & Polish | 1/3 | In Progress|  |
-| 7. Fix Download→Organize Pipeline | 0/0 | Not started | - |
+| 7. Fix Download→Organize Pipeline | 0/2 | Planning complete | - |
 | 8. Test Coverage & Doc Cleanup | 0/0 | Not started | - |

@@ -331,8 +331,13 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 		if downloadErr == nil {
 			// Success — decrypt (if AAXC) and verify files remain in staging.
 			if err := p.verifyStaged(ctx, book.ASIN, asinStagingDir); err != nil {
+				// Not available — don't retry, book is inaccessible
+				var notAvailErr *audible.NotAvailableError
+				if errors.As(err, &notAvailErr) {
+					return err
+				}
 				lastErr = err
-				// Retry on verify failure
+				// Retry on other verify failures
 				if attempt < maxAttempts-1 {
 					delay := backoff.Delay(attempt)
 					if sleepErr := p.sleepFunc(ctx, delay); sleepErr != nil {
@@ -354,6 +359,15 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 		// Auth error — don't retry, propagate immediately.
 		var authErr *audible.AuthError
 		if errors.As(downloadErr, &authErr) {
+			return downloadErr
+		}
+
+		// Not available (expired subscription) — mark unavailable, don't retry.
+		var notAvailErr *audible.NotAvailableError
+		if errors.As(downloadErr, &notAvailErr) {
+			if err := db.UpdateBookStatus(p.db, book.ASIN, "unavailable"); err != nil {
+				slog.Warn("failed to mark book unavailable", "asin", book.ASIN, "error", err)
+			}
 			return downloadErr
 		}
 
@@ -395,7 +409,27 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 // remain in staging. Files are NOT moved to library — that is handled by
 // the organize command.
 func (p *Pipeline) verifyStaged(ctx context.Context, asin string, stagingDir string) error {
-	// Step 1: Decrypt AAXC to M4B if applicable.
+	// Step 1: Check if any audio files exist (aaxc, m4b, or m4a).
+	// If audible-cli "succeeded" but downloaded no audio, the book is likely unavailable.
+	hasAudio := false
+	for _, ext := range []string{"*.aaxc", "*.m4b", "*.m4a"} {
+		found, _ := filepath.Glob(filepath.Join(stagingDir, ext))
+		if len(found) > 0 {
+			hasAudio = true
+			break
+		}
+	}
+	if !hasAudio {
+		// Mark as unavailable — audible-cli didn't error but no audio was downloaded
+		if err := db.UpdateBookStatus(p.db, asin, "unavailable"); err != nil {
+			slog.Warn("failed to mark book unavailable", "asin", asin, "error", err)
+		}
+		return &audible.NotAvailableError{
+			Message: fmt.Sprintf("no audio files downloaded for %s — book may no longer be available (expired subscription?)", asin),
+		}
+	}
+
+	// Step 2: Decrypt AAXC to M4B if applicable.
 	if !p.config.Quiet {
 		fmt.Fprintf(p.w, "  Decrypting...\n")
 	}
@@ -403,7 +437,7 @@ func (p *Pipeline) verifyStaged(ctx context.Context, asin string, stagingDir str
 		return fmt.Errorf("decrypting AAXC for %s: %w", asin, err)
 	}
 
-	// Step 2: Glob for audio files in staging (.m4b first, then .m4a).
+	// Step 3: Glob for decoded audio files in staging (.m4b first, then .m4a).
 	var matches []string
 	for _, ext := range []string{"*.m4b", "*.m4a"} {
 		found, err := filepath.Glob(filepath.Join(stagingDir, ext))
@@ -413,7 +447,7 @@ func (p *Pipeline) verifyStaged(ctx context.Context, asin string, stagingDir str
 		matches = append(matches, found...)
 	}
 	if len(matches) == 0 {
-		return fmt.Errorf("no audio files (.m4b/.m4a) found in staging for %s", asin)
+		return fmt.Errorf("no audio files (.m4b/.m4a) found in staging for %s after decryption", asin)
 	}
 
 	// Step 3: Verify each audio file.

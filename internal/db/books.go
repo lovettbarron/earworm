@@ -16,6 +16,8 @@ var ValidStatuses = []string{
 	"organized",
 	"error",
 	"removed",
+	"skipped",
+	"unavailable",
 }
 
 // Book represents an audiobook in the library.
@@ -404,7 +406,7 @@ func ListNewBooks(db *sql.DB) ([]Book, error) {
 		`SELECT `+allColumns+` FROM books
 		WHERE audible_status != ''
 		  AND (local_path = '' OR local_path IS NULL)
-		  AND status NOT IN ('scanned', 'downloaded', 'organized')
+		  AND status NOT IN ('scanned', 'downloaded', 'organized', 'skipped', 'unavailable')
 		ORDER BY purchase_date DESC`,
 	)
 	if err != nil {
