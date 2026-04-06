@@ -139,7 +139,7 @@ func TestListDownloadable(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "scanned with audible_status - should appear",
+			name: "scanned with audible_status - should NOT appear (already local)",
 			book: Book{
 				ASIN:          "LD005",
 				Title:         "Scanned Remote",
@@ -147,7 +147,7 @@ func TestListDownloadable(t *testing.T) {
 				Status:        "scanned",
 				AudibleStatus: "in_progress",
 			},
-			expected: true,
+			expected: false,
 		},
 		{
 			name: "no audible_status - should NOT appear",

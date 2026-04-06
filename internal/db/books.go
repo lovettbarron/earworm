@@ -314,7 +314,7 @@ func UpdateDownloadError(db *sql.DB, asin string, retryCount int, errMsg string)
 func ListDownloadable(db *sql.DB) ([]Book, error) {
 	rows, err := db.Query(
 		`SELECT `+allColumns+` FROM books
-		WHERE (audible_status != '' AND status NOT IN ('downloaded', 'organized'))
+		WHERE (audible_status != '' AND status NOT IN ('scanned', 'downloaded', 'organized', 'skipped', 'unavailable'))
 		   OR status = 'error'
 		ORDER BY purchase_date DESC`,
 	)
