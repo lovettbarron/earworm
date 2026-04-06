@@ -2,7 +2,7 @@
 phase: 08
 slug: coverage-doc-cleanup
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-06
 ---
@@ -38,11 +38,14 @@ created: 2026-04-06
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 08-01-01 | 01 | 1 | TEST-12 | coverage | `go test ./... -coverprofile=coverage.out` | ✅ | ⬜ pending |
-| 08-01-02 | 01 | 1 | TEST-12 | unit | `go test ./internal/cli/...` | ✅ | ⬜ pending |
-| 08-02-01 | 02 | 1 | TEST-12 | docs | `grep -c '\[x\]' .planning/ROADMAP.md` | ✅ | ⬜ pending |
+| 08-01-01 | 01 | 1 | TEST-12 | coverage | `go test ./internal/metadata/... -cover -count=1 && go test ./internal/venv/... -cover -count=1` | Yes | pending |
+| 08-01-02 | 01 | 1 | TEST-12 | coverage | `go test ./internal/audible/... -cover -count=1 && go test ./internal/config/... -cover -count=1 && go test ./internal/db/... -cover -count=1 && go test ./internal/download/... -cover -count=1` | Yes | pending |
+| 08-02-01 | 02 | 1 | TEST-12 | coverage | `go test ./internal/cli/... -cover -count=1` | Yes | pending |
+| 08-02-02 | 02 | 1 | TEST-12 | coverage | `go test ./internal/cli/... -cover -count=1` | Yes | pending |
+| 08-03-01 | 03 | 2 | TEST-12 | docs | `COUNT=$(grep -c '\[x\] \*\*Phase' .planning/ROADMAP.md) && test "$COUNT" -ge 6` | Yes | pending |
+| 08-03-02 | 03 | 2 | TEST-12 | coverage+docs | `go test ./... -coverprofile=/tmp/cov.out -count=1 && TOTAL=$(go tool cover -func=/tmp/cov.out \| grep "total:" \| awk '{print $NF}' \| tr -d '%') && test $(echo "$TOTAL >= 80.0" \| bc) -eq 1` | Yes | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
@@ -62,11 +65,11 @@ Existing infrastructure covers all phase requirements.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
