@@ -138,3 +138,66 @@ func TestWriteDefaultConfig(t *testing.T) {
 	assert.Contains(t, string(data), "library_path")
 	assert.Contains(t, string(data), "audible_cli_path")
 }
+
+func TestWriteDefaultConfig_BadPath(t *testing.T) {
+	resetViper(t)
+	// /dev/null is not a directory, so MkdirAll should fail
+	err := WriteDefaultConfig("/dev/null/sub/config.yaml")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "creating config directory")
+}
+
+func TestValidateLibraryPathNotDir(t *testing.T) {
+	resetViper(t)
+	SetDefaults()
+	// Create a regular file and set it as library_path
+	tmpDir := t.TempDir()
+	fPath := filepath.Join(tmpDir, "not-a-dir")
+	require.NoError(t, os.WriteFile(fPath, []byte("data"), 0644))
+	viper.Set("library_path", fPath)
+	err := Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "is not a directory")
+}
+
+func TestValidateNegativeRateLimit(t *testing.T) {
+	resetViper(t)
+	SetDefaults()
+	viper.Set("download.rate_limit_seconds", -1)
+	err := Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "rate_limit_seconds")
+}
+
+func TestValidateNegativeMaxRetries(t *testing.T) {
+	resetViper(t)
+	SetDefaults()
+	viper.Set("download.max_retries", -1)
+	err := Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "max_retries")
+}
+
+func TestValidateNegativeTimeout(t *testing.T) {
+	resetViper(t)
+	SetDefaults()
+	viper.Set("download.timeout_minutes", -1)
+	err := Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "timeout_minutes")
+}
+
+func TestInitConfigBadFile(t *testing.T) {
+	resetViper(t)
+	// Point to a file that doesn't exist and has invalid extension
+	// Viper errors when the config file is set explicitly but can't be read
+	err := InitConfig("/nonexistent/path/config.yaml")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "reading config file")
+}
+
+func TestDefaultStagingPath(t *testing.T) {
+	p, err := DefaultStagingPath()
+	require.NoError(t, err)
+	assert.Contains(t, p, filepath.Join(".config", "earworm", "staging"))
+}

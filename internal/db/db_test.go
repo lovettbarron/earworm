@@ -693,3 +693,47 @@ func TestListNewBooks_Empty(t *testing.T) {
 	assert.NotNil(t, newBooks)
 	assert.Empty(t, newBooks)
 }
+
+func TestOpenInvalidPath(t *testing.T) {
+	_, err := Open("/dev/null/impossible/path.db")
+	assert.Error(t, err)
+}
+
+func TestInsertBookInvalidStatus(t *testing.T) {
+	db := setupTestDB(t)
+	book := Book{ASIN: "BADSTATUS", Title: "Test", Author: "Author", Status: "bogus"}
+	err := InsertBook(db, book)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid status")
+}
+
+func TestUpsertBookInvalidStatus(t *testing.T) {
+	db := setupTestDB(t)
+	book := Book{ASIN: "BADSTATUS2", Title: "Test", Author: "Author", Status: "bogus"}
+	err := UpsertBook(db, book)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid status")
+}
+
+func TestUpdateBookStatusInvalidStatus(t *testing.T) {
+	db := setupTestDB(t)
+	book := Book{ASIN: "STATUSTEST", Title: "Test", Author: "Author", Status: "unknown"}
+	require.NoError(t, InsertBook(db, book))
+	err := UpdateBookStatus(db, "STATUSTEST", "bogus")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid status")
+}
+
+func TestListBooksOnClosedDB(t *testing.T) {
+	db := setupTestDB(t)
+	db.Close()
+	_, err := ListBooks(db)
+	assert.Error(t, err)
+}
+
+func TestGetBookOnClosedDB(t *testing.T) {
+	db := setupTestDB(t)
+	db.Close()
+	_, err := GetBook(db, "ANYTHING")
+	assert.Error(t, err)
+}

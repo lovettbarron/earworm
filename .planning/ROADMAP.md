@@ -144,7 +144,7 @@ Plans:
   4. ROADMAP.md progress table and phase checkboxes reflect actual completion state
 **Plans**: 3 plans
 Plans:
-- [ ] 08-01-PLAN.md — Test coverage for metadata, venv, audible, config, db, download packages
+- [x] 08-01-PLAN.md — Test coverage for metadata, venv, audible, config, db, download packages
 - [ ] 08-02-PLAN.md — Test coverage for cli package
 - [ ] 08-03-PLAN.md — Documentation cleanup and coverage verification gate
 
@@ -162,4 +162,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 5. File Organization | 2/2 | Complete | Yes |
 | 6. Integrations & Polish | 3/3 | Complete | Yes |
 | 7. Fix Download→Organize Pipeline | 2/2 | Complete | Yes |
-| 8. Test Coverage & Doc Cleanup | 0/3 | Executing | - |
+| 8. Test Coverage & Doc Cleanup | 1/3 | Executing | - |

@@ -137,6 +137,29 @@ func TestStatusJSONFields(t *testing.T) {
 	assert.Contains(t, book, "Status")
 }
 
+func TestStatusIndicator(t *testing.T) {
+	tests := []struct {
+		status   string
+		expected string
+	}{
+		{"scanned", "OK"},
+		{"downloaded", "DL"},
+		{"organized", "OK"},
+		{"error", "ERR"},
+		{"removed", "GONE"},
+		{"anything_else", "?"},
+		{"", "?"},
+		{"unknown", "?"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			result := statusIndicator(tt.status)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestStatusFilterAuthor(t *testing.T) {
 	books := []db.Book{
 		{
