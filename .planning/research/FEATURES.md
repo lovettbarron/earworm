@@ -1,195 +1,192 @@
-# Feature Research
+# Feature Landscape: v1.1 Library Cleanup
 
-**Domain:** CLI audiobook library management (Audible ecosystem)
-**Researched:** 2026-04-03
-**Confidence:** HIGH
+**Domain:** Plan-based audiobook library cleanup and organization
+**Researched:** 2026-04-06
+**Confidence:** HIGH (domain patterns well-established via Terraform plan/apply, beets import workflow, media library tools)
 
-## Feature Landscape
+## Context
 
-### Table Stakes (Users Expect These)
+v1.0 handles ASIN-bearing books: scan, download, organize, notify. v1.1 addresses everything v1.0 skips -- folders without ASINs, misstructured directories, missing metadata, multi-book folders, and nested audio. The core pattern is plan-then-apply with zero destructive defaults, modeled after Terraform's plan/apply workflow and beets' interactive import.
 
-Features users assume exist. Missing these = product feels incomplete.
+Existing v1.0 capabilities this builds on:
+- Scanner identifies ASIN-bearing folders, skips non-ASIN folders (reports as `SkippedDir` with reason `no_asin`)
+- SQLite DB tracks books by ASIN with status lifecycle
+- Organize package moves files into `Author/Title [ASIN]/` structure
+- MoveFile handles cross-filesystem copies
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Audible authentication via audible-cli | Cannot do anything without auth; every tool has this | LOW | Wrap `audible quickstart` and `audible manage auth-file` subprocesses. Auth files are stored by audible-cli itself. |
-| Library listing from Audible account | Must know what books exist to download them; audible-cli, Libation, OpenAudible all do this | LOW | `audible library list` and `audible library export --format json` provide full library metadata. |
-| Download audiobooks from Audible | Core purpose of tool. Libation, OpenAudible, audible-cli all do this. | MEDIUM | Wrap `audible download` with ASIN targeting. audible-cli handles AAXC format + resume of partial downloads natively. |
-| Local library scanning | Must detect what is already downloaded vs. what is missing. Libation scans by ASIN in subdirectories. | MEDIUM | Walk directory tree, match files to known ASINs. Must handle Libation's convention of embedding ASIN in folder names. |
-| SQLite state tracking | Need persistent record of library state, download status, metadata. Standard for CLI tools (audible-cli uses it, Libation uses LibationContext.db). | MEDIUM | Schema: books table (ASIN, title, author, series, narrator, download_status, file_path, timestamps). |
-| Download status tracking | Users need to know what downloaded, what failed, what is pending. All tools show this. | LOW | Track per-book: pending, downloading, completed, failed, skipped. Store in SQLite. |
-| Cover art download | All tools download cover art. Audiobookshelf and media players expect it alongside audio files. | LOW | audible-cli supports `--cover` flag on download. Save as cover.jpg or folder.jpg in book directory. |
-| Metadata preservation | Title, author, narrator, series, duration, publish date. All tools preserve this. Audiobookshelf parses it from folder structure + ID3 tags. | MEDIUM | Store in SQLite from audible-cli library export JSON. audible-cli embeds ID3 tags during download. |
-| Configurable output directory | Users store libraries on NAS mounts, external drives, etc. All tools support custom output paths. | LOW | CLI flag + config file. Default to current directory or configured library root. |
-| Progress reporting during downloads | Downloads take hours for large libraries. Users need visibility. Libation shows progress; its crashes during long runs are a top complaint. | MEDIUM | Parse audible-cli stdout for progress. Report per-book and overall progress. |
-| Rate limiting / backoff | Audible will throttle or ban aggressive downloaders. Essential for long-running batch downloads. | MEDIUM | Configurable delay between downloads. Exponential backoff on HTTP errors. Respect audible-cli's own rate handling. |
+## Table Stakes
 
-### Differentiators (Competitive Advantage)
+Features users expect in any plan-based library cleanup tool. Missing these means the system feels unsafe or incomplete.
 
-Features that set Earworm apart from Libation, OpenAudible, and raw audible-cli usage.
+| Feature | Why Expected | Complexity | Depends On |
+|---------|--------------|------------|------------|
+| Deep library scan (all folders) | Current scanner only indexes ASIN folders. Non-ASIN folders are invisible -- users cannot fix what they cannot see. Every library cleanup tool starts with full inventory. | MEDIUM | Existing scanner infrastructure; new `library_items` table or extended scan model |
+| Issue detection during scan | Identifying problems is the whole point. Audiobookshelf users report: nested audio in wrong directory level, multi-book folders, missing metadata, orphan files. Must categorize issues, not just list folders. | MEDIUM | Deep scan |
+| Plan creation from scan results | Terraform's `plan` step is table stakes for any tool that modifies user files. Users must see proposed changes before anything happens. DB-persisted plans survive CLI restarts. | HIGH | Deep scan, issue detection, new `plans` and `plan_operations` tables |
+| Plan review (human-readable diff) | Terraform shows `+ create`, `~ update`, `- destroy`. Users must review exactly what will change, with clear operation types and affected paths. | MEDIUM | Plan creation |
+| Plan apply with confirmation | `terraform apply` requires explicit "yes" to proceed. Earworm must do the same. No auto-apply without `--auto-approve` equivalent. | MEDIUM | Plan review |
+| Dry-run / preview mode | beets has `-p` (pretend), Terraform has speculative plans. Must be able to preview without persisting a plan. | LOW | Plan creation |
+| Undo / rollback information | Users need confidence they can recover. At minimum, log what was done and where originals were. Full undo is a differentiator; logging what happened is table stakes. | MEDIUM | Execution logging |
+| Non-destructive defaults | No deletion without explicit opt-in. Moves and renames are recoverable; deletes are not. Separating deletions from structural operations is a safety pattern seen in beets (separate `remove` vs `import`) and media cleaners (dry-run-first). | LOW | Architecture decision, not code |
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Fault-tolerant batch downloads | Libation crashes mid-download on large libraries (well-documented: crashes at 2hrs into 6hr sessions, crashes after green light, database corruption). Earworm's core value is surviving interruptions gracefully. | HIGH | Track each book independently. If process dies, resume from last incomplete book on restart. audible-cli already handles partial file resume for individual books. Earworm adds queue-level resilience on top. |
-| Automatic new book detection | Check Audible account for books not yet in local library. Libation has this but it is coupled to its unreliable GUI. No CLI tool does this well. | MEDIUM | Diff audible-cli library export against SQLite state. Report new books, optionally auto-download. |
-| Audiobookshelf scan trigger | After downloads complete, automatically notify Audiobookshelf to pick up new content. No existing tool integrates this. | LOW | Single POST to `/api/libraries/<ID>/scan` with Bearer token. Config stores API URL + token + library ID. |
-| Libation-compatible folder structure | Existing Libation users can switch without reorganizing their library. Audiobookshelf already configured to read this structure. | MEDIUM | Replicate Libation's `Author/Title [ASIN]` convention. Include cover art and metadata files in same locations Libation uses. |
-| Headless/daemon mode | Run on a server or NAS host, polling for new books periodically. Libation and OpenAudible are GUI apps. audible-cli is manual. | MEDIUM | Periodic polling loop with configurable interval. Log-based output instead of interactive. Suitable for cron or systemd. |
-| Goodreads sync integration | Mark finished audiobooks on Goodreads. No other download tool integrates this. | MEDIUM | Wrap `good-audible-story-sync` (Ruby gem) or implement similar logic. Secondary priority -- the gem is macOS-focused and uses Selenium-style auth. |
-| Chapter file download | audible-cli supports downloading chapter metadata. Useful for Audiobookshelf chapter navigation. | LOW | `audible download --chapter` flag. Store .json chapter file alongside audio. |
-| Dry-run mode | Preview what would be downloaded without actually downloading. Useful for large libraries. | LOW | List new/missing books, show estimated download size, exit without downloading. |
-| Machine-readable output (JSON) | Enable scripting and pipeline integration. Raw audible-cli output is not structured. | LOW | `--output json` flag on list/status/download commands. Enables integration with jq, scripts, dashboards. |
+## Differentiators
 
-### Anti-Features (Commonly Requested, Often Problematic)
+Features that set Earworm's cleanup apart from BadaBoomBooks, manual scripting, or Audiobookshelf's limited built-in tools.
 
-Features that seem good but create problems for Earworm specifically.
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| Plan-as-data (DB-persisted plans) | Unlike Terraform's file-based plans, Earworm plans live in SQLite. This enables: partial apply, plan diffing between runs, plan merging from multiple sources (scan + CSV import). No other audiobook tool has structured plan infrastructure. | HIGH | New DB tables: `plans`, `plan_operations` |
+| CSV import for plan creation | Bridge between manual analysis and automated execution. User exports library list, annotates in spreadsheet (correct author, correct title, action), imports as plan. No audiobook tool supports this workflow. | MEDIUM | Plan infrastructure |
+| metadata.json sidecar writing | Audiobookshelf reads metadata.json with highest priority (above folder name, audio tags, OPF). Writing this file lets Earworm fix metadata without touching audio files. Safer than tag embedding. ABS will pick it up on next scan. | MEDIUM | Deep scan (to know what needs metadata), Audiobookshelf metadata.json format |
+| Structural operations with integrity verification | Flatten nested audio (move files up), split multi-book folders (separate into individual book folders), with SHA-256 before/after verification. No audiobook tool verifies file integrity after structural moves. | HIGH | Plan infrastructure, cross-filesystem move (existing) |
+| Separated deletion workflow | Deletions are never part of a structural plan. Separate `earworm cleanup` command requires explicit confirmation per batch. Modeled after how beets separates `remove` from `import`, and how Terraform separates `destroy` from `apply`. | MEDIUM | Plan infrastructure, execution log (to know what is safe to delete) |
+| Execution audit trail | Every operation logged to DB with timestamp, operation type, source path, destination path, SHA-256 hashes, success/failure, error message. Enables post-hoc review, debugging, and undo planning. | MEDIUM | New `execution_log` table |
+| Claude Code skill for conversational orchestration | Natural language interface: "fix my library" becomes scan + plan + review cycle. Claude can interpret ambiguous folder names, suggest correct metadata, and orchestrate multi-step cleanup. No media tool has AI-assisted library management. | MEDIUM | All plan infrastructure, Claude Code custom skill format |
+| Plan diffing between runs | Re-scan after partial apply, see what changed. Plans track generation number, operations track completion status. Re-scanning produces a new plan that accounts for already-applied operations. | MEDIUM | Plan infrastructure, deep scan |
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| AAX/AAXC decryption within Earworm | "One tool to do everything" | License contamination risk (Libation is GPL), massive complexity, duplicates audible-cli's job. audible-cli already handles decryption. | Delegate entirely to audible-cli. Earworm is an orchestrator, not a codec tool. |
-| Audio playback | "Preview my books" | Earworm is a library manager, not a player. Audiobookshelf handles playback. Adding playback means audio library dependencies, UI complexity. | Point users to Audiobookshelf for playback. |
-| Multi-format conversion (MP3, M4B, FLAC) | "I want MP3s" | Format conversion is a deep rabbit hole (ffmpeg dependency, quality settings, chapter handling). OpenAudible charges for this. | v1: M4A only (audible-cli default output). Document how to use ffmpeg externally if needed. |
-| GUI / TUI with rich widgets | "Make it look nice" | Massive scope increase. TUI frameworks (bubbletea, etc.) add complexity. The value is reliability, not prettiness. | Clean CLI output with good formatting. JSON output for custom dashboards. |
-| Direct Audible API implementation | "Remove Python dependency" | audible-cli has years of auth flow handling, DRM negotiation, regional quirks. Reimplementing is months of work with ongoing maintenance as Audible changes. | Wrap audible-cli. Accept Python as a runtime dependency. Document installation. |
-| Multi-service support (Libro.fm, Chirp, etc.) | "Support more than Audible" | Each service has different APIs, auth, DRM. Scope explosion. | v1: Audible only. Architecture should not preclude future services, but do not build for them now. |
-| Automatic library reorganization / renaming | "Fix my existing messy library" | Destructive operation on user files. Risk of data loss. Complex edge cases (duplicates, partial names, special characters). | Scan-only for existing libraries. Only organize files that Earworm downloads itself. |
-| Real-time webhook notifications | "Notify me on Slack/Discord when download finishes" | Scope creep. Webhook infrastructure, retry logic, auth for each service. | Log output + exit codes. Users can wrap with their own notification scripts. |
+## Anti-Features
+
+Features to explicitly NOT build in v1.1.
+
+| Anti-Feature | Why Tempting | Why Avoid | What to Do Instead |
+|--------------|-------------|-----------|-------------------|
+| Audio file tag writing / embedding | "Fix metadata everywhere" | Modifying audio files risks corruption, especially on NAS mounts with SMB/NFS. Audiobookshelf overwrites embedded tags anyway on rescan if metadata.json exists. | Write metadata.json sidecar only. Let Audiobookshelf handle tag embedding if user wants it. |
+| Automatic plan execution (no review) | "Just fix everything" | Violates the safety-first principle. One wrong rename on a 500-book library is catastrophic. Even Terraform requires `--auto-approve` to skip review. | Always require explicit confirmation. Provide `--auto-approve` flag only for scripted/CI use with prominent warnings. |
+| Format conversion during cleanup | "Convert M4A to M4B while reorganizing" | Scope explosion. Conversion is a separate concern with its own error modes (ffmpeg dependency, quality loss, chapter handling). Mixing it with structural operations makes rollback impossible. | Keep cleanup purely structural (move, rename, split, flatten) + metadata (metadata.json). Conversion is a separate tool/workflow. |
+| Duplicate detection and merging | "Find and merge duplicate books" | Duplicate detection is a similarity problem (same book, different editions/narrators). False positives delete unique content. Audiobookshelf has an open issue for this (#3705) because it is genuinely hard. | Flag potential duplicates in scan output as an issue type. Let user decide via plan review. Never auto-merge. |
+| Direct Audiobookshelf metadata sync | "Pull metadata from ABS, push metadata to ABS" | Two-way sync is a distributed systems problem. Conflict resolution, stale data, race conditions. ABS metadata.json is one-way and sufficient. | Write metadata.json locally. Trigger ABS scan. ABS reads the file. One-way, deterministic. |
+| Recursive undo / full rollback | "Undo everything from the last apply" | True rollback requires storing original file state, which means copying every file before moving it. On a NAS with 500 audiobooks at 500MB each, that is 250GB of undo storage. | Log all operations in execution_log with source/destination paths. User can manually reverse specific operations. Provide `earworm plan undo` that generates a reversal plan from execution log. |
+| Watch mode for continuous cleanup | "Monitor library and auto-fix new issues" | Continuous file watching on NAS mounts is unreliable (inotify doesn't work over SMB/NFS). Daemon mode already exists for downloads; mixing cleanup into it creates dangerous automation. | Manual scan + plan + apply cycle. User runs when ready. |
 
 ## Feature Dependencies
 
 ```
-[Audible Authentication]
-    +--requires--> [audible-cli installed and configured]
+[Deep Library Scan]
+    +--extends--> existing scanner (new: scan ALL folders, not just ASIN-bearing)
+    +--produces--> library inventory with issue annotations
     |
-    +--enables--> [Library Listing from Audible]
-                      +--enables--> [New Book Detection]
-                      +--enables--> [Download Audiobooks]
-                                        +--requires--> [Rate Limiting]
-                                        +--requires--> [Download Status Tracking]
-                                        +--enables--> [Fault-Tolerant Batch Downloads]
-                                        +--enables--> [Audiobookshelf Scan Trigger]
-                                        +--enables--> [Goodreads Sync]
+    +--enables--> [Issue Detection]
+    |                 +--categorizes--> nested_audio, multi_book, missing_metadata,
+    |                                   no_asin, orphan_files, wrong_structure
+    |
+    +--enables--> [Plan Creation]
+                      +--requires--> [DB Plan Tables] (plans, plan_operations)
+                      +--input-from--> scan results OR CSV import
+                      |
+                      +--enables--> [Plan Review]
+                      |                 +--renders--> human-readable operation diff
+                      |                 +--enables--> [Plan Apply]
+                      |                                   +--requires--> confirmation
+                      |                                   +--performs--> rename, move, flatten, split
+                      |                                   +--writes--> metadata.json
+                      |                                   +--verifies--> SHA-256 integrity
+                      |                                   +--logs-to--> [Execution Log]
+                      |
+                      +--enables--> [Guarded Cleanup]
+                                        +--separate command--> earworm cleanup
+                                        +--only deletions--> empty dirs, orphan files
+                                        +--requires--> double confirmation
 
-[Local Library Scanning]
-    +--requires--> [SQLite State Tracking]
-    +--requires--> [Libation-Compatible Folder Structure]
-    +--enables--> [New Book Detection] (by diffing local vs remote)
+[CSV Import]
+    +--creates--> plan operations from spreadsheet
+    +--feeds-into--> [Plan Creation] (alternative to scan-based plan)
 
-[SQLite State Tracking]
-    +--enables--> [Download Status Tracking]
-    +--enables--> [Local Library Scanning]
-    +--enables--> [New Book Detection]
+[Execution Log]
+    +--enables--> audit trail review
+    +--enables--> reversal plan generation
+    +--enables--> Claude Code skill context
 
-[Headless/Daemon Mode]
-    +--requires--> [New Book Detection]
-    +--requires--> [Fault-Tolerant Batch Downloads]
-    +--requires--> [Audiobookshelf Scan Trigger]
+[Claude Code Skill]
+    +--orchestrates--> scan, plan, review, apply
+    +--requires--> all plan infrastructure
+    +--reads--> execution log for context
 ```
 
-### Dependency Notes
+## Issue Types (Deep Scan Output)
 
-- **Download requires Auth**: Cannot download without valid audible-cli auth session. Auth must be the first thing configured.
-- **New Book Detection requires both Library Listing and Local Scan**: Must know what Audible has AND what is already local to compute the diff.
-- **Fault-Tolerant Batch Downloads requires Status Tracking**: Cannot resume a batch without persistent record of what succeeded/failed.
-- **Headless Mode requires everything else**: It is the capstone feature that automates the full pipeline. Build last.
-- **Audiobookshelf Scan Trigger is independent**: Simple HTTP call. Can be added at any point after downloads work.
+The deep scanner should categorize every non-conforming folder into actionable issue types:
 
-## MVP Definition
+| Issue Type | Description | Suggested Operation | Example |
+|------------|-------------|--------------------|---------| 
+| `no_asin` | Folder exists in library but has no ASIN in name. Cannot be matched to Audible. | User provides ASIN via CSV or interactive prompt; plan renames folder | `Author/Some Book Title/` |
+| `nested_audio` | Audio files exist in subdirectories of a book folder instead of directly in it. Audiobookshelf may not detect them. | Flatten: move audio files up to book folder root | `Author/Title [ASIN]/CD1/track01.m4a` |
+| `multi_book` | Single folder contains audio files from multiple distinct books (detected by metadata mismatch or file count anomaly). | Split: create separate folders per book | `Author/Collection/book1.m4a, book2.m4a` (different titles in tags) |
+| `missing_metadata` | Book folder exists and is structurally correct but lacks metadata.json. Audiobookshelf will use lower-priority sources. | Generate metadata.json from DB or audio file tags | `Author/Title [ASIN]/` with no metadata.json |
+| `wrong_structure` | Folder doesn't match `Author/Title [ASIN]/` convention. May be flat, too deeply nested, or differently named. | Rename/restructure to match convention | `Title - Author/` or `Author/Series/Title/` |
+| `orphan_files` | Non-audio files (logs, temp files, .DS_Store, Thumbs.db) in book directories. | Cleanup candidate (deletion, handled by separate cleanup command) | `.DS_Store`, `desktop.ini`, `.nfo` files |
+| `empty_dir` | Directory exists but contains no audio files. May be leftover from failed organize. | Cleanup candidate | `Author/Title [ASIN]/` with 0 audio files |
+| `cover_missing` | Book folder has audio but no cover image. Audiobookshelf will show placeholder. | Not auto-fixable in v1.1, but flag for user awareness | -- |
 
-### Launch With (v1)
+## CLI Command Surface
 
-Minimum viable product -- what is needed to replace manual audible-cli usage.
+Proposed commands for v1.1 (extends existing 12+ commands):
 
-- [ ] Audible authentication (wrap audible-cli auth) -- cannot function without it
-- [ ] Library listing from Audible account -- must see what is available
-- [ ] Local library scanning with ASIN matching -- must know what is already downloaded
-- [ ] SQLite state tracking -- persistent knowledge of library state
-- [ ] Download audiobooks with status tracking -- the core action
-- [ ] Rate limiting and backoff -- protect against Audible throttling
-- [ ] Fault-tolerant batch downloads (queue-level resume) -- the core differentiator
-- [ ] Libation-compatible folder organization -- compatibility with existing libraries
-- [ ] Cover art download -- expected by Audiobookshelf
-- [ ] Progress reporting -- visibility during long operations
-- [ ] New book detection (diff remote vs local) -- know what to download
+| Command | Purpose | Key Flags |
+|---------|---------|-----------|
+| `earworm scan --deep` | Full library scan including non-ASIN folders | `--deep` (new flag on existing command) |
+| `earworm plan create` | Generate plan from latest deep scan results | `--from-csv FILE`, `--issues TYPES`, `--dry-run` |
+| `earworm plan list` | List all plans with status | `--json` |
+| `earworm plan show ID` | Display plan operations in diff format | `--json`, `--verbose` |
+| `earworm plan apply ID` | Execute plan operations with confirmation | `--auto-approve`, `--operation-ids` (partial apply) |
+| `earworm plan import FILE.csv` | Create plan from annotated CSV | `--dry-run` |
+| `earworm cleanup` | Delete orphan files and empty dirs flagged by scan | `--dry-run`, `--yes` (still requires per-batch confirmation) |
+| `earworm log` | View execution audit trail | `--plan ID`, `--since DATE`, `--json` |
 
-### Add After Validation (v1.x)
+## MVP Recommendation for v1.1
 
-Features to add once core downloading is stable.
+### Must Ship (Core Value)
 
-- [ ] Audiobookshelf scan trigger -- add once download pipeline is reliable
-- [ ] Chapter file download -- add once basic downloads work
-- [ ] Dry-run mode -- add once new book detection works
-- [ ] JSON output mode -- add when scripting integrations are needed
-- [ ] Configurable naming templates -- add if users need non-default folder structures
+1. **Deep library scan** -- without this, nothing else works. Extend existing scanner to report all folders with issue categorization.
+2. **Plan infrastructure (DB tables + CRUD)** -- the foundation for everything. `plans` and `plan_operations` tables with status tracking.
+3. **Plan create from scan** -- automated plan generation from detected issues. This is the primary user flow.
+4. **Plan review (show)** -- human-readable diff output. Users must see what will change.
+5. **Plan apply with confirmation** -- execute structural operations (rename, move, flatten) with SHA-256 verification.
+6. **Execution logging** -- every operation recorded. Non-negotiable for a tool that modifies user files.
+7. **metadata.json writing** -- the primary metadata fix mechanism. Audiobookshelf reads it with highest priority.
 
-### Future Consideration (v2+)
+### Should Ship (High Value, Manageable Scope)
 
-Features to defer until core is battle-tested.
+8. **CSV import for plan creation** -- bridges manual analysis workflow. Many users already have spreadsheets of their library.
+9. **Guarded cleanup command** -- separated deletion path with double confirmation.
+10. **Flatten nested audio** -- common structural issue, straightforward to implement with existing MoveFile.
 
-- [ ] Headless/daemon mode with polling -- requires all v1 features to be rock-solid
-- [ ] Goodreads sync -- secondary workflow, depends on fragile Ruby gem or custom implementation
-- [ ] Multi-region Audible support -- audible-cli supports it, but adds testing complexity
-- [ ] Notification hooks (post-download scripts) -- simple but scope creep; add when users ask
+### Defer to v1.2+ (Valuable but Risky Scope)
 
-## Feature Prioritization Matrix
+11. **Split multi-book folders** -- requires metadata analysis to determine book boundaries. High complexity, edge cases.
+12. **Claude Code skill** -- depends on all plan infrastructure being stable. Add once the CLI workflow is proven.
+13. **Plan diffing between runs** -- nice-to-have, requires plan versioning logic.
+14. **Reversal plan generation from execution log** -- useful but adds complexity to the audit trail.
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Audible authentication (wrap) | HIGH | LOW | P1 |
-| Library listing from Audible | HIGH | LOW | P1 |
-| Local library scanning | HIGH | MEDIUM | P1 |
-| SQLite state tracking | HIGH | MEDIUM | P1 |
-| Download audiobooks | HIGH | MEDIUM | P1 |
-| Rate limiting / backoff | HIGH | MEDIUM | P1 |
-| Fault-tolerant batch downloads | HIGH | HIGH | P1 |
-| Libation-compatible folder structure | HIGH | MEDIUM | P1 |
-| Cover art download | MEDIUM | LOW | P1 |
-| Progress reporting | MEDIUM | MEDIUM | P1 |
-| New book detection | HIGH | LOW | P1 |
-| Audiobookshelf scan trigger | HIGH | LOW | P2 |
-| Chapter file download | MEDIUM | LOW | P2 |
-| Dry-run mode | MEDIUM | LOW | P2 |
-| JSON output mode | MEDIUM | LOW | P2 |
-| Headless/daemon mode | HIGH | MEDIUM | P3 |
-| Goodreads sync | LOW | HIGH | P3 |
-| Configurable naming templates | LOW | MEDIUM | P3 |
+## Complexity Assessment
 
-**Priority key:**
-- P1: Must have for launch
-- P2: Should have, add when possible
-- P3: Nice to have, future consideration
-
-## Competitor Feature Analysis
-
-| Feature | Libation | OpenAudible | audible-cli (raw) | Earworm (planned) |
-|---------|----------|-------------|--------------------|--------------------|
-| Authentication | Built-in (C#) | Built-in (Java) | Built-in (Python) | Wraps audible-cli |
-| Library listing | GUI grid view | GUI list view | `audible library list/export` | CLI + JSON output |
-| Download | GUI batch with progress | GUI batch | `audible download` per book | Orchestrated batch with queue resume |
-| DRM removal | Built-in decryption | Built-in (paid feature) | Built-in AAXC handling | Delegates to audible-cli |
-| Format conversion | M4B, MP3, chapter split | MP3, M4B (paid) | M4A/AAXC native | M4A only (v1) |
-| Folder organization | Configurable naming templates with 20+ tags | Author/Title convention | `--output-dir` flag, manual | Libation-compatible convention |
-| Fault tolerance | Poor -- crashes on large batches, DB corruption | Unknown | Per-file resume for AAXC | Queue-level resume + per-file resume |
-| Headless / CLI | No (GUI only, hangup mode exists but limited) | No (GUI only) | Yes (CLI native) | Yes (CLI native, daemon planned) |
-| Audiobookshelf integration | None | None | None | API scan trigger |
-| Goodreads integration | None | None | None | Planned (v2) |
-| Cover art | Downloaded with book | Downloaded with book | `--cover` flag | Automatic with download |
-| Chapter metadata | Cue file generation, chapter split | Chapter split (paid) | `--chapter` flag | Chapter JSON download |
-| New book detection | Auto-scan on launch | Manual refresh | Manual (re-export library) | Diff-based detection |
-| NAS / server use | Possible but GUI-dependent, unreliable | GUI-dependent | Manual scripting required | First-class support |
-| Rate limiting | Unknown / implicit | Unknown | None explicit | Configurable delays + backoff |
+| Feature Area | Estimated Complexity | Risk | Notes |
+|-------------|---------------------|------|-------|
+| Deep scan extension | MEDIUM | LOW | Extends existing scanner. Main work is issue categorization logic. |
+| Plan DB schema | MEDIUM | LOW | New tables, standard CRUD. Follows existing migration pattern. |
+| Plan creation from scan | MEDIUM | MEDIUM | Mapping issues to operations requires decision logic per issue type. |
+| Plan review rendering | LOW | LOW | String formatting of operations into diff-like output. |
+| Plan apply engine | HIGH | MEDIUM | Must handle partial failures, SHA-256 verification, cross-filesystem moves. Existing MoveFile helps. |
+| metadata.json writing | MEDIUM | LOW | Well-defined Audiobookshelf format. JSON serialization. |
+| CSV import parsing | LOW | LOW | Standard CSV with defined columns. Validation is the work. |
+| Execution logging | MEDIUM | LOW | Insert-only table. Straightforward. |
+| Guarded cleanup | MEDIUM | MEDIUM | Deletion safety is the concern, not implementation complexity. |
+| Structural operations (flatten) | MEDIUM | MEDIUM | File moves with integrity checks. Edge cases around name collisions. |
+| Structural operations (split) | HIGH | HIGH | Requires metadata analysis to determine book boundaries in multi-book folders. |
+| Claude Code skill | MEDIUM | LOW | Custom skill file format, wraps existing CLI commands. |
 
 ## Sources
 
-- [Libation GitHub](https://github.com/rmcrackan/Libation) -- feature set, naming templates, known issues
-- [Libation naming templates docs](https://getlibation.com/docs/features/naming-templates) -- folder structure conventions and metadata tags
-- [audible-cli GitHub](https://github.com/mkb79/audible-cli) -- CLI commands, download resume, library export
-- [OpenAudible](https://openaudible.org/) -- feature overview, pricing model
-- [Audiobookshelf API docs](https://api.audiobookshelf.org/) -- library scan endpoint, authentication, metadata endpoints
-- [Audiobookshelf folder structure docs](https://www.audiobookshelf.org/docs/) -- Author/Title naming convention
-- [good-audible-story-sync](https://github.com/cheshire137/good-audible-story-sync) -- Goodreads/StoryGraph sync CLI tool
-- Libation crash issues: [#918](https://github.com/rmcrackan/Libation/issues/918), [#886](https://github.com/rmcrackan/Libation/issues/886), [#1170](https://github.com/rmcrackan/Libation/issues/1170), [#1258](https://github.com/rmcrackan/Libation/issues/1258)
+- [Terraform plan command](https://developer.hashicorp.com/terraform/cli/commands/plan) -- plan/apply workflow pattern
+- [Terraform apply command](https://developer.hashicorp.com/terraform/cli/commands/apply) -- confirmation and auto-approve patterns
+- [beets CLI reference](https://beets.readthedocs.io/en/stable/reference/cli.html) -- import workflow, timid mode, pretend/dry-run
+- [Audiobookshelf book scanner guide](https://www.audiobookshelf.org/guides/book-scanner/) -- metadata.json format, metadata priority system
+- [Audiobookshelf duplicate issue #3705](https://github.com/advplyr/audiobookshelf/issues/3705) -- duplicate detection complexity
+- [Audiobookshelf metadata overwrite issue #2155](https://github.com/advplyr/audiobookshelf/issues/2155) -- metadata priority behavior
+- [Audiobookshelf flexible library structure #2208](https://github.com/advplyr/audiobookshelf/issues/2208) -- folder structure edge cases
+- [BadaBoomBooks](https://github.com/WirlyWirly/BadaBoomBooks) -- audiobook organizer, rename workflow, metadata.opf writing
+- [AudiobookOrganiser](https://github.com/jamesbrindle/AudiobookOrganiser) -- rename and organize patterns
+- [beets pipeline](https://github.com/adammillerio/beets-pipeline) -- workflow configuration patterns
 
 ---
-*Feature research for: CLI audiobook library management (Audible ecosystem)*
-*Researched: 2026-04-03*
+*Feature research for: v1.1 Library Cleanup (plan-based audiobook library organization)*
+*Researched: 2026-04-06*

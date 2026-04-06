@@ -1,189 +1,224 @@
-# Technology Stack
+# Technology Stack: v1.1 Library Cleanup
 
-**Project:** Earworm - CLI Audiobook Library Manager
-**Researched:** 2026-04-03
+**Project:** Earworm v1.1
+**Researched:** 2026-04-06
+**Mode:** Incremental (additions to existing v1.0 stack)
 **Overall Confidence:** HIGH
 
-## Recommended Stack
+## Key Finding: Zero New External Dependencies
 
-### Language & Runtime
+v1.1's features are fully covered by Go's standard library plus the existing dependency set. No new `go get` commands needed. This is the ideal outcome for a maintenance-focused milestone.
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| Go | 1.23+ | Application language | Single binary distribution, excellent CLI ecosystem, strong subprocess management via os/exec, cross-platform. Project constraint. | HIGH |
+## Existing Stack (Unchanged)
 
-### CLI Framework
+| Technology | Version | Purpose | Status |
+|------------|---------|---------|--------|
+| Go | 1.26.1 | Application language | Unchanged |
+| spf13/cobra | v1.10.2 | CLI commands | Add new subcommands only |
+| spf13/viper | v1.21.0 | Configuration | May add new config keys |
+| modernc.org/sqlite | v1.48.1 | Database | Add new migrations (005+) |
+| dhowden/tag | v0.0.0-20240417 | M4A metadata reading | Unchanged |
+| testify | v1.11.1 | Test assertions | Unchanged |
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| spf13/cobra | v2.3.0 | Command structure & parsing | De facto standard for Go CLIs (kubectl, docker, gh all use it). Subcommand model maps directly to earworm's needs: `earworm scan`, `earworm download`, `earworm sync`. RunE pattern for proper error propagation. | HIGH |
-| spf13/viper | v1.11.0 | Configuration management | Natural companion to Cobra. Handles config file (YAML/TOML), env vars, and flag binding in one place. Needed for Audiobookshelf URL/token, library paths, audible-cli path, rate limit settings. | HIGH |
+## Stdlib Capabilities for v1.1 Features
 
-### Database
+### Plan Infrastructure (DB-Backed Workflow)
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| modernc.org/sqlite | v1.36+ | Library state persistence | CGo-free pure Go SQLite. Enables true single-binary cross-compilation without requiring a C toolchain. Performance gap vs mattn/go-sqlite3 is irrelevant for a library catalog (hundreds to low thousands of rows, not millions). Eliminates the #1 cross-compilation headache in Go. | HIGH |
+**Need:** Plan creation, review, apply, cleanup lifecycle persisted in SQLite.
 
-**Why not mattn/go-sqlite3:** Requires CGo and a C compiler. Makes cross-compilation painful (need cross-compiler toolchains for each target). The 10-50% performance advantage is meaningless for a metadata catalog of personal audiobooks. modernc.org/sqlite is imported by 3,400+ Go projects and is production-proven.
+| Stdlib Package | Purpose | Why Sufficient |
+|----------------|---------|----------------|
+| `database/sql` | Plan/action CRUD | Already used for books table. Same patterns: INSERT, UPDATE, SELECT with status filtering. |
+| `encoding/json` | Plan serialization for `--json` output | Already used in v1.0 status commands. `json.MarshalIndent` for human-readable plan display. |
+| `time` | Timestamps for plan lifecycle | Plan created_at, applied_at, completed_at tracking. |
 
-### Audio Metadata
+**Migration pattern:** Follow existing `internal/db/migrations/` numbered SQL files (005_add_plans.sql, 006_add_plan_actions.sql, etc.). Embedded via `//go:embed`. No schema migration library needed -- the existing manual migration runner works.
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| dhowden/tag | latest (v0.0.0-20240417053459) | M4A/MP4 metadata reading | Pure Go, no CGo. Supports MP4/M4A (AAC, ALAC) metadata: title, album, artist, year, track, disc, genre, artwork extraction. 640+ GitHub stars, 346 downstream importers. Read-only which is fine -- earworm reads existing metadata, doesn't write it. | MEDIUM |
+**Schema additions needed:**
+- `plans` table: id, name, description, status (draft/reviewed/applying/applied/failed), created_at, applied_at
+- `plan_actions` table: id, plan_id, action_type (move/flatten/split/delete/write_metadata), source_path, dest_path, status (pending/applied/failed/skipped), error_msg, applied_at
+- `execution_log` table: id, plan_id, action_id, operation, detail, timestamp
 
-**Why MEDIUM confidence:** dhowden/tag is the best pure-Go option but hasn't had a tagged release in a while. The library works well for reading standard iTunes-style M4A atoms which is what Audible/audible-cli produces. If edge cases arise with specific Audible M4A formatting, fallback is shelling out to `ffprobe` (which is likely available if audible-cli is installed). Plan for this fallback path in architecture.
+### Structural File Operations (Flatten/Split/Move)
 
-### HTTP Client
+**Need:** Move files between directories, flatten nested structures, split multi-book folders, verify integrity with SHA-256.
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| net/http (stdlib) | Go 1.23+ | Audiobookshelf API integration | Earworm makes very few HTTP calls (library scan trigger, possibly listing libraries). A full client library like Resty is overkill. The Audiobookshelf API is simple REST with Bearer token auth. stdlib net/http handles this in ~20 lines per endpoint. | HIGH |
+| Stdlib Package | Purpose | Why Sufficient |
+|----------------|---------|----------------|
+| `os` | File/directory operations | `os.Rename`, `os.MkdirAll`, `os.Remove`, `os.ReadDir`. Already used in organize package. |
+| `io` | Stream copying for cross-device moves | `io.Copy` for cross-filesystem moves. Already proven in v1.0's organize/mover.go. |
+| `path/filepath` | Path manipulation | `filepath.WalkDir` for deep scanning. `filepath.Rel` for relative path computation. |
+| `crypto/sha256` | File integrity verification | `sha256.New()` + `io.Copy()` pattern. Stream-based, handles large M4A files (100MB+) without loading into memory. |
+| `crypto/subtle` | Hash comparison | `subtle.ConstantTimeCompare` for secure hash verification after file moves. |
+| `encoding/hex` | Hash string representation | `hex.EncodeToString` for human-readable SHA-256 hashes in logs and plan output. |
 
-**Why not go-resty:** Earworm isn't an API-heavy application. It hits 2-3 Audiobookshelf endpoints (scan trigger, maybe library list and search). Adding a dependency for that adds bloat with no real benefit. If the API surface grows significantly, reconsider.
+**Implementation pattern for SHA-256 verification:**
+```go
+func HashFile(path string) (string, error) {
+    f, err := os.Open(path)
+    if err != nil {
+        return "", err
+    }
+    defer f.Close()
+    h := sha256.New()
+    if _, err := io.Copy(h, f); err != nil {
+        return "", err
+    }
+    return hex.EncodeToString(h.Sum(nil)), nil
+}
+```
 
-### Subprocess Management
+**Cross-filesystem move pattern:** Already exists in `internal/organize/mover.go`. Reuse for plan-based moves. Hash before move, move, hash after, compare.
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| os/exec (stdlib) | Go 1.23+ | Wrapping audible-cli | Go's stdlib exec is purpose-built for this. exec.CommandContext for timeout control, StdoutPipe/StderrPipe for streaming output parsing, and clean process lifecycle management. No third-party library needed. | HIGH |
+### CSV Import
 
-**Key patterns for audible-cli wrapping:**
-- `exec.CommandContext()` with context for cancellation and timeout
-- Pipe stdout/stderr for real-time progress reporting
-- Parse audible-cli's output for download progress, errors, and completion
-- Handle exit codes for retry logic (network failures vs auth failures vs rate limits)
+**Need:** Parse user-provided CSV files to create plans (bridge manual analysis to plan system).
 
-### Terminal UI / Output
+| Stdlib Package | Purpose | Why Sufficient |
+|----------------|---------|----------------|
+| `encoding/csv` | CSV parsing | RFC 4180 compliant. Handles quoted fields, multiline values, custom delimiters. More than enough for structured plan import. |
+| `os` | File reading | Standard file open/close. |
+| `strconv` | Type conversion | Parse numeric fields from CSV strings if needed. |
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| charmbracelet/lipgloss | v2.x | Styled terminal output | Clean, styled CLI output without building a full TUI. Tables for library listings, colored status indicators, styled headers. Lightweight -- just output formatting, not a full framework. | HIGH |
-| charmbracelet/bubbles | latest | Progress bars, spinners | Reusable components for download progress, scanning indicators. Can be used standalone without full Bubble Tea. | MEDIUM |
+**Why NOT csvutil or go-csvlib:** The CSV format for plan import will be earworm-defined (action_type, source, destination, etc.). Simple column-position or header-based parsing with `csv.Reader.Read()` is straightforward. Struct-tag mapping libraries add a dependency for ~10 lines of saved code.
 
-**Why not full Bubble Tea:** Earworm is a command-line tool, not an interactive TUI application. Most commands run, produce output, and exit. Lipgloss for styled output + bubbles for progress bars covers the UI needs without the complexity of the Elm Architecture model. If an interactive mode is needed later (e.g., book selection), Bubble Tea can be added incrementally since it's the same ecosystem.
+**Expected CSV format:**
+```
+action,source_path,dest_path,notes
+move,"/lib/Author/Wrong Title","/lib/Author/Right Title",Fix title
+flatten,"/lib/Author/Book/nested/","/lib/Author/Book/",Remove nesting
+delete,"/lib/Author/Book/.DS_Store","",macOS artifact
+```
 
-### Logging
+### Metadata Application (metadata.json)
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| log/slog (stdlib) | Go 1.21+ | Structured logging | Standard library, zero dependencies, good enough performance for a CLI tool. JSON output mode for machine parsing, text mode for human reading. Avoids adding zerolog/zap dependency for a tool that mostly communicates via styled terminal output, not log files. | HIGH |
+**Need:** Write `metadata.json` files alongside audiobook folders. Read-only operation on audio files -- only creates new JSON files.
 
-**Why not zerolog:** zerolog's performance advantage (zero-allocation logging) matters for high-throughput servers, not CLI tools that log dozens of lines per invocation. slog is stdlib, maintained forever, and has a clean API. One less dependency.
+| Stdlib Package | Purpose | Why Sufficient |
+|----------------|---------|----------------|
+| `encoding/json` | JSON marshaling | `json.MarshalIndent` with 2-space indent for human-readable metadata files. |
+| `os` | File writing | `os.WriteFile` for atomic-ish writes (write to temp, rename). |
 
-### Testing
+**metadata.json structure** (Audiobookshelf-compatible):
+```json
+{
+  "title": "Book Title",
+  "author": "Author Name",
+  "asin": "B00XXXXX",
+  "series": "Series Name",
+  "seriesSequence": "1"
+}
+```
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| testing (stdlib) | Go 1.23+ | Unit and integration tests | Go's built-in testing is sufficient. Table-driven tests are idiomatic. | HIGH |
-| testify/assert | v1.9+ | Test assertions | `require` and `assert` packages reduce test boilerplate significantly. Near-universal in Go projects. | HIGH |
+**Write pattern:** Write to `metadata.json.tmp`, then `os.Rename` to `metadata.json` for crash safety. Avoids partial writes if interrupted.
 
-### Build & Distribution
+### Execution Logging and Audit Trail
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| goreleaser | v2.x | Cross-platform builds & releases | Standard tool for Go binary distribution. Builds for darwin/linux amd64+arm64, creates GitHub releases with checksums. Config is simple YAML. | HIGH |
+**Need:** Persistent log of all plan operations for debugging and accountability.
 
-## External Dependencies (Not Go Libraries)
+| Stdlib Package | Purpose | Why Sufficient |
+|----------------|---------|----------------|
+| `database/sql` | Log persistence | SQLite `execution_log` table. INSERT-only (append-only audit log). |
+| `log/slog` | Structured runtime logging | Already used. Add plan-specific log attributes (plan_id, action_id, operation). |
+| `time` | Timestamps | Microsecond-precision timestamps for operation ordering. |
+| `fmt` | Detail formatting | Format operation details for human-readable log entries. |
 
-| Dependency | Required | Purpose | Notes |
-|------------|----------|---------|-------|
-| audible-cli | Yes | Audible authentication & downloads | Python package (pip/uv install). Earworm wraps this as subprocess. Must be on PATH or configured path. |
-| Python 3.9+ | Yes | Runtime for audible-cli | Required by audible-cli. Not used by earworm directly. |
-| ffprobe | Optional | Fallback metadata extraction | Part of ffmpeg. Useful fallback if dhowden/tag can't parse specific M4A variants. Likely already installed alongside audible-cli. |
+**Design:** Dual logging -- slog for runtime terminal/file output, SQLite execution_log table for persistent queryable audit trail. The `earworm plan log <plan-id>` command queries the table.
 
-## Alternatives Considered
+### Claude Code Skill
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| CLI framework | cobra | urfave/cli | Cobra has richer ecosystem, better auto-completion, more Go CLI projects use it. urfave/cli v2 is fine but Cobra is the standard. |
-| SQLite driver | modernc.org/sqlite | mattn/go-sqlite3 | CGo requirement kills easy cross-compilation. Performance delta irrelevant for this workload. |
-| SQLite driver | modernc.org/sqlite | crawshaw.io/sqlite | Less maintained, smaller community. modernc.org has wider adoption. |
-| HTTP client | net/http (stdlib) | go-resty/resty v2 | Only 2-3 API endpoints. Dependency not justified. |
-| HTTP client | net/http (stdlib) | go-resty/resty v3 | v3 is very new (Dec 2025). Unnecessary dependency regardless. |
-| Config | viper | koanf | Viper integrates natively with Cobra. koanf is lighter but loses the Cobra synergy. |
-| Logging | log/slog | zerolog | CLI tool doesn't need zero-allocation logging. slog is stdlib with no dependency. |
-| Logging | log/slog | zap | Same reasoning. Zap's structured logging is great for servers, overkill here. |
-| Terminal UI | lipgloss + bubbles | bubbletea | Full TUI framework is overkill for a run-and-exit CLI. Can upgrade later if needed. |
-| Audio tags | dhowden/tag | sentriz/go-taglib | go-taglib uses WASM-compiled TagLib. Heavier, more complex. dhowden/tag is simpler and sufficient for read-only M4A metadata. |
-| Audio tags | dhowden/tag | ffprobe shelling | Pure library preferable to subprocess for metadata. Keep ffprobe as fallback. |
+**Need:** `.claude/skills/earworm-cleanup/SKILL.md` for conversational library cleanup orchestration.
 
-## Complete Dependency List
+**No Go dependencies.** This is a markdown file with YAML frontmatter that instructs Claude Code how to use earworm's CLI commands for library management.
+
+**Skill location:** `.claude/skills/earworm-cleanup/SKILL.md`
+
+**Skill capabilities:**
+- Guide Claude through scan -> plan -> review -> apply workflow
+- Reference earworm CLI commands and their `--json` output
+- Include CSV format specification for plan import
+- Define safety guardrails (always dry-run first, confirm deletions)
+
+### Deep Library Scanning
+
+**Need:** Scan all folders (not just ASIN-bearing ones), detect structural issues.
+
+| Stdlib Package | Purpose | Why Sufficient |
+|----------------|---------|----------------|
+| `path/filepath` | Directory walking | `filepath.WalkDir` (Go 1.16+) is more efficient than `filepath.Walk` -- uses `fs.DirEntry` to avoid unnecessary `Stat` calls. |
+| `os` | File system queries | `os.Stat`, `os.ReadDir` for directory inspection. |
+| `strings` | Path/name analysis | Pattern matching for issue detection (empty dirs, nested structures, naming anomalies). |
+
+**Why WalkDir over Walk:** `filepath.WalkDir` avoids calling `os.Lstat` on every file, which matters when scanning large NAS-mounted libraries over SMB/NFS where each stat is a network round-trip.
+
+## What NOT to Add
+
+| Library | Why Tempting | Why Not |
+|---------|-------------|---------|
+| `jszwec/csvutil` | Struct-tag CSV mapping | Only one CSV format to parse. 10 lines of manual parsing vs a dependency. |
+| `go-resty/resty` | HTTP client for ABS API | Already decided against in v1.0. Still only 2-3 endpoints. |
+| `hashicorp/go-multierror` | Aggregate errors from batch operations | Go 1.20+ `errors.Join` covers this. Stdlib. |
+| `google/uuid` | Plan IDs | Already in go.mod as indirect dep. Use integer auto-increment IDs instead -- simpler, SQLite-native, sufficient for a local CLI tool. |
+| `fsnotify/fsnotify` | Watch library for changes | Already in go.mod as indirect dep (viper). Not needed -- earworm is run-and-exit or polled via daemon. |
+| Schema migration library (goose, migrate) | DB migrations | Existing hand-rolled migration runner works. Adding a migration framework for 3-4 new migrations is overkill. |
+| `tidwall/gjson` | JSON querying | Not needed. We write JSON, not query complex nested JSON. |
+
+## New Migrations Required
+
+| Migration | Tables/Columns | Purpose |
+|-----------|---------------|---------|
+| `005_add_plans.sql` | `plans` table | Plan lifecycle tracking |
+| `006_add_plan_actions.sql` | `plan_actions` table | Individual operations within a plan |
+| `007_add_execution_log.sql` | `execution_log` table | Audit trail for applied operations |
+| `008_add_scan_issues.sql` | `scan_issues` table | Deep scan issue tracking (orphan folders, naming problems, structural issues) |
+
+## New Internal Packages
+
+No external packages, but new internal packages are needed:
+
+| Package | Purpose | Key Stdlib Dependencies |
+|---------|---------|------------------------|
+| `internal/plan/` | Plan CRUD, lifecycle management | `database/sql`, `encoding/json` |
+| `internal/fileops/` | Flatten, split, move with SHA-256 verification | `os`, `io`, `crypto/sha256`, `path/filepath` |
+| `internal/csvimport/` | CSV parsing into plan actions | `encoding/csv`, `os` |
+| `internal/audit/` | Execution logging | `database/sql`, `log/slog`, `time` |
+
+## New CLI Commands
+
+| Command | Package | Purpose |
+|---------|---------|---------|
+| `earworm scan --deep` | `internal/cli/` | Deep library scan (extend existing scan) |
+| `earworm plan create` | `internal/cli/` | Create plan from scan issues or manual |
+| `earworm plan list` | `internal/cli/` | List plans with status |
+| `earworm plan show <id>` | `internal/cli/` | Show plan details and actions |
+| `earworm plan apply <id>` | `internal/cli/` | Execute plan (with --dry-run) |
+| `earworm plan import <csv>` | `internal/cli/` | Import CSV as plan |
+| `earworm plan log <id>` | `internal/cli/` | Show execution log for plan |
+| `earworm cleanup <id>` | `internal/cli/` | Guarded deletion (plan's delete actions only, explicit confirm) |
+
+## Configuration Additions (Viper)
+
+| Key | Type | Default | Purpose |
+|-----|------|---------|---------|
+| `scan.deep` | bool | false | Enable deep scanning by default |
+| `plan.auto_hash` | bool | true | SHA-256 verify after file operations |
+| `plan.backup_deletes` | bool | true | Move to trash instead of hard delete |
+| `plan.trash_dir` | string | `~/.config/earworm/trash/` | Soft-delete destination |
+
+## Installation
 
 ```bash
-# Initialize module
-go mod init github.com/andrewlovett-barron/earworm
-
-# Core dependencies
-go get github.com/spf13/cobra@latest
-go get github.com/spf13/viper@latest
-go get modernc.org/sqlite@latest
-
-# Audio metadata
-go get github.com/dhowden/tag@latest
-
-# Terminal output
-go get github.com/charmbracelet/lipgloss/v2@latest
-go get github.com/charmbracelet/bubbles@latest
-
-# Testing
-go get github.com/stretchr/testify@latest
-
-# Dev tools (install separately)
-go install github.com/goreleaser/goreleaser/v2@latest
+# No new dependencies needed for v1.1
+# Existing go.mod is sufficient
+go mod tidy
 ```
-
-## Project Structure Convention
-
-```
-earworm/
-  cmd/                    # Cobra command definitions
-    root.go
-    scan.go
-    download.go
-    sync.go
-    library.go
-  internal/
-    audible/              # audible-cli subprocess wrapper
-    library/              # Library scanning, organization, file structure
-    metadata/             # M4A metadata extraction (dhowden/tag + ffprobe fallback)
-    db/                   # SQLite operations, migrations
-    audiobookshelf/       # Audiobookshelf API client
-    config/               # Viper config loading
-  main.go
-  .goreleaser.yaml
-```
-
-## Audiobookshelf API Notes
-
-The Audiobookshelf API is straightforward REST:
-- **Auth:** Bearer token (user API token from Audiobookshelf settings)
-- **Library scan:** `POST /api/libraries/{id}/scan` -- triggers a full library scan
-- **Library list:** `GET /api/libraries` -- list all libraries (to find the right ID)
-- **Base URL:** User-configured (e.g., `http://nas:13378`)
-
-This is simple enough that a small hand-written client (~50-100 lines) using net/http is the right approach. No SDK or generated client needed.
-
-## Key Technical Decisions
-
-1. **Pure Go stack (no CGo):** Every dependency is pure Go. This means `go build` produces a static binary with zero system dependencies. Cross-compilation is trivial. This is a deliberate constraint -- the only external runtime dependency is Python (for audible-cli), which is a process boundary, not a linking dependency.
-
-2. **Stdlib-heavy approach:** Use stdlib (os/exec, net/http, log/slog, testing) wherever it's sufficient. Add dependencies only when they provide clear value (Cobra for CLI structure, modernc.org/sqlite for embedded DB, dhowden/tag for audio metadata, lipgloss for terminal styling).
-
-3. **audible-cli as a process boundary:** Do not import Python, do not use audible's Python API directly, do not embed Python. Clean subprocess boundary via os/exec. This preserves license isolation and keeps the Go binary independent.
 
 ## Sources
 
-- [Cobra GitHub](https://github.com/spf13/cobra) -- v2.3.0 confirmed
-- [Viper GitHub](https://github.com/spf13/viper) -- v1.11.0 referenced in multiple 2026 sources
-- [modernc.org/sqlite on pkg.go.dev](https://pkg.go.dev/modernc.org/sqlite) -- v1.36+, SQLite 3.51.3
-- [dhowden/tag GitHub](https://github.com/dhowden/tag) -- 642 stars, MP4/M4A support confirmed
-- [go-resty/resty releases](https://github.com/go-resty/resty/releases) -- v2.16.5 (considered, not recommended)
-- [Audiobookshelf API Reference](https://api.audiobookshelf.org/) -- library scan endpoint confirmed
-- [Audiobookshelf scan discussion](https://github.com/advplyr/audiobookshelf/discussions/1012) -- confirms `/api/libraries/{id}/scan`
-- [audible-cli GitHub](https://github.com/mkb79/audible-cli) -- actively maintained, Python CLI
-- [Go ecosystem trends 2025 (JetBrains)](https://blog.jetbrains.com/go/2025/11/10/go-language-trends-ecosystem-2025/)
-- [slog vs zerolog comparison (Leapcell)](https://leapcell.io/blog/high-performance-structured-logging-in-go-with-slog-and-zerolog)
-- [Lipgloss v2 on pkg.go.dev](https://pkg.go.dev/github.com/charmbracelet/lipgloss/v2)
-- [SQLite CGo vs no-CGo benchmarks](https://github.com/multiprocessio/sqlite-cgo-no-cgo)
+- [Go crypto/sha256 package](https://pkg.go.dev/crypto/sha256) -- stdlib SHA-256, confirmed io.Copy streaming pattern
+- [Go encoding/csv package](https://pkg.go.dev/encoding/csv) -- RFC 4180 compliant CSV parser
+- [Go encoding/json package](https://pkg.go.dev/encoding/json) -- MarshalIndent for metadata files
+- [Go filepath.WalkDir](https://pkg.go.dev/path/filepath#WalkDir) -- efficient directory traversal without extra Stat calls
+- [Claude Code Skills documentation](https://code.claude.com/docs/en/skills) -- .claude/skills/ format with YAML frontmatter
+- [SHA-256 file hashing in Go](https://transloadit.com/devtips/verify-file-integrity-with-go-and-sha256/) -- io.Copy pattern for large files
+- [Go errors.Join](https://pkg.go.dev/errors#Join) -- Go 1.20+ multi-error aggregation, replaces hashicorp/go-multierror

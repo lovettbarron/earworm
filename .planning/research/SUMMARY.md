@@ -1,181 +1,186 @@
 # Project Research Summary
 
-**Project:** Earworm - CLI Audiobook Library Manager
-**Domain:** CLI audiobook library management (Audible ecosystem, NAS-targeted)
-**Researched:** 2026-04-03
+**Project:** Earworm v1.1 — Library Cleanup
+**Domain:** Plan-based audiobook library organization and structural repair
+**Researched:** 2026-04-06
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Earworm is a Go CLI tool that orchestrates audible-cli to download, organize, and manage Audible audiobook libraries, targeting users who run Audiobookshelf on a NAS. The expert approach for this kind of tool is clear: build a thin orchestration layer around audible-cli (which handles the hard problems of Audible auth, DRM, and download), persist all state in SQLite, and organize files into an Audiobookshelf-compatible folder structure. The Go ecosystem provides everything needed -- Cobra for CLI structure, a pure-Go SQLite driver for zero-CGo builds, and stdlib subprocess management for wrapping audible-cli. The stack is well-understood and low-risk.
+Earworm v1.1 extends a functional v1.0 audiobook download manager into a library cleanup system for a NAS-mounted audiobook collection. The central pattern, drawn from Terraform's plan/apply workflow and beets' interactive import, is: scan all folders to detect structural issues, generate a named plan of operations, require human review before execution, then apply operations with per-action audit logging. This pattern is well-established in infrastructure and media management tooling, and maps cleanly to the existing Cobra/SQLite/Go architecture.
 
-The core differentiator is fault-tolerant batch downloads. Libation (the main competitor) is notorious for crashing mid-download on large libraries, corrupting its database, and requiring GUI interaction. Earworm's value proposition is simple: reliably download your entire Audible library to a NAS without babysitting. This means the download pipeline -- queue management, per-book state tracking, crash recovery, and rate limiting -- is the heart of the project and deserves the most design attention.
+The recommended approach is fully achievable within the existing Go dependency set — no new external libraries are required. Four new internal packages (plan, fileops, csvimport, audit) extend the codebase, and four new SQLite migrations add the plans, plan_operations, audit_log, and scan_issues tables. The existing organize.MoveFile and scanner packages are reused rather than replaced. Deep scanning adds a new code path alongside the existing ASIN-only scanner, keeping v1.0 behavior intact.
 
-The critical risks are: (1) SQLite database corruption from being placed on a network filesystem (must store DB locally, never on NAS), (2) Audible rate limiting with undocumented thresholds (must use conservative defaults), (3) subprocess lifecycle issues when wrapping audible-cli from Go (zombie processes, pipe deadlocks), and (4) auth token mismanagement leading to account lockouts. All four are well-understood and preventable with the patterns documented in the architecture research. None are novel problems.
+The dominant risk is data loss on NAS-mounted filesystems. Three mitigations must be present from day one: (1) SHA-256 hash verification for all file moves (not just size checks), (2) per-operation status tracking so partial plan failures leave a clear recovery path, and (3) deletion operations strictly separated into a guarded earworm cleanup command with explicit double-confirmation. The plan infrastructure phase, which establishes these safety primitives, is the prerequisite for all other v1.1 work.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack is deliberately stdlib-heavy and CGo-free, producing a single static binary. External runtime dependency is limited to Python (for audible-cli), which sits behind a clean process boundary. See [STACK.md](STACK.md) for full details.
+No new external dependencies are required for v1.1. The existing stack (Go 1.26.1, Cobra v1.10.2, Viper v1.21.0, modernc.org/sqlite v1.48.1, dhowden/tag, testify) covers all feature needs. Stdlib packages crypto/sha256, encoding/csv, encoding/json, path/filepath, and database/sql provide the remaining primitives.
 
-**Core technologies:**
-- **Go 1.23+**: Project language -- single binary distribution, excellent CLI and subprocess ecosystem
-- **Cobra + Viper**: CLI framework and config -- industry standard (kubectl, docker, gh use Cobra), config file + env var + flag binding
-- **modernc.org/sqlite**: Pure Go SQLite -- eliminates CGo/cross-compilation headaches, performance irrelevant at this scale (hundreds of rows)
-- **dhowden/tag + ffprobe fallback**: M4A metadata reading -- pure Go for common cases, ffprobe for edge cases
-- **lipgloss + bubbles**: Terminal output styling and progress bars -- lightweight, no full TUI framework needed
-- **stdlib (os/exec, net/http, log/slog)**: Subprocess management, HTTP client, logging -- sufficient for all needs, zero unnecessary dependencies
+**Core technologies used by v1.1:**
+- `database/sql` + modernc.org/sqlite: plan/operation/audit persistence — CGo-free, existing migration pattern
+- `crypto/sha256` + `io.Copy`: streaming SHA-256 for cross-filesystem move verification — handles 100MB+ M4A files
+- `encoding/csv`: CSV plan import with BOM stripping required for Excel compatibility
+- `encoding/json`: metadata.json sidecar writing for Audiobookshelf compatibility
+- `path/filepath.WalkDir`: efficient deep library scanning over NAS mounts (avoids extra Stat calls)
 
 ### Expected Features
 
-See [FEATURES.md](FEATURES.md) for full feature landscape and competitor analysis.
-
 **Must have (table stakes):**
-- Audible authentication via audible-cli wrapper
-- Library listing from Audible account (JSON export parsing)
-- Local library scanning with ASIN matching
-- SQLite state tracking for all library state
-- Download with status tracking per book
-- Rate limiting with configurable delays and exponential backoff
-- Fault-tolerant batch downloads with queue-level resume (the differentiator)
-- Libation-compatible folder organization (Author/Title [ASIN])
-- Cover art download
-- Progress reporting during downloads
-- New book detection (diff remote vs local)
+- Deep library scan of all folders — users cannot fix what they cannot see; v1.0 only indexes ASIN folders
+- Issue detection and categorization — no_asin, nested_audio, multi_book, missing_metadata, wrong_structure, orphan_files, empty_dir
+- DB-persisted plan creation from scan results — plans survive CLI restarts, enable review
+- Human-readable plan review (diff-format) — users must see exactly what will change before confirmation
+- Plan apply with per-operation status tracking and SHA-256 verification
+- Execution audit log — every file operation recorded with paths, hashes, timestamps
+- metadata.json sidecar writing — Audiobookshelf reads this with highest priority, safer than tag embedding
 
-**Should have (add after core is stable):**
-- Audiobookshelf scan trigger (single POST endpoint, low effort)
-- Chapter file download (audible-cli flag)
-- Dry-run mode
-- JSON output mode for scripting
+**Should have (differentiators):**
+- CSV import for plan creation — bridge from manual spreadsheet analysis to automated execution
+- Guarded cleanup command (earworm cleanup) — separated deletion path with double-confirm and trash-dir default
+- Flatten nested audio — common structural issue, implementable with existing MoveFile
 
-**Defer (v2+):**
-- Headless/daemon mode with polling (requires all v1 features to be rock-solid)
-- Goodreads sync (fragile Ruby gem dependency)
-- Multi-format conversion (ffmpeg rabbit hole)
-- Multi-service support beyond Audible
+**Defer to v1.2+:**
+- Split multi-book folders — requires metadata analysis for book boundary detection, high edge-case risk
+- Claude Code skill — depends on all plan infrastructure being stable; add after CLI workflow is proven
+- Plan diffing between runs / reversal plan generation from execution log
 
 ### Architecture Approach
 
-Layered CLI architecture with clear separation: CLI layer (Cobra commands) calls into service layer (Library, Download, Organizer, Integration services), which depends on infrastructure layer (SQLite store, subprocess manager, HTTP client, filesystem scanner). Services never import each other -- the CLI layer coordinates. See [ARCHITECTURE.md](ARCHITECTURE.md) for full details including database schema and data flow diagrams.
+v1.1 follows an additive extension pattern: new packages are added alongside existing ones, and no v1.0 code paths (scan, download, organize, daemon) are modified. The plan is the central abstraction — a DB-persisted state machine that transitions draft -> reviewed -> applying -> applied/failed, with individual operation status tracked at each step. File operations are performed by a new fileops.Executor that wraps the existing organize.MoveFile and adds SHA-256 verification and audit logging via struct injection.
 
 **Major components:**
-1. **Store (SQLite)** -- Persistent state for books, download status, integration config. Local filesystem only.
-2. **Subprocess Manager (audible-cli wrapper)** -- Typed Go interface over audible-cli commands. All subprocess interaction isolated here.
-3. **Download Service** -- Queue management, rate limiting (token bucket), retry with exponential backoff, state machine per book.
-4. **Library Service** -- Local filesystem scanning, remote library sync, reconciliation (what is new, what is downloaded).
-5. **Organizer Service** -- Staging directory to final library path. Atomic moves. Audiobookshelf-compatible naming.
-6. **Integration Service** -- Audiobookshelf scan trigger, future Goodreads sync.
+1. `internal/plan/` — Plan lifecycle state machine (create, review, apply, status)
+2. `internal/fileops/` — Structural file operations (flatten, move, delete) with SHA-256 verification
+3. `internal/audit/` — Insert-only audit logger, injected into fileops and plan engine
+4. `internal/csvimport/` — CSV-to-plan-operations parser with BOM handling and row validation
+5. `internal/db/` additions — plans, plan_operations, audit_log, scan_issues tables (migrations 005-008)
+6. `internal/scanner/` addition — DeepScan() alongside existing ScanLibrary(), adds FolderIssue detection
+7. `internal/metadata/` addition — WriteMetadataJSON() for Audiobookshelf sidecar files
+8. `internal/cli/` additions — plan.go, cleanup.go, import.go command files
 
 ### Critical Pitfalls
 
-See [PITFALLS.md](PITFALLS.md) for full analysis of 11 pitfalls.
-
-1. **SQLite on network filesystem** -- Silent corruption, broken locking. Store DB in `~/.config/earworm/`, never on NAS. Add startup detection for network mount paths.
-2. **Audible rate limiting** -- Undocumented thresholds, account ban risk. Default to 30-60 second delays between downloads, circuit breaker after consecutive failures.
-3. **Subprocess lifecycle** -- Zombie processes, pipe deadlocks, orphans surviving crashes. Use process groups, concurrent pipe reads, context timeouts, signal forwarding.
-4. **Auth token mismanagement** -- 60-minute token expiry, device slot pollution. Register once, persist locally, refresh proactively, never auto-deregister.
-5. **Large file NAS writes** -- Network timeout mid-write, partial files. Download to local staging first, copy-then-verify to NAS.
+1. **Plan state diverging from filesystem reality** — Hash source files at plan creation time and re-verify at apply time. Fail the plan if any source has changed. Warn on stale plans. Never apply while daemon is active.
+2. **Partial plan execution without recovery** — Log every completed action to DB immediately on success. Record source, dest, sha256_before, sha256_after per operation. Support earworm plan resume to pick up from last successful action.
+3. **NAS/SMB silent corruption during cross-filesystem moves** — Upgrade size-check to SHA-256 for ALL plan-based file moves. Hash before copy, hash after, compare. Keep source until verified copy confirmed.
+4. **Delete operations without sufficient guards** — Strict separation: deletions only in earworm cleanup, never in plan apply. Require --confirm-delete plus interactive prompt. Default to trash dir not permanent deletion.
+5. **Non-ASIN books have no representation in current data model** — Add scan_issues table keyed by path, not ASIN. Plans reference filesystem paths, not the ASIN-keyed books table.
 
 ## Implications for Roadmap
 
-Based on combined research, the build order follows a clear dependency chain. Each phase produces something usable and validates assumptions before building on them.
+Based on the build-order dependency graph in ARCHITECTURE.md and the phase-specific warnings in PITFALLS.md:
 
-### Phase 1: Foundation and Data Model
-**Rationale:** Everything depends on the data model, configuration, and database. Getting the SQLite schema right (and on local filesystem) prevents the most critical pitfall.
-**Delivers:** Go module, project structure, domain types, SQLite schema with migrations, Viper-based configuration loading, CLI skeleton with Cobra (root + config commands).
-**Addresses:** SQLite state tracking, configurable output directory
-**Avoids:** Pitfall 1 (SQLite on NAS -- enforce local DB path from day one), Pitfall 9 (Python environment detection -- add audible-cli detection in config/setup)
+### Phase 1: Plan Infrastructure and DB Schema
+**Rationale:** Everything else depends on this. Plans, operations, and audit tables must exist before any scanner enhancements or file operations can be wired up. Schema design decisions (type+params JSON blob, separate tables from books) must be correct from the start.
+**Delivers:** DB migrations 005-008, internal/db/plans.go, internal/db/operations.go, internal/db/audit.go, internal/audit/logger.go
+**Addresses:** Table stakes — plan creation, review, audit trail
+**Avoids:** Pitfall 1 (stale plan validation baked in), Pitfall 2 (per-operation status from day one), Pitfall 5 (extensible type+params schema), Pitfall 11 (execution locking), Pitfall 12 (no Book.Status overloading), Pitfall 13 (path-keyed tables)
 
-### Phase 2: Local Library Scanning
-**Rationale:** Immediately useful even without downloads -- users can index their existing Libation/audible-cli library. Validates the data model against real files. Low risk, well-understood filesystem patterns.
-**Delivers:** Filesystem scanner, ASIN extraction from folder names, metadata reading (dhowden/tag + ffprobe fallback), book record upsert, `earworm scan` and `earworm status` commands.
-**Addresses:** Local library scanning, metadata preservation, Libation-compatible folder structure recognition
-**Avoids:** Pitfall 6 (Libation compatibility -- validate folder parsing against real Libation output), Pitfall 7 (metadata complexity -- read-only, defer writes)
+### Phase 2: Deep Library Scanner
+**Rationale:** The plan engine needs something to scan before it can create plans. Deep scan can be developed in parallel with Phase 1 since it only extends the existing scanner package.
+**Delivers:** scanner.DeepScan(), scanner.FolderIssue types, scan_issues table population, earworm scan --deep CLI flag
+**Addresses:** Table stakes — full library inventory, issue categorization
+**Avoids:** Pitfall 13 (discovers non-ASIN books), NAS scanning performance (filepath.WalkDir avoids extra Stat calls)
 
-### Phase 3: Audible-cli Integration
-**Rationale:** Hard prerequisite for downloads. The subprocess wrapper is the most architecturally sensitive component -- it must handle process lifecycle, output parsing, and auth correctly before download orchestration is built on top.
-**Delivers:** audible-cli subprocess wrapper with typed interface, auth management (wrap `audible quickstart`), library export parsing (JSON), `earworm sync` command (discover new books).
-**Addresses:** Audible authentication, library listing from Audible, new book detection
-**Avoids:** Pitfall 2 (auth token mismanagement -- register once, persist locally), Pitfall 4 (subprocess lifecycle -- process groups, context timeouts, concurrent pipe reads)
+### Phase 3: Structural File Operations
+**Rationale:** Required before the plan engine can execute. The fileops.Executor wraps existing organize.MoveFile and adds SHA-256 verification — this is where NAS corruption protection is implemented.
+**Delivers:** internal/fileops/ package (Flatten, Delete, VerifyChecksum), SHA-256 move verification
+**Addresses:** Table stakes — plan apply engine prerequisite; should-have — flatten nested audio
+**Avoids:** Pitfall 4 (SHA-256 not size-check for NAS moves), Pitfall 6 (flatten always plan-based, never automatic)
 
-### Phase 4: Download Pipeline
-**Rationale:** Core value proposition. This is the most complex phase and the primary differentiator. Depends on Phase 3 (subprocess wrapper) and Phase 1 (state tracking). Rate limiting and fault tolerance must be built in from the start, not bolted on.
-**Delivers:** Download queue with state machine, rate limiter (token bucket), retry with exponential backoff + jitter, crash recovery (resume from last incomplete book), progress reporting, `earworm download` command.
-**Addresses:** Fault-tolerant batch downloads, rate limiting/backoff, download status tracking, progress reporting, cover art download
-**Avoids:** Pitfall 3 (rate limiting -- conservative defaults, circuit breaker), Pitfall 5 (NAS writes -- download to local staging), Pitfall 11 (crash recovery -- state machine with verified transitions)
+### Phase 4: Plan Engine and CLI Commands
+**Rationale:** With DB schema, deep scan, and file operations in place, the plan engine wires them together. This phase delivers the primary user workflow: scan -> create plan -> show plan -> apply plan.
+**Delivers:** internal/plan/Engine, earworm plan create/list/show/apply/status commands, dry-run default, --confirm required for mutation
+**Addresses:** All table stakes (plan creation, review, apply, execution logging)
+**Avoids:** Pitfall 1 (hash validation at apply time), Pitfall 2 (resume after partial failure), Pitfall 10 (grouped summary view before detail)
 
-### Phase 5: File Organization
-**Rationale:** Depends on Phase 4 output (downloaded files). Conceptually simple but important for Audiobookshelf compatibility. Staging-to-library move pattern prevents partial states.
-**Delivers:** Path template computation, atomic file moves (staging to library), Audiobookshelf-compatible naming (`Author/Series/Seq - Title [ASIN]/`), `earworm organize` command.
-**Addresses:** Libation-compatible folder structure, configurable output directory
-**Avoids:** Pitfall 5 (NAS writes -- copy-then-verify), Pitfall 6 (Libation compatibility drift -- template system with configurable defaults)
+### Phase 5: Metadata Writing
+**Rationale:** Parallelizable with Phases 3-4 since WriteMetadataJSON has no dependency on the plan engine. Ships as a plan operation type in Phase 4.
+**Delivers:** metadata.WriteMetadataJSON(), metadata plan action type, Audiobookshelf-compatible sidecar files
+**Addresses:** Table stakes — metadata.json for missing metadata issue type; differentiator — non-destructive metadata fix
+**Avoids:** Pitfall 7 (omit fields rather than write empty values; metadata writing opt-in)
 
-### Phase 6: External Integrations and Polish
-**Rationale:** Additive features that enhance the tool but are not required for core functionality. The tool is fully usable after Phase 5.
-**Delivers:** Audiobookshelf scan trigger, chapter file download, dry-run mode, JSON output mode, CLI polish (help text, shell completions).
-**Addresses:** Audiobookshelf scan trigger, chapter file download, dry-run mode, JSON output
-**Avoids:** Pitfall 10 (Audiobookshelf API assumptions -- fire-and-forget with optional polling, graceful failure)
+### Phase 6: CSV Import
+**Rationale:** Requires plan types from Phase 4 to construct plan operations from CSV rows. Low risk, well-scoped.
+**Delivers:** internal/csvimport/ParseCSV(), earworm plan import FILE.csv command
+**Addresses:** Differentiator — bridge from manual spreadsheet analysis to plan system
+**Avoids:** Pitfall 8 (BOM stripping, CRLF normalization, row-level validation with line numbers, --validate-only flag)
+
+### Phase 7: Guarded Cleanup Command
+**Rationale:** Deletion is the most dangerous operation and must build on all safety infrastructure from earlier phases. Ships last among core features.
+**Delivers:** earworm cleanup PLAN_ID --confirm with trash-dir default, double-confirmation UX, audit logging of every deletion
+**Addresses:** Should-have — guarded deletion of empty dirs and orphan files
+**Avoids:** Pitfall 3 (delete in separate command only, trash dir default, no undeclared-path deletions)
+
+### Phase 8: Claude Code Skill
+**Rationale:** The conversational orchestration layer is only safe and useful once the CLI workflow is stable. A skill that creates plans but never applies them is safe; build it after the underlying commands are solid.
+**Delivers:** .claude/commands/library-cleanup.md skill file with scan -> plan -> review orchestration guidance
+**Addresses:** Differentiator — AI-assisted library cleanup orchestration
+**Avoids:** Pitfall 14 (skill creates plans only, human must apply)
 
 ### Phase Ordering Rationale
 
-- **Dependency chain is strict:** Store must exist before scanning, subprocess wrapper before downloads, downloads before organization.
-- **Phase 2 (scanning) before Phase 3 (audible-cli):** Scanning is simpler, validates the data model, and is immediately useful for existing libraries. It also defers the subprocess complexity until the foundation is proven.
-- **Phase 4 (downloads) is isolated as its own phase:** It is the most complex and highest-risk component. It deserves focused attention without being mixed with other concerns.
-- **Phase 6 is "nice to have":** The tool delivers full value after Phase 5. Phase 6 is polish and integrations that can ship incrementally.
+- Phases 1 and 2 can be developed in parallel (no cross-dependencies; Phase 1 is DB, Phase 2 is scanner)
+- Phase 5 (metadata writing) is also parallelizable once Phase 1 migrations are in place
+- Phase 3 must precede Phase 4 (plan engine needs fileops to execute operations)
+- Phases 6 and 7 require Phase 4 (plan types and engine must exist)
+- Phase 8 requires Phase 7 (all CLI commands must be stable)
+- This ordering ensures that safety infrastructure (audit log, SHA-256 verification, execution lock) is in place before the features that depend on it are built
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
-- **Phase 3 (Audible-cli Integration):** audible-cli's exact output formats, error codes, and auth flow edge cases need hands-on exploration. Documentation is sparse for automation use cases.
-- **Phase 4 (Download Pipeline):** Rate limiting thresholds are undocumented. Will need empirical testing with a small library to calibrate safe defaults. Crash recovery logic needs careful state machine design.
+- **Phase 5 (metadata writing):** Audiobookshelf's metadata.json merge-vs-overwrite behavior is not fully documented. Requires testing against a live ABS instance before implementation. Pitfall 7 is unresolved.
+- **Phase 4 (plan engine, resume):** The earworm plan resume UX and rollback-from-audit-log behavior needs design work during planning — no established pattern in the existing codebase.
 
-Phases with standard patterns (skip deep research):
-- **Phase 1 (Foundation):** Standard Go project setup, Cobra/Viper, SQLite schema. Well-documented everywhere.
-- **Phase 2 (Local Scanning):** Filesystem walking and metadata reading are straightforward Go patterns.
-- **Phase 5 (File Organization):** File move/copy operations with path templating. Standard patterns.
-- **Phase 6 (Integrations):** Audiobookshelf API is simple REST. One endpoint.
+Phases with standard patterns (skip research-phase):
+- **Phase 1 (DB schema):** Follow established migration pattern exactly. All schema decisions are documented in ARCHITECTURE.md.
+- **Phase 2 (deep scanner):** Extends existing ScanLibrary pattern. filepath.WalkDir is standard Go.
+- **Phase 3 (file operations):** crypto/sha256 streaming pattern is fully specified in STACK.md. Reuses existing MoveFile.
+- **Phase 6 (CSV import):** Go's encoding/csv plus BOM stripping is a known pattern. Pitfall 8 has full prevention strategy.
+- **Phase 8 (Claude Code skill):** Markdown file, no code changes to earworm.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All libraries are mature, well-documented, and widely used. Pure-Go constraint is achievable. |
-| Features | HIGH | Competitor analysis is thorough. Libation's weaknesses are well-documented in GitHub issues. MVP scope is clear. |
-| Architecture | HIGH | Layered CLI architecture is a standard Go pattern (kubectl, Terraform). Data flow is straightforward. |
-| Pitfalls | MEDIUM-HIGH | Critical pitfalls (SQLite on NAS, subprocess lifecycle) are well-documented. Rate limiting thresholds are unknown (LOW confidence on specifics). |
+| Stack | HIGH | Zero new dependencies confirmed. All stdlib packages are standard Go. Existing stack versions verified from go.mod. |
+| Features | HIGH | Table stakes derived from Terraform/beets/Audiobookshelf patterns, all well-documented. |
+| Architecture | HIGH | Based on direct codebase analysis of v1.0 plus established conventions from CLAUDE.md. Build order derived from actual package dependencies. |
+| Pitfalls | HIGH | SMB corruption and CSV BOM sourced from documented bugs. Plan state divergence and partial execution are fundamental patterns. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Audible rate limit thresholds:** No public documentation. Must use conservative defaults and tune empirically. Start with 30-60 second delays, measure against a small library.
-- **dhowden/tag M4A edge cases:** Library may not handle all Audible-specific M4A atoms. Plan ffprobe fallback from the start; do not depend solely on dhowden/tag.
-- **Libation folder structure defaults:** Libation's naming template defaults are not version-pinned in documentation. Validate against actual Libation output on disk, not assumed conventions.
-- **audible-cli output stability:** audible-cli's JSON export format and error output are not formally versioned. The subprocess wrapper should be defensive (handle missing/extra fields).
-- **M4B vs M4A file extensions:** Libation uses .m4b; audible-cli produces .m4a/.aaxc. Earworm must handle both when scanning existing libraries.
+- **Audiobookshelf metadata.json precedence behavior:** Does ABS merge or overwrite when metadata.json exists alongside embedded audio tags and ABS's own metadata database? Must be verified against a live instance before Phase 5 implementation. Handle by making metadata writing opt-in as a safe default.
+- **earworm plan resume UX design:** The recovery workflow after partial plan failure is specified at data model level (per-operation status) but the user-facing command design needs to be worked out during Phase 4 planning.
+- **Multi-book folder split heuristics:** Deferred to v1.2+, but the deep scanner's multi_book issue detection still needs a heuristic that minimizes false positives. Audio metadata comparison (album/title tags) is recommended, but edge cases (box sets, disc folders) require conservative defaults.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [Cobra CLI framework](https://github.com/spf13/cobra) -- CLI structure, v2.3.0
-- [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) -- Pure Go SQLite, v1.36+
-- [SQLite Over a Network](https://sqlite.org/useovernet.html) -- NAS pitfall documentation
-- [Audiobookshelf API](https://api.audiobookshelf.org/) -- Library scan endpoint
-- [audible-cli GitHub](https://github.com/mkb79/audible-cli) -- Subprocess target, CLI interface
-- [Audible Authentication Docs](https://audible.readthedocs.io/en/latest/auth/authentication.html) -- Token lifecycle
+- Earworm v1.0 codebase (direct analysis) — existing patterns, package structure, migration system
+- [Go crypto/sha256](https://pkg.go.dev/crypto/sha256) — streaming hash verification pattern
+- [Go encoding/csv](https://pkg.go.dev/encoding/csv) — RFC 4180 CSV parser
+- [Go filepath.WalkDir](https://pkg.go.dev/path/filepath#WalkDir) — efficient directory traversal
+- [Audiobookshelf book scanner guide](https://www.audiobookshelf.org/guides/book-scanner/) — metadata.json format and priority
+- [Terraform plan/apply](https://developer.hashicorp.com/terraform/cli/commands/plan) — plan/apply workflow pattern
+- [beets CLI reference](https://beets.readthedocs.io/en/stable/reference/cli.html) — import workflow, dry-run, separation of delete
 
 ### Secondary (MEDIUM confidence)
-- [Libation GitHub issues](https://github.com/rmcrackan/Libation/issues) -- Crash reports validating fault-tolerance differentiator
-- [Libation Naming Templates](https://getlibation.com/docs/features/naming-templates) -- Folder structure conventions
-- [dhowden/tag](https://github.com/dhowden/tag) -- M4A metadata reading capabilities
-- [Go exec.Command lifecycle](https://segmentfault.com/a/1190000041466423/en) -- Subprocess pitfall documentation
+- [SMB file corruption (doublecmd issue #2018)](https://github.com/doublecmd/doublecmd/issues/2018) — SHA-256 mismatch despite matching file sizes over SMB
+- [PhotoStructure file copy strategies](https://photostructure.com/guide/file-copy-strategies/) — NAS verification patterns
+- [Go CSV BOM issue #33887](https://github.com/golang/go/issues/33887) — BOM breaks encoding/csv quote handling
+- [Audiobookshelf duplicate issue #3705](https://github.com/advplyr/audiobookshelf/issues/3705) — duplicate detection complexity
+- [Martin Fowler: Audit Log pattern](https://martinfowler.com/eaaDev/AuditLog.html) — canonical audit log design
 
 ### Tertiary (LOW confidence)
-- Audible rate limit behavior -- inferred from community experience, no official documentation
-- Libation default naming template specifics -- user-configurable, version-dependent
+- Audiobookshelf metadata.json merge-vs-overwrite behavior — needs live instance verification (see Gaps)
 
 ---
-*Research completed: 2026-04-03*
+*Research completed: 2026-04-06*
 *Ready for roadmap: yes*
