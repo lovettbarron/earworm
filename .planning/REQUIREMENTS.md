@@ -67,7 +67,7 @@
 - [x] **TEST-09**: Unit tests for file organization logic (path construction, cross-filesystem move, naming conventions)
 - [x] **TEST-10**: Integration tests for end-to-end file organization (staging to library move, folder structure validation)
 - [x] **TEST-11**: Integration tests for external integrations (Audiobookshelf API mock, Goodreads sync, daemon mode lifecycle)
-- [ ] **TEST-12**: All packages maintain >80% line coverage; no phase ships without passing `go test ./...`
+- [x] **TEST-12**: All packages maintain >80% line coverage; no phase ships without passing `go test ./...`
 
 ## v2 Requirements
 
@@ -136,7 +136,7 @@
 | TEST-09 | Phase 5 | Complete |
 | TEST-10 | Phase 5 | Complete |
 | TEST-11 | Phase 6 | Complete |
-| TEST-12 | Phase 8 | Pending |
+| TEST-12 | Phase 8 | Complete |
 
 **Coverage:**
 - v1 requirements: 43 total
