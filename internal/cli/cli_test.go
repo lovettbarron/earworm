@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,9 +33,27 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	organizeJSON = false
 	notifyJSON = false
 	goodreadsOutput = ""
+	undoSkip = false
 	daemonVerbose = false
 	daemonOnce = false
 	daemonInterval = ""
+
+	// Reset cobra flag Changed state and help flag on all subcommands
+	// to prevent cross-test contamination (--help sticks across tests).
+	for _, cmd := range rootCmd.Commands() {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+			if f.Name == "help" {
+				_ = f.Value.Set("false")
+			}
+		})
+	}
+	rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		f.Changed = false
+		if f.Name == "help" {
+			_ = f.Value.Set("false")
+		}
+	})
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
