@@ -142,7 +142,11 @@ Plans:
   2. Overall line coverage exceeds 80% (or gaps are identified and addressed)
   3. REQUIREMENTS.md traceability table accurately reflects completion status for all 43 requirements
   4. ROADMAP.md progress table and phase checkboxes reflect actual completion state
-**Plans**: 0 plans
+**Plans**: 3 plans
+Plans:
+- [ ] 08-01-PLAN.md — Test coverage for metadata, venv, audible, config, db, download packages
+- [ ] 08-02-PLAN.md — Test coverage for cli package
+- [ ] 08-03-PLAN.md — Documentation cleanup and coverage verification gate
 
 ## Progress
 
@@ -158,4 +162,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 5. File Organization | 0/2 | Planning complete | - |
 | 6. Integrations & Polish | 1/3 | In Progress|  |
 | 7. Fix Download→Organize Pipeline | 0/2 | Planning complete | - |
-| 8. Test Coverage & Doc Cleanup | 0/0 | Not started | - |
+| 8. Test Coverage & Doc Cleanup | 0/3 | Planning complete | - |
