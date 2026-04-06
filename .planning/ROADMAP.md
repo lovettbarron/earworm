@@ -145,8 +145,8 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 08-01-PLAN.md — Test coverage for metadata, venv, audible, config, db, download packages
-- [ ] 08-02-PLAN.md — Test coverage for cli package
-- [ ] 08-03-PLAN.md — Documentation cleanup and coverage verification gate
+- [x] 08-02-PLAN.md — Test coverage for cli package
+- [x] 08-03-PLAN.md — Documentation cleanup and coverage verification gate
 
 ## Progress
 
