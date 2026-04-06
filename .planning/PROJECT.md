@@ -44,7 +44,14 @@ Reliably download and organize Audible audiobooks into a local library with zero
 
 ### Active
 
-(No active requirements — planning next milestone)
+- [ ] Deep library scanning (all folders, issue detection)
+- [ ] Plan infrastructure (plan→review→apply DB-backed workflow)
+- [ ] Metadata application (write `metadata.json`, no audio modification)
+- [ ] Structural operations (flatten nested audio, split multi-book folders, SHA-256 verification)
+- [ ] CSV import for plan creation
+- [ ] Guarded cleanup command (separated deletions, explicit confirmation)
+- [ ] Execution logging and audit trail
+- [ ] Claude Code skill for conversational library cleanup
 
 ### Out of Scope
 
@@ -56,6 +63,20 @@ Reliably download and organize Audible audiobooks into a local library with zero
 - Running natively on NAS hardware — targets desktop/server writing to NAS mount
 - Multi-service support (Libro.fm, etc.) — scope explosion; v1 is Audible-only
 - Real-time webhook notifications — users can wrap CLI with their own scripts
+
+## Current Milestone: v1.1 Library Cleanup
+
+**Goal:** Extend Earworm with safe, plan-based library cleanup capabilities for organizing non-Audible books, fixing metadata, and restructuring folders — all with zero destructive defaults.
+
+**Target features:**
+- Deep library scanning (all folders, not just ASIN-bearing)
+- Plan infrastructure (plan→review→apply→cleanup flow with DB persistence)
+- Metadata application (`metadata.json` writes, no audio file modification)
+- Structural operations (flatten nested audio, split multi-book folders with SHA-256 verification)
+- CSV import (bridge manual analysis to plan system)
+- Guarded cleanup command (only deletions, separated and explicit)
+- Execution logging and audit trail
+- Claude Code skill for conversational orchestration
 
 ## Context
 
@@ -108,4 +129,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 after v1.0 milestone — 8 phases, 22 plans, 43 requirements satisfied, 83.2% test coverage*
+*Last updated: 2026-04-06 after milestone v1.1 started*
