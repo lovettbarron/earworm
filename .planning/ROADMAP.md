@@ -12,12 +12,12 @@ Earworm builds from the data layer up through a strict dependency chain: foundat
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation & Configuration** - Go project skeleton, SQLite state, config system, CLI framework
-- [ ] **Phase 2: Local Library Scanning** - Scan existing audiobook directories and display library status
-- [ ] **Phase 3: Audible Integration** - Authenticate with Audible, sync remote library, detect new books
-- [ ] **Phase 4: Download Pipeline** - Fault-tolerant batch downloads with rate limiting and crash recovery
-- [ ] **Phase 5: File Organization** - Organize downloads into Libation-compatible folder structure
-- [ ] **Phase 6: Integrations & Polish** - Audiobookshelf, Goodreads, daemon mode, documentation
+- [x] **Phase 1: Foundation & Configuration** - Go project skeleton, SQLite state, config system, CLI framework
+- [x] **Phase 2: Local Library Scanning** - Scan existing audiobook directories and display library status
+- [x] **Phase 3: Audible Integration** - Authenticate with Audible, sync remote library, detect new books
+- [x] **Phase 4: Download Pipeline** - Fault-tolerant batch downloads with rate limiting and crash recovery
+- [x] **Phase 5: File Organization** - Organize downloads into Libation-compatible folder structure
+- [x] **Phase 6: Integrations & Polish** - Audiobookshelf, Goodreads, daemon mode, documentation
 
 ## Phase Details
 
@@ -113,7 +113,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 06-01-PLAN.md — Audiobookshelf API client and Goodreads CSV export packages with tests
-- [ ] 06-02-PLAN.md — CLI commands (notify, goodreads, daemon), daemon package, ABS hook in download pipeline
+- [x] 06-02-PLAN.md — CLI commands (notify, goodreads, daemon), daemon package, ABS hook in download pipeline
 - [x] 06-03-PLAN.md — README rewrite with full v1 documentation
 
 ### Phase 7: Fix Download→Organize Pipeline Integration
@@ -129,8 +129,8 @@ Plans:
   5. Integration tests verify the download→organize handoff with real staging directory state
 **Plans**: 2 plans
 Plans:
-- [ ] 07-01-PLAN.md — Remove MoveToLibrary from download pipeline, update verifyAndMove to verifyStaged, remove ABS scan from download command
-- [ ] 07-02-PLAN.md — Download-to-organize handoff integration tests, ABS scan trigger in organize command
+- [x] 07-01-PLAN.md — Remove MoveToLibrary from download pipeline, update verifyAndMove to verifyStaged, remove ABS scan from download command
+- [x] 07-02-PLAN.md — Download-to-organize handoff integration tests, ABS scan trigger in organize command
 
 ### Phase 8: Test Coverage & Documentation Cleanup
 **Goal**: Establish >80% test coverage measurement and fix stale documentation artifacts for clean milestone close
@@ -155,11 +155,11 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Configuration | 0/3 | Planning complete | - |
-| 2. Local Library Scanning | 0/2 | Planning complete | - |
-| 3. Audible Integration | 1/3 | Executing | - |
-| 4. Download Pipeline | 0/4 | Planning complete | - |
-| 5. File Organization | 0/2 | Planning complete | - |
-| 6. Integrations & Polish | 1/3 | In Progress|  |
-| 7. Fix Download→Organize Pipeline | 0/2 | Planning complete | - |
-| 8. Test Coverage & Doc Cleanup | 0/3 | Planning complete | - |
+| 1. Foundation & Configuration | 3/3 | Complete | Yes |
+| 2. Local Library Scanning | 2/2 | Complete | Yes |
+| 3. Audible Integration | 3/3 | Complete | Yes |
+| 4. Download Pipeline | 4/4 | Complete | Yes |
+| 5. File Organization | 2/2 | Complete | Yes |
+| 6. Integrations & Polish | 3/3 | Complete | Yes |
+| 7. Fix Download→Organize Pipeline | 2/2 | Complete | Yes |
+| 8. Test Coverage & Doc Cleanup | 0/3 | Executing | - |
