@@ -329,10 +329,10 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 		}
 
 		if downloadErr == nil {
-			// Success — decrypt (if AAXC), verify, and move files.
-			if err := p.verifyAndMove(ctx, book.ASIN, book.Title, asinStagingDir); err != nil {
+			// Success — decrypt (if AAXC) and verify files remain in staging.
+			if err := p.verifyStaged(ctx, book.ASIN, asinStagingDir); err != nil {
 				lastErr = err
-				// Retry on verify/move failure
+				// Retry on verify failure
 				if attempt < maxAttempts-1 {
 					delay := backoff.Delay(attempt)
 					if sleepErr := p.sleepFunc(ctx, delay); sleepErr != nil {
@@ -342,13 +342,8 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 				continue
 			}
 
-			// Mark complete in DB.
-			folderName := book.ASIN
-			if book.Title != "" {
-				folderName = fmt.Sprintf("%s [%s]", sanitizeFolderName(book.Title), book.ASIN)
-			}
-			localPath := filepath.Join(p.config.LibraryDir, folderName)
-			if err := db.UpdateDownloadComplete(p.db, book.ASIN, localPath); err != nil {
+			// Mark complete in DB with empty local_path (files remain in staging).
+			if err := db.UpdateDownloadComplete(p.db, book.ASIN, ""); err != nil {
 				slog.Warn("failed to mark download complete", "asin", book.ASIN, "error", err)
 			}
 			return nil
@@ -396,9 +391,10 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 	return lastErr
 }
 
-// verifyAndMove decrypts AAXC files (if present), verifies audio files,
-// and moves them to the library.
-func (p *Pipeline) verifyAndMove(ctx context.Context, asin string, title string, stagingDir string) error {
+// verifyStaged decrypts AAXC files (if present) and verifies audio files
+// remain in staging. Files are NOT moved to library — that is handled by
+// the organize command.
+func (p *Pipeline) verifyStaged(ctx context.Context, asin string, stagingDir string) error {
 	// Step 1: Decrypt AAXC to M4B if applicable.
 	if !p.config.Quiet {
 		fmt.Fprintf(p.w, "  Decrypting...\n")
@@ -428,14 +424,6 @@ func (p *Pipeline) verifyAndMove(ctx context.Context, asin string, title string,
 		if err := p.verifyFunc(f); err != nil {
 			return fmt.Errorf("verifying %s: %w", filepath.Base(f), err)
 		}
-	}
-
-	// Step 4: Move to library.
-	if !p.config.Quiet {
-		fmt.Fprintf(p.w, "  Moving to library...\n")
-	}
-	if err := MoveToLibrary(p.config.StagingDir, p.config.LibraryDir, asin, title); err != nil {
-		return fmt.Errorf("moving %s to library: %w", asin, err)
 	}
 
 	return nil
