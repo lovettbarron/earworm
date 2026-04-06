@@ -35,8 +35,8 @@
 
 ### File Organization
 
-- [ ] **ORG-01**: Downloaded books are organized in Libation-compatible folder structure (Author/Title [ASIN]/)
-- [ ] **ORG-02**: Cover art, chapter metadata, and audio files are placed in the correct locations within each book folder
+- [x] **ORG-01**: Downloaded books are organized in Libation-compatible folder structure (Author/Title [ASIN]/)
+- [x] **ORG-02**: Cover art, chapter metadata, and audio files are placed in the correct locations within each book folder
 - [x] **ORG-03**: File moves from staging to library handle cross-filesystem boundaries (copy-then-delete)
 
 ### Integrations
@@ -113,8 +113,8 @@
 | DL-07 | Phase 4 | Complete |
 | DL-08 | Phase 4 | Complete |
 | DL-09 | Phase 4 | Complete |
-| ORG-01 | Phase 7 | Pending |
-| ORG-02 | Phase 7 | Pending |
+| ORG-01 | Phase 7 | Complete |
+| ORG-02 | Phase 7 | Complete |
 | ORG-03 | Phase 5 | Complete |
 | INT-01 | Phase 6 | Complete |
 | INT-02 | Phase 6 | Complete |
