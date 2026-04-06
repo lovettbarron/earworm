@@ -39,62 +39,6 @@ func TestVerifyM4A_InvalidFile(t *testing.T) {
 // Since creating a real M4A fixture is complex, we test the error paths above
 // and trust dhowden/tag for the happy path. Integration tests can use real files.
 
-func TestMoveToLibrary(t *testing.T) {
-	t.Run("moves files with title naming", func(t *testing.T) {
-		staging := t.TempDir()
-		library := t.TempDir()
-
-		asin := "B001234567"
-		stagingASIN := filepath.Join(staging, asin)
-		require.NoError(t, os.MkdirAll(stagingASIN, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(stagingASIN, "book.m4a"), []byte("audio data"), 0644))
-		require.NoError(t, os.WriteFile(filepath.Join(stagingASIN, "cover.jpg"), []byte("image data"), 0644))
-
-		err := MoveToLibrary(staging, library, asin, "My Book Title")
-		require.NoError(t, err)
-
-		// Verify files exist in library with Title [ASIN] folder
-		assert.FileExists(t, filepath.Join(library, "My Book Title [B001234567]", "book.m4a"))
-		assert.FileExists(t, filepath.Join(library, "My Book Title [B001234567]", "cover.jpg"))
-
-		// Verify staging directory was removed
-		assert.NoDirExists(t, stagingASIN)
-	})
-
-	t.Run("falls back to bare ASIN when no title", func(t *testing.T) {
-		staging := t.TempDir()
-		library := t.TempDir()
-
-		asin := "B001234567"
-		stagingASIN := filepath.Join(staging, asin)
-		require.NoError(t, os.MkdirAll(stagingASIN, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(stagingASIN, "book.m4a"), []byte("audio data"), 0644))
-
-		err := MoveToLibrary(staging, library, asin, "")
-		require.NoError(t, err)
-
-		assert.FileExists(t, filepath.Join(library, asin, "book.m4a"))
-	})
-
-	t.Run("handles destination already exists (overwrite)", func(t *testing.T) {
-		staging := t.TempDir()
-		library := t.TempDir()
-
-		asin := "B001234567"
-		stagingASIN := filepath.Join(staging, asin)
-		require.NoError(t, os.MkdirAll(stagingASIN, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(stagingASIN, "book.m4a"), []byte("new audio"), 0644))
-
-		err := MoveToLibrary(staging, library, asin, "My Book")
-		require.NoError(t, err)
-
-		// Verify new content
-		data, err := os.ReadFile(filepath.Join(library, "My Book [B001234567]", "book.m4a"))
-		require.NoError(t, err)
-		assert.Equal(t, "new audio", string(data))
-	})
-}
-
 func TestCleanOrphans(t *testing.T) {
 	t.Run("removes orphaned ASIN directories", func(t *testing.T) {
 		staging := t.TempDir()

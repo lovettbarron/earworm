@@ -160,6 +160,10 @@ func TestPipeline_SequentialDownload(t *testing.T) {
 	require.Len(t, client.calls, 2)
 	assert.Equal(t, "B000000001", client.calls[0])
 	assert.Equal(t, "B000000002", client.calls[1])
+
+	// Verify files remain in staging (not moved to library)
+	assert.DirExists(t, filepath.Join(staging, "B000000001"))
+	assert.DirExists(t, filepath.Join(staging, "B000000002"))
 }
 
 func TestPipeline_DownloadCallsDBState(t *testing.T) {
@@ -179,12 +183,13 @@ func TestPipeline_DownloadCallsDBState(t *testing.T) {
 	_, err := p.Run(context.Background())
 	require.NoError(t, err)
 
-	// After pipeline, book should be marked as downloaded with a local_path
+	// After pipeline, book should be marked as downloaded with empty local_path
+	// (files remain in staging; organize command handles library placement)
 	book, err := db.GetBook(database, "B000000001")
 	require.NoError(t, err)
 	require.NotNil(t, book)
 	assert.Equal(t, "downloaded", book.Status)
-	assert.NotEmpty(t, book.LocalPath)
+	assert.Empty(t, book.LocalPath)
 }
 
 func TestPipeline_RetryOnFailure(t *testing.T) {
@@ -544,9 +549,9 @@ func TestPipeline_AAXCDecryptIntegration(t *testing.T) {
 	assert.Equal(t, 1, summary.Succeeded)
 	assert.Equal(t, 0, summary.Failed)
 
-	// Verify M4B file ends up in library with Title [ASIN] folder
-	libraryASIN := filepath.Join(library, "Book One [B000000001]")
-	entries, err := os.ReadDir(libraryASIN)
+	// Verify M4B file remains in staging after download (not moved to library)
+	stagingASIN := filepath.Join(staging, "B000000001")
+	entries, err := os.ReadDir(stagingASIN)
 	require.NoError(t, err)
 	var hasM4B bool
 	for _, e := range entries {
@@ -554,7 +559,7 @@ func TestPipeline_AAXCDecryptIntegration(t *testing.T) {
 			hasM4B = true
 		}
 	}
-	assert.True(t, hasM4B, "library should contain .m4b file")
+	assert.True(t, hasM4B, "staging should contain .m4b file after decrypt+verify")
 }
 
 // aaxcFakeDownloader creates AAXC + voucher files instead of M4A.
