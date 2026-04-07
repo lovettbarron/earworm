@@ -125,4 +125,55 @@ func TestScanCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "--recursive")
 	assert.Contains(t, out, "-r")
+	assert.Contains(t, out, "--deep")
+}
+
+func TestScanDeep(t *testing.T) {
+	tmpLib := t.TempDir()
+
+	// Create dirs with ASIN and without
+	bookDir := filepath.Join(tmpLib, "Author", "Book [B08C6YJ1LS]")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "book.m4a"), []byte("fake"), 0644))
+
+	noASINDir := filepath.Join(tmpLib, "Random Folder")
+	require.NoError(t, os.MkdirAll(noASINDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(noASINDir, "track.m4a"), []byte("fake"), 0644))
+
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan", "--deep")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Deep scan complete")
+	assert.Contains(t, out, "Directories:")
+	assert.Contains(t, out, "With ASIN:")
+	assert.Contains(t, out, "Without ASIN:")
+	assert.Contains(t, out, "Issues found:")
+}
+
+func TestScanDeepShowsIssues(t *testing.T) {
+	tmpLib := t.TempDir()
+
+	// Create empty subdir to trigger empty_dir issue
+	emptyDir := filepath.Join(tmpLib, "EmptyBook")
+	require.NoError(t, os.MkdirAll(emptyDir, 0755))
+
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan", "--deep")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Deep scan complete")
+	// Should have at least 1 issue (empty_dir)
+	assert.NotContains(t, out, "Issues found: 0")
+}
+
+func TestScanWithoutDeep_Unchanged(t *testing.T) {
+	tmpLib := createTestLibrary(t)
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan")
+	require.NoError(t, err)
+	// Existing behavior unchanged: shows "Scan complete:" not "Deep scan complete:"
+	assert.Contains(t, out, "Scan complete:")
+	assert.NotContains(t, out, "Deep scan complete")
 }

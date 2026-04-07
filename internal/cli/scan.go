@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 
@@ -13,6 +14,7 @@ import (
 )
 
 var scanRecursive bool
+var scanDeep bool
 
 var scanCmd = &cobra.Command{
 	Use:   "scan",
@@ -27,6 +29,7 @@ Use --recursive to search deeply nested directory structures.`,
 
 func init() {
 	scanCmd.Flags().BoolVarP(&scanRecursive, "recursive", "r", false, "recursively scan nested directories")
+	scanCmd.Flags().BoolVar(&scanDeep, "deep", false, "scan all folders including those without ASINs and detect issues")
 	rootCmd.AddCommand(scanCmd)
 }
 
@@ -53,6 +56,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to open database: %w\n\nTry removing %s and running again", err, dbPath)
 	}
 	defer database.Close()
+
+	// Deep scan mode: walk all directories, detect issues, persist results
+	if scanDeep {
+		return runDeepScan(cmd, database, libPath)
+	}
 
 	// Start spinner for progress feedback on stderr
 	spin := NewSpinner(cmd.ErrOrStderr(), "Scanning")
@@ -124,6 +132,60 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 		if len(skipped) > 10 {
 			fmt.Fprintf(cmd.ErrOrStderr(), "  ... and %d more\n", len(skipped)-10)
+		}
+	}
+
+	return nil
+}
+
+func runDeepScan(cmd *cobra.Command, database *sql.DB, libPath string) error {
+	// Start spinner
+	spin := NewSpinner(cmd.ErrOrStderr(), "Deep scanning")
+	if !quiet {
+		spin.Start()
+	}
+
+	// Adapter for metadata extraction (same as existing scan)
+	metadataFn := func(bookDir string) (*scanner.BookMetadata, error) {
+		meta, err := metadata.ExtractMetadata(bookDir)
+		if err != nil {
+			return nil, err
+		}
+		return &scanner.BookMetadata{
+			Title:        meta.Title,
+			Author:       meta.Author,
+			Narrator:     meta.Narrator,
+			Genre:        meta.Genre,
+			Year:         meta.Year,
+			Series:       meta.Series,
+			HasCover:     meta.HasCover,
+			Duration:     meta.Duration,
+			ChapterCount: meta.ChapterCount,
+			FileCount:    meta.FileCount,
+			Source:       string(meta.Source),
+		}, nil
+	}
+
+	result, err := scanner.DeepScanLibrary(libPath, database, metadataFn)
+	if !quiet {
+		spin.Stop()
+	}
+	if err != nil {
+		return fmt.Errorf("deep scan failed: %w", err)
+	}
+
+	// Print summary to stdout
+	fmt.Fprintf(cmd.OutOrStdout(), "Deep scan complete:\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "  Directories: %d\n", result.TotalDirs)
+	fmt.Fprintf(cmd.OutOrStdout(), "  With ASIN:   %d\n", result.WithASIN)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Without ASIN: %d\n", result.WithoutASIN)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Issues found: %d\n", result.IssuesFound)
+
+	// Print issue breakdown if any (to stderr, for non-quiet mode)
+	if result.IssuesFound > 0 && !quiet {
+		fmt.Fprintf(cmd.ErrOrStderr(), "\nIssues by type:\n")
+		for issueType, count := range result.IssueCounts {
+			fmt.Fprintf(cmd.ErrOrStderr(), "  %-20s %d\n", issueType, count)
 		}
 	}
 
