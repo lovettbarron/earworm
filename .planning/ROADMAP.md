@@ -250,7 +250,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
 | 10. Deep Library Scanner | 0/3 | Planned | - |
-| 11. Structural Operations & Metadata | 0/2 | Planned | - |
+| 11. Structural Operations & Metadata | 1/2 | In Progress | - |
 | 12. Plan Engine & CLI | 0/0 | Not started | - |
 | 13. CSV Import & Guarded Cleanup | 0/0 | Not started | - |
 | 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |
