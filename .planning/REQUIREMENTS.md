@@ -9,7 +9,7 @@ Requirements for Library Cleanup milestone. Each maps to roadmap phases.
 
 ### Scanning
 
-- [ ] **SCAN-01**: User can deep-scan all library folders (not just ASIN-bearing) and detect issues: no_asin, nested_audio, multi_book, missing_metadata, wrong_structure, orphan_files, empty_dir, cover_missing
+- [x] **SCAN-01**: User can deep-scan all library folders (not just ASIN-bearing) and detect issues: no_asin, nested_audio, multi_book, missing_metadata, wrong_structure, orphan_files, empty_dir, cover_missing
 - [ ] **SCAN-02**: Library items are tracked in a path-keyed DB table so plans can reference non-Audible content
 - [x] **SCAN-03**: Detected scan issues are persisted in DB with severity, category, and suggested action
 
@@ -58,7 +58,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCAN-01 | Phase 10 | Pending |
+| SCAN-01 | Phase 10 | Complete |
 | SCAN-02 | Phase 9 | Pending |
 | SCAN-03 | Phase 10 | Complete |
 | PLAN-01 | Phase 9 | Complete |
