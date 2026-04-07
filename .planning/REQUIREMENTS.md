@@ -15,7 +15,7 @@ Requirements for Library Cleanup milestone. Each maps to roadmap phases.
 
 ### Plan Infrastructure
 
-- [ ] **PLAN-01**: User can create named plans with typed action records (move, flatten, split, delete, write_metadata) and per-action status tracking
+- [x] **PLAN-01**: User can create named plans with typed action records (move, flatten, split, delete, write_metadata) and per-action status tracking
 - [ ] **PLAN-02**: User can review a plan via CLI with human-readable diff showing what each action will do before applying
 - [ ] **PLAN-03**: User can apply a plan with SHA-256 verification, per-operation status tracking, resume on failure, and full audit trail
 - [ ] **PLAN-04**: User can import plans from CSV spreadsheets to bridge manual analysis into the plan system
@@ -29,7 +29,7 @@ Requirements for Library Cleanup milestone. Each maps to roadmap phases.
 
 ### Integration
 
-- [ ] **INTG-01**: All plan operations produce a full audit trail with timestamps, before/after state, and success/failure
+- [x] **INTG-01**: All plan operations produce a full audit trail with timestamps, before/after state, and success/failure
 - [ ] **INTG-02**: Claude Code skill enables conversational plan creation (not execution) via Claude Code
 
 ## Future Requirements
@@ -61,7 +61,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SCAN-01 | Phase 10 | Pending |
 | SCAN-02 | Phase 9 | Pending |
 | SCAN-03 | Phase 10 | Pending |
-| PLAN-01 | Phase 9 | Pending |
+| PLAN-01 | Phase 9 | Complete |
 | PLAN-02 | Phase 12 | Pending |
 | PLAN-03 | Phase 12 | Pending |
 | PLAN-04 | Phase 13 | Pending |
@@ -69,7 +69,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FOPS-02 | Phase 11 | Pending |
 | FOPS-03 | Phase 13 | Pending |
 | FOPS-04 | Phase 14 | Pending |
-| INTG-01 | Phase 9 | Pending |
+| INTG-01 | Phase 9 | Complete |
 | INTG-02 | Phase 14 | Pending |
 
 **Coverage:**
