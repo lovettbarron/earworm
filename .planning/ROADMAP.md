@@ -176,7 +176,7 @@ Plans:
   7. Unit tests cover all 8 issue detectors, deep scan traversal, DB persistence, and CLI integration
 **Plans**: 3 plans
 Plans:
-- [ ] 10-01-PLAN.md — Migration 006 (scan_issues table), ScanIssue CRUD functions and tests
+- [x] 10-01-PLAN.md — Migration 006 (scan_issues table), ScanIssue CRUD functions and tests
 - [ ] 10-02-PLAN.md — Issue detection heuristics (8 detectors as pure functions) with tests
 - [ ] 10-03-PLAN.md — DeepScanLibrary orchestrator, CLI --deep flag wiring, integration tests
 
@@ -196,4 +196,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 7. Fix Download→Organize Pipeline | 2/2 | Complete | Yes |
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
 | 9. Plan Infrastructure & DB Schema | 1/2 | In Progress | - |
-| 10. Deep Library Scanner | 0/3 | Planned | - |
+| 10. Deep Library Scanner | 1/3 | In Progress|  |
