@@ -18,7 +18,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Download Pipeline** - Fault-tolerant batch downloads with rate limiting and crash recovery
 - [x] **Phase 5: File Organization** - Organize downloads into Libation-compatible folder structure
 - [x] **Phase 6: Integrations & Polish** - Audiobookshelf, Goodreads, daemon mode, documentation
+- [x] **Phase 9: Plan Infrastructure & DB Schema** - DB tables, plan CRUD, audit logger, and library_items tracking for non-ASIN content
 - [ ] **Phase 10: Deep Library Scanner** - Deep scan all folders, detect structural issues, persist scan results
+- [ ] **Phase 11: Structural Operations & Metadata** - Flatten nested audio, write metadata.json sidecars, SHA-256 verification
+- [ ] **Phase 12: Plan Engine & CLI** - Wire scan results into reviewable, executable plans with per-operation tracking
+- [ ] **Phase 13: CSV Import & Guarded Cleanup** - CSV-to-plan bridge and separated deletion command with safety guards
+- [ ] **Phase 14: Multi-Book Split & Claude Skill** - Content-based folder splitting and conversational plan creation
 
 ## Phase Details
 
@@ -160,7 +165,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 09-01-PLAN.md — Migration 005, LibraryItem CRUD, tests
-- [ ] 09-02-PLAN.md — Plan and PlanOperation CRUD, audit log functions
+- [x] 09-02-PLAN.md — Plan and PlanOperation CRUD, audit log functions
 
 ### Phase 10: Deep Library Scanner
 **Goal**: Users can deep-scan their entire library to discover non-ASIN content and detect structural issues with severity, category, and suggested actions
@@ -180,6 +185,51 @@ Plans:
 - [ ] 10-02-PLAN.md — Issue detection heuristics (8 detectors as pure functions) with tests
 - [ ] 10-03-PLAN.md — DeepScanLibrary orchestrator, CLI --deep flag wiring, integration tests
 
+### Phase 11: Structural Operations & Metadata
+**Goal**: The file operation primitives exist for plan execution — flatten nested directories, write metadata sidecars, and verify file integrity via SHA-256
+**Depends on**: Phase 9
+**Requirements**: FOPS-01, FOPS-02
+**Success Criteria** (what must be TRUE):
+  1. User can flatten a nested audio directory, moving all audio files up to the book folder level with SHA-256 verification
+  2. User can write an Audiobookshelf-compatible metadata.json sidecar for a book folder without modifying any audio files
+  3. All file moves are verified via SHA-256 hash comparison (source before, destination after) before source deletion
+  4. Failed operations leave source files intact (no data loss on verification failure)
+**Plans**: TBD
+
+### Phase 12: Plan Engine & CLI
+**Goal**: Users can go from scan results to reviewed, executed plans through CLI commands — the full scan-to-plan-to-apply workflow works end to end
+**Depends on**: Phase 10, Phase 11
+**Requirements**: PLAN-02, PLAN-03
+**Success Criteria** (what must be TRUE):
+  1. User can review a plan via CLI and see a human-readable diff showing source, destination, and operation type for every action
+  2. User can apply a plan with `--confirm` and see per-operation progress with pass/fail status
+  3. Plan application resumes from the last successful operation after interruption or failure
+  4. Applied plans record SHA-256 hashes and per-operation status in the audit trail
+  5. Plans default to dry-run (no mutation without explicit confirmation)
+**Plans**: TBD
+
+### Phase 13: CSV Import & Guarded Cleanup
+**Goal**: Users can bridge manual spreadsheet analysis into the plan system and safely delete unwanted files through a separated, guarded command
+**Depends on**: Phase 12
+**Requirements**: PLAN-04, FOPS-03
+**Success Criteria** (what must be TRUE):
+  1. User can run `earworm plan import FILE.csv` and get a named plan created from CSV rows with validation feedback
+  2. CSV import handles BOM, CRLF normalization, and reports row-level validation errors with line numbers
+  3. User can run `earworm cleanup` with trash-dir default (not permanent deletion), double confirmation prompt, and full audit logging
+  4. Cleanup command only processes delete operations from completed plans — it cannot delete arbitrary files
+**Plans**: TBD
+
+### Phase 14: Multi-Book Split & Claude Skill
+**Goal**: Users can handle the hardest structural issue (multi-book folders) and optionally use Claude Code for conversational plan creation
+**Depends on**: Phase 12
+**Requirements**: FOPS-04, INTG-02
+**Success Criteria** (what must be TRUE):
+  1. User can split a multi-book folder into separate directories based on content detection (audio metadata comparison)
+  2. Split operations use SHA-256 verification and produce audit trail entries like all other file operations
+  3. Claude Code skill can orchestrate scan and plan creation through conversation, producing plans the user reviews before applying
+  4. Claude Code skill never executes plans — only creates them for human review and application
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
@@ -195,5 +245,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 6. Integrations & Polish | 3/3 | Complete | Yes |
 | 7. Fix Download→Organize Pipeline | 2/2 | Complete | Yes |
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
-| 9. Plan Infrastructure & DB Schema | 1/2 | In Progress | - |
+| 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
 | 10. Deep Library Scanner | 0/3 | Planned | - |
+| 11. Structural Operations & Metadata | 0/0 | Not started | - |
+| 12. Plan Engine & CLI | 0/0 | Not started | - |
+| 13. CSV Import & Guarded Cleanup | 0/0 | Not started | - |
+| 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |
