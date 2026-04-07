@@ -194,7 +194,10 @@ Plans:
   2. User can write an Audiobookshelf-compatible metadata.json sidecar for a book folder without modifying any audio files
   3. All file moves are verified via SHA-256 hash comparison (source before, destination after) before source deletion
   4. Failed operations leave source files intact (no data loss on verification failure)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 11-01-PLAN.md — SHA-256 hash utility, verified move, FlattenDir with collision handling
+- [ ] 11-02-PLAN.md — Audiobookshelf metadata.json sidecar writer (ABSMetadata, BuildABSMetadata, WriteMetadataSidecar)
 
 ### Phase 12: Plan Engine & CLI
 **Goal**: Users can go from scan results to reviewed, executed plans through CLI commands — the full scan-to-plan-to-apply workflow works end to end
@@ -247,7 +250,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
 | 10. Deep Library Scanner | 0/3 | Planned | - |
-| 11. Structural Operations & Metadata | 0/0 | Not started | - |
+| 11. Structural Operations & Metadata | 0/2 | Planned | - |
 | 12. Plan Engine & CLI | 0/0 | Not started | - |
 | 13. CSV Import & Guarded Cleanup | 0/0 | Not started | - |
 | 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |
