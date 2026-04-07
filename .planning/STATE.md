@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Library Cleanup
-status: defining_requirements
-stopped_at: Milestone v1.1 started — defining requirements
-last_updated: "2026-04-06T00:00:00.000Z"
-last_activity: 2026-04-06
+status: ready_to_plan
+stopped_at: Roadmap created for v1.1 — ready to plan Phase 9
+last_updated: "2026-04-07T00:00:00.000Z"
+last_activity: 2026-04-07
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** Reliably download and organize Audible audiobooks into a local library with zero manual intervention
-**Current focus:** Defining requirements for v1.1 Library Cleanup
+**Current focus:** Phase 9 — Plan Infrastructure & DB Schema
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-06 — Milestone v1.1 started
+Phase: 9 of 14 (Plan Infrastructure & DB Schema)
+Plan: 0 of 0 in current phase (not yet planned)
+Status: Ready to plan
+Last activity: 2026-04-07 — Roadmap created for v1.1 Library Cleanup milestone
 
 ## Accumulated Context
 
@@ -36,14 +36,18 @@ Last activity: 2026-04-06 — Milestone v1.1 started
 
 Decisions are logged in PROJECT.md Key Decisions table.
 
+- v1.1: Plan infrastructure (DB + CRUD) first — everything depends on it
+- v1.1: SHA-256 verification before structural operations, cleanup last among destructive features
+- v1.1: Multi-book split late (highest complexity), Claude skill last (wraps all features)
+
 ### Pending Todos
 
 None.
 
 ### Blockers/Concerns
 
-- Audible rate limit thresholds are undocumented -- must use conservative defaults and tune empirically
-- audible-cli output formats are not formally versioned -- subprocess wrapper must be defensive
+- Audiobookshelf metadata.json merge-vs-overwrite behavior needs live verification before Phase 11
+- Plan resume UX design needed during Phase 12 planning
 
 ### Quick Tasks Completed
 
@@ -56,6 +60,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-06
-Stopped at: Milestone v1.1 started — defining requirements
+Last session: 2026-04-07
+Stopped at: Roadmap created for v1.1, ready to plan Phase 9
 Resume file: None

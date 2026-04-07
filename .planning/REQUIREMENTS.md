@@ -58,25 +58,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCAN-01 | — | Pending |
-| SCAN-02 | — | Pending |
-| SCAN-03 | — | Pending |
-| PLAN-01 | — | Pending |
-| PLAN-02 | — | Pending |
-| PLAN-03 | — | Pending |
-| PLAN-04 | — | Pending |
-| FOPS-01 | — | Pending |
-| FOPS-02 | — | Pending |
-| FOPS-03 | — | Pending |
-| FOPS-04 | — | Pending |
-| INTG-01 | — | Pending |
-| INTG-02 | — | Pending |
+| SCAN-01 | Phase 10 | Pending |
+| SCAN-02 | Phase 9 | Pending |
+| SCAN-03 | Phase 10 | Pending |
+| PLAN-01 | Phase 9 | Pending |
+| PLAN-02 | Phase 12 | Pending |
+| PLAN-03 | Phase 12 | Pending |
+| PLAN-04 | Phase 13 | Pending |
+| FOPS-01 | Phase 11 | Pending |
+| FOPS-02 | Phase 11 | Pending |
+| FOPS-03 | Phase 13 | Pending |
+| FOPS-04 | Phase 14 | Pending |
+| INTG-01 | Phase 9 | Pending |
+| INTG-02 | Phase 14 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 13 total
-- Mapped to phases: 0
-- Unmapped: 13 ⚠️
+- Mapped to phases: 13
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-07*
-*Last updated: 2026-04-07 after initial definition*
+*Last updated: 2026-04-07 after roadmap creation*
