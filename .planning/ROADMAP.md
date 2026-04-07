@@ -43,7 +43,10 @@
   2. Library items are tracked in a path-keyed DB table that represents non-ASIN content alongside existing books
   3. Every plan mutation (create, status change) produces an audit log entry with timestamp, before/after state, and success/failure
   4. Plan and operation records survive CLI restarts (DB-persisted with migration)
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 09-01-PLAN.md — Migration 005 schema and LibraryItem CRUD with path normalization
+- [ ] 09-02-PLAN.md — Plan/Operation CRUD with audit logging and transactional status changes
 
 ### Phase 10: Deep Library Scanner
 **Goal**: Users can see everything in their library — not just ASIN-bearing folders — and understand what needs fixing
@@ -116,7 +119,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12 → 13 → 14
 | 6. Integrations & Polish | v1.0 | 3/3 | Complete | 2026-04-05 |
 | 7. Fix Download→Organize Pipeline | v1.0 | 2/2 | Complete | 2026-04-06 |
 | 8. Test Coverage & Doc Cleanup | v1.0 | 3/3 | Complete | 2026-04-06 |
-| 9. Plan Infrastructure & DB Schema | v1.1 | 0/0 | Not started | - |
+| 9. Plan Infrastructure & DB Schema | v1.1 | 0/2 | Planned | - |
 | 10. Deep Library Scanner | v1.1 | 0/0 | Not started | - |
 | 11. Structural Operations & Metadata | v1.1 | 0/0 | Not started | - |
 | 12. Plan Engine & CLI | v1.1 | 0/0 | Not started | - |
