@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: File Organization** - Organize downloads into Libation-compatible folder structure
 - [x] **Phase 6: Integrations & Polish** - Audiobookshelf, Goodreads, daemon mode, documentation
 - [x] **Phase 9: Plan Infrastructure & DB Schema** - DB tables, plan CRUD, audit logger, and library_items tracking for non-ASIN content
-- [ ] **Phase 10: Deep Library Scanner** - Deep scan all folders, detect structural issues, persist scan results
+- [x] **Phase 10: Deep Library Scanner** - Deep scan all folders, detect structural issues, persist scan results (completed 2026-04-07)
 - [ ] **Phase 11: Structural Operations & Metadata** - Flatten nested audio, write metadata.json sidecars, SHA-256 verification
 - [ ] **Phase 12: Plan Engine & CLI** - Wire scan results into reviewable, executable plans with per-operation tracking
 - [ ] **Phase 13: CSV Import & Guarded Cleanup** - CSV-to-plan bridge and separated deletion command with safety guards
@@ -249,7 +249,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 7. Fix Download→Organize Pipeline | 2/2 | Complete | Yes |
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
-| 10. Deep Library Scanner | 0/3 | Planned | - |
+| 10. Deep Library Scanner | 0/3 | Complete    | 2026-04-07 |
 | 11. Structural Operations & Metadata | 0/2 | Planned | - |
 | 12. Plan Engine & CLI | 0/0 | Not started | - |
 | 13. CSV Import & Guarded Cleanup | 0/0 | Not started | - |
