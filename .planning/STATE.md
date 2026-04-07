@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 10-03-PLAN.md
-last_updated: "2026-04-07T18:28:13.594Z"
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-04-07T18:25:00.331Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 14
   completed_phases: 2
-  total_plans: 7
+  total_plans: 5
   completed_plans: 5
   percent: 68
 ---
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 ## Current Position
 
 Phase: 11
-Plan: Not started
-Status: Executing Phase 11
+Plan: 01 of 2 complete
+Status: Executing
 Last activity: 2026-04-07
 
 Progress: [██████▓░░░] 68%
@@ -124,6 +124,8 @@ Recent decisions affecting current work:
 - [Phase 10]: No FK from scan_issues to library_items; issues may reference untracked paths
 - [Phase 10]: metadataFn callback pattern for dependency injection in DeepScanLibrary
 - [Phase 10]: Deep scan clears all old issues before each run to prevent accumulation
+- [Phase 11]: VerifiedMove delegates to organize.MoveFile for actual moves (reuses cross-FS EXDEV fallback)
+- [Phase 11]: FlattenDir uses filepath.WalkDir with case-insensitive .m4a/.m4b matching and per-file error isolation
 
 ### Pending Todos
 
