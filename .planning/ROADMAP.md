@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Download Pipeline** - Fault-tolerant batch downloads with rate limiting and crash recovery
 - [x] **Phase 5: File Organization** - Organize downloads into Libation-compatible folder structure
 - [x] **Phase 6: Integrations & Polish** - Audiobookshelf, Goodreads, daemon mode, documentation
+- [ ] **Phase 10: Deep Library Scanner** - Deep scan all folders, detect structural issues, persist scan results
 
 ## Phase Details
 
@@ -148,6 +149,37 @@ Plans:
 - [x] 08-02-PLAN.md — Test coverage for cli package
 - [x] 08-03-PLAN.md — Documentation cleanup and coverage verification gate
 
+### Phase 9: Plan Infrastructure & DB Schema
+**Goal**: Create the database schema for library items and plan infrastructure that deep scanner and plan engine will build on
+**Depends on**: Phase 8
+**Requirements**: SCAN-02, PLAN-01, INTG-01
+**Success Criteria** (what must be TRUE):
+  1. Migration 005 creates library_items, plans, plan_operations, and audit_log tables
+  2. LibraryItem CRUD functions work with path-based primary key and NormalizePath deduplication
+  3. All existing tests continue to pass
+**Plans**: 2 plans
+Plans:
+- [x] 09-01-PLAN.md — Migration 005, LibraryItem CRUD, tests
+- [ ] 09-02-PLAN.md — Plan and PlanOperation CRUD, audit log functions
+
+### Phase 10: Deep Library Scanner
+**Goal**: Users can deep-scan their entire library to discover non-ASIN content and detect structural issues with severity, category, and suggested actions
+**Depends on**: Phase 9
+**Requirements**: SCAN-01, SCAN-03
+**Success Criteria** (what must be TRUE):
+  1. User can run `earworm scan --deep` to traverse all library directories, not just ASIN-bearing ones
+  2. Non-ASIN directories are tracked in the library_items table
+  3. Eight issue types are detected: no_asin, nested_audio, multi_book, missing_metadata, wrong_structure, orphan_files, empty_dir, cover_missing
+  4. Detected issues are persisted in scan_issues table with severity, category, and suggested action
+  5. Running `--deep` again clears old issues and inserts fresh results (no accumulation)
+  6. Existing `earworm scan` (without --deep) works exactly as before
+  7. Unit tests cover all 8 issue detectors, deep scan traversal, DB persistence, and CLI integration
+**Plans**: 3 plans
+Plans:
+- [ ] 10-01-PLAN.md — Migration 006 (scan_issues table), ScanIssue CRUD functions and tests
+- [ ] 10-02-PLAN.md — Issue detection heuristics (8 detectors as pure functions) with tests
+- [ ] 10-03-PLAN.md — DeepScanLibrary orchestrator, CLI --deep flag wiring, integration tests
+
 ## Progress
 
 **Execution Order:**
@@ -164,3 +196,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 7. Fix Download→Organize Pipeline | 2/2 | Complete | Yes |
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
 | 9. Plan Infrastructure & DB Schema | 1/2 | In Progress | - |
+| 10. Deep Library Scanner | 0/3 | Planned | - |
