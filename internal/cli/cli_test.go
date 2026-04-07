@@ -25,6 +25,7 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	filterAuthor = ""
 	filterStatus = ""
 	scanRecursive = false
+	scanDeep = false
 	syncJSON = false
 	dryRun = false
 	downloadJSON = false
