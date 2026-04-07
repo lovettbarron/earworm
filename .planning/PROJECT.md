@@ -11,6 +11,7 @@ Reliably download and organize Audible audiobooks into a local library with zero
 ## Current State
 
 **Shipped:** v1.0 MVP (2026-04-06)
+**In progress:** v1.1 Library Cleanup — Phase 9 complete (Plan Infrastructure & DB Schema)
 **Codebase:** ~134k lines Go across 13 packages, 83.2% test coverage
 **Tech stack:** Go 1.23+, Cobra/Viper CLI, modernc.org/sqlite (pure Go, no CGo), charmbracelet/lipgloss
 **Commands:** auth, sync, scan, status, download, organize, notify, goodreads, daemon, config, version, skip
@@ -45,12 +46,12 @@ Reliably download and organize Audible audiobooks into a local library with zero
 ### Active
 
 - [ ] Deep library scanning (all folders, issue detection)
-- [ ] Plan infrastructure (plan→review→apply DB-backed workflow)
+- ✓ Plan infrastructure (plan→review→apply DB-backed workflow) — Validated in Phase 9: Plan Infrastructure & DB Schema
 - [ ] Metadata application (write `metadata.json`, no audio modification)
 - [ ] Structural operations (flatten nested audio, split multi-book folders, SHA-256 verification)
 - [ ] CSV import for plan creation
 - [ ] Guarded cleanup command (separated deletions, explicit confirmation)
-- [ ] Execution logging and audit trail
+- ✓ Execution logging and audit trail — Validated in Phase 9: Plan Infrastructure & DB Schema
 - [ ] Claude Code skill for conversational library cleanup
 
 ### Out of Scope
@@ -129,4 +130,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 after milestone v1.1 started*
+*Last updated: 2026-04-07 after Phase 9 complete*
