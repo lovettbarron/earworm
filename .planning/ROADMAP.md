@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: File Organization** - Organize downloads into Libation-compatible folder structure
 - [x] **Phase 6: Integrations & Polish** - Audiobookshelf, Goodreads, daemon mode, documentation
 - [x] **Phase 9: Plan Infrastructure & DB Schema** - DB tables, plan CRUD, audit logger, and library_items tracking for non-ASIN content
-- [ ] **Phase 10: Deep Library Scanner** - Deep scan all folders, detect structural issues, persist scan results
+- [x] **Phase 10: Deep Library Scanner** - Deep scan all folders, detect structural issues, persist scan results (completed 2026-04-07)
 - [ ] **Phase 11: Structural Operations & Metadata** - Flatten nested audio, write metadata.json sidecars, SHA-256 verification
 - [ ] **Phase 12: Plan Engine & CLI** - Wire scan results into reviewable, executable plans with per-operation tracking
 - [ ] **Phase 13: CSV Import & Guarded Cleanup** - CSV-to-plan bridge and separated deletion command with safety guards
@@ -181,9 +181,9 @@ Plans:
   7. Unit tests cover all 8 issue detectors, deep scan traversal, DB persistence, and CLI integration
 **Plans**: 3 plans
 Plans:
-- [ ] 10-01-PLAN.md — Migration 006 (scan_issues table), ScanIssue CRUD functions and tests
-- [ ] 10-02-PLAN.md — Issue detection heuristics (8 detectors as pure functions) with tests
-- [ ] 10-03-PLAN.md — DeepScanLibrary orchestrator, CLI --deep flag wiring, integration tests
+- [x] 10-01-PLAN.md — Migration 006 (scan_issues table), ScanIssue CRUD functions and tests
+- [x] 10-02-PLAN.md — Issue detection heuristics (8 detectors as pure functions) with tests
+- [x] 10-03-PLAN.md — DeepScanLibrary orchestrator, CLI --deep flag wiring, integration tests
 
 ### Phase 11: Structural Operations & Metadata
 **Goal**: The file operation primitives exist for plan execution — flatten nested directories, write metadata sidecars, and verify file integrity via SHA-256
@@ -246,7 +246,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 7. Fix Download→Organize Pipeline | 2/2 | Complete | Yes |
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
-| 10. Deep Library Scanner | 0/3 | Planned | - |
+| 10. Deep Library Scanner | 3/3 | Complete   | 2026-04-07 |
 | 11. Structural Operations & Metadata | 0/0 | Not started | - |
 | 12. Plan Engine & CLI | 0/0 | Not started | - |
 | 13. CSV Import & Guarded Cleanup | 0/0 | Not started | - |
