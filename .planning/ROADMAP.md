@@ -209,7 +209,10 @@ Plans:
   3. Plan application resumes from the last successful operation after interruption or failure
   4. Applied plans record SHA-256 hashes and per-operation status in the audit trail
   5. Plans default to dry-run (no mutation without explicit confirmation)
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 12-01-PLAN.md — Plan executor engine with operation dispatch, resume-on-failure, SHA-256 audit trail
+- [ ] 12-02-PLAN.md — CLI commands (earworm plan list/review/apply), dry-run default, --confirm flag
 
 ### Phase 13: CSV Import & Guarded Cleanup
 **Goal**: Users can bridge manual spreadsheet analysis into the plan system and safely delete unwanted files through a separated, guarded command
@@ -251,6 +254,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
 | 10. Deep Library Scanner | 0/3 | Planned | - |
 | 11. Structural Operations & Metadata | 1/2 | Complete    | 2026-04-07 |
-| 12. Plan Engine & CLI | 0/0 | Not started | - |
+| 12. Plan Engine & CLI | 0/2 | Planned | - |
 | 13. CSV Import & Guarded Cleanup | 0/0 | Not started | - |
 | 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |
