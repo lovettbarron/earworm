@@ -170,3 +170,46 @@ func TestPlanReview_JSON(t *testing.T) {
 	assert.Contains(t, result, "plan")
 	assert.Contains(t, result, "operations")
 }
+
+func TestPlanImport_Valid(t *testing.T) {
+	_ = setupPlanTestDB(t)
+	tmpFile := filepath.Join(t.TempDir(), "test.csv")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("op_type,source_path,dest_path\nmove,/src/a.m4a,/dst/a.m4a\ndelete,/src/b.m4a,\n"), 0644))
+
+	out, err := executeCommand(t, "plan", "import", tmpFile)
+	assert.NoError(t, err)
+	assert.Contains(t, out, "Created plan")
+	assert.Contains(t, out, "2 operations")
+}
+
+func TestPlanImport_WithName(t *testing.T) {
+	_ = setupPlanTestDB(t)
+	tmpFile := filepath.Join(t.TempDir(), "test.csv")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("op_type,source_path,dest_path\nmove,/src/a.m4a,/dst/a.m4a\n"), 0644))
+
+	out, err := executeCommand(t, "plan", "import", tmpFile, "--name", "my plan")
+	assert.NoError(t, err)
+	assert.Contains(t, out, "my plan")
+}
+
+func TestPlanImport_InvalidCSV(t *testing.T) {
+	_ = setupPlanTestDB(t)
+	tmpFile := filepath.Join(t.TempDir(), "bad.csv")
+	require.NoError(t, os.WriteFile(tmpFile, []byte("op_type,source_path,dest_path\nrename,/src/a.m4a,/dst/a.m4a\n"), 0644))
+
+	_, err := executeCommand(t, "plan", "import", tmpFile)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "validation errors")
+}
+
+func TestPlanImport_MissingFile(t *testing.T) {
+	_ = setupPlanTestDB(t)
+	_, err := executeCommand(t, "plan", "import", "/nonexistent/file.csv")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open CSV file")
+}
+
+func TestPlanImport_NoArgs(t *testing.T) {
+	_, err := executeCommand(t, "plan", "import")
+	require.Error(t, err)
+}

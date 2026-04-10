@@ -41,6 +41,7 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	planConfirm = false
 	planJSON = false
 	planStatus = ""
+	planImportName = ""
 
 	// Reset cobra flag Changed state and help flag on all subcommands
 	// to prevent cross-test contamination (--help sticks across tests).

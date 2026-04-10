@@ -3,7 +3,10 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/lovettbarron/earworm/internal/config"
 	"github.com/lovettbarron/earworm/internal/db"
@@ -12,9 +15,10 @@ import (
 )
 
 var (
-	planConfirm bool
-	planJSON    bool
-	planStatus  string
+	planConfirm    bool
+	planJSON       bool
+	planStatus     string
+	planImportName string
 )
 
 var planCmd = &cobra.Command{
@@ -44,13 +48,22 @@ var planApplyCmd = &cobra.Command{
 	RunE:  runPlanApply,
 }
 
+var planImportCmd = &cobra.Command{
+	Use:   "import FILE.csv",
+	Short: "Import a plan from a CSV file",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runPlanImport,
+}
+
 func init() {
 	planListCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
 	planListCmd.Flags().StringVar(&planStatus, "status", "", "filter by plan status")
 	planReviewCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
 	planApplyCmd.Flags().BoolVar(&planConfirm, "confirm", false, "actually apply the plan (default is dry-run)")
 	planApplyCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
-	planCmd.AddCommand(planListCmd, planReviewCmd, planApplyCmd)
+	planImportCmd.Flags().StringVar(&planImportName, "name", "", "plan name (defaults to filename without extension)")
+	planImportCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
+	planCmd.AddCommand(planListCmd, planReviewCmd, planApplyCmd, planImportCmd)
 	rootCmd.AddCommand(planCmd)
 }
 
@@ -251,5 +264,58 @@ func runPlanApply(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\nApplied: %d completed, %d failed out of %d operations\n",
 		completed, failed, len(results))
+	return nil
+}
+
+func runPlanImport(cmd *cobra.Command, args []string) error {
+	filePath := args[0]
+
+	// Derive plan name from filename if not provided.
+	planName := planImportName
+	if planName == "" {
+		base := filepath.Base(filePath)
+		planName = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open CSV file: %w", err)
+	}
+	defer f.Close()
+
+	dbPath, err := config.DBPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine database path: %w", err)
+	}
+	database, err := db.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer database.Close()
+
+	result, err := planengine.ImportCSV(database, planName, f)
+	if err != nil {
+		return fmt.Errorf("CSV import failed: %w", err)
+	}
+
+	if result.ErrorCount > 0 {
+		for _, e := range result.Errors {
+			fmt.Fprintf(cmd.ErrOrStderr(), "line %d: %s: %s\n", e.Line, e.Column, e.Message)
+		}
+		return fmt.Errorf("CSV import failed: %d validation errors", result.ErrorCount)
+	}
+
+	if planJSON {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]interface{}{
+			"plan_id":   result.PlanID,
+			"name":      planName,
+			"row_count": result.RowCount,
+		})
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Created plan %d (%q) with %d operations\n",
+		result.PlanID, planName, result.RowCount)
 	return nil
 }
