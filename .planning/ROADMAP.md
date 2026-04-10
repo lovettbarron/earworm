@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 10: Deep Library Scanner** - Deep scan all folders, detect structural issues, persist scan results
 - [x] **Phase 11: Structural Operations & Metadata** - Flatten nested audio, write metadata.json sidecars, SHA-256 verification (completed 2026-04-07)
 - [x] **Phase 12: Plan Engine & CLI** - Wire scan results into reviewable, executable plans with per-operation tracking (completed 2026-04-10)
-- [ ] **Phase 13: CSV Import & Guarded Cleanup** - CSV-to-plan bridge and separated deletion command with safety guards
+- [x] **Phase 13: CSV Import & Guarded Cleanup** - CSV-to-plan bridge and separated deletion command with safety guards (completed 2026-04-10)
 - [ ] **Phase 14: Multi-Book Split & Claude Skill** - Content-based folder splitting and conversational plan creation
 
 ## Phase Details
@@ -258,5 +258,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 10. Deep Library Scanner | 0/3 | Planned | - |
 | 11. Structural Operations & Metadata | 1/2 | Complete    | 2026-04-07 |
 | 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
-| 13. CSV Import & Guarded Cleanup | 1/2 | In Progress|  |
+| 13. CSV Import & Guarded Cleanup | 1/2 | Complete    | 2026-04-10 |
 | 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |
