@@ -26,8 +26,8 @@ func isValidPlanStatus(status string) bool {
 	return false
 }
 
-// isValidOpType checks whether an operation type string is in the allowed set.
-func isValidOpType(opType string) bool {
+// IsValidOpType checks whether an operation type string is in the allowed set.
+func IsValidOpType(opType string) bool {
 	for _, t := range ValidOpTypes {
 		if t == opType {
 			return true
@@ -240,7 +240,7 @@ func UpdatePlanStatusAudited(db *sql.DB, id int64, newStatus string) error {
 
 // AddOperation adds an operation to a plan after validating the op type and plan existence.
 func AddOperation(db *sql.DB, op PlanOperation) (int64, error) {
-	if !isValidOpType(op.OpType) {
+	if !IsValidOpType(op.OpType) {
 		return 0, fmt.Errorf("invalid op type %q", op.OpType)
 	}
 
