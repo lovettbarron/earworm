@@ -226,7 +226,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 13-01-PLAN.md — CSV import package (BOM stripping, row validation, plan creation) and plan import CLI subcommand
-- [ ] 13-02-PLAN.md — Cleanup executor (trash-dir move, audit logging) and cleanup CLI command with double confirmation
+- [x] 13-02-PLAN.md — Cleanup executor (trash-dir move, audit logging) and cleanup CLI command with double confirmation
 
 ### Phase 14: Multi-Book Split & Claude Skill
 **Goal**: Users can handle the hardest structural issue (multi-book folders) and optionally use Claude Code for conversational plan creation

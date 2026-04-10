@@ -28,6 +28,9 @@ func SetDefaults() {
 	viper.SetDefault("download.timeout_minutes", 30)
 	viper.SetDefault("scan.recursive", false)
 	viper.SetDefault("audible.profile_path", "")
+	if configDir, err := ConfigDir(); err == nil {
+		viper.SetDefault("cleanup.trash_dir", filepath.Join(configDir, "trash"))
+	}
 }
 
 // InitConfig initializes the configuration system. If cfgFile is provided, it
@@ -91,6 +94,7 @@ func Validate() error {
 func ValidKeys() []string {
 	keys := []string{
 		"audible_cli_path",
+		"cleanup.trash_dir",
 		"audiobookshelf.library_id",
 		"audiobookshelf.token",
 		"audiobookshelf.url",
