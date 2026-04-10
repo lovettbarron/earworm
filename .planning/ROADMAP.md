@@ -225,7 +225,7 @@ Plans:
   4. Cleanup command only processes delete operations from completed plans — it cannot delete arbitrary files
 **Plans**: 2 plans
 Plans:
-- [ ] 13-01-PLAN.md — CSV import package (BOM stripping, row validation, plan creation) and plan import CLI subcommand
+- [x] 13-01-PLAN.md — CSV import package (BOM stripping, row validation, plan creation) and plan import CLI subcommand
 - [ ] 13-02-PLAN.md — Cleanup executor (trash-dir move, audit logging) and cleanup CLI command with double confirmation
 
 ### Phase 14: Multi-Book Split & Claude Skill
@@ -258,5 +258,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 10. Deep Library Scanner | 0/3 | Planned | - |
 | 11. Structural Operations & Metadata | 1/2 | Complete    | 2026-04-07 |
 | 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
-| 13. CSV Import & Guarded Cleanup | 0/2 | Planned | - |
+| 13. CSV Import & Guarded Cleanup | 1/2 | In Progress|  |
 | 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |

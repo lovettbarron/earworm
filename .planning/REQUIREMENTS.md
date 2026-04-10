@@ -18,7 +18,7 @@ Requirements for Library Cleanup milestone. Each maps to roadmap phases.
 - [x] **PLAN-01**: User can create named plans with typed action records (move, flatten, split, delete, write_metadata) and per-action status tracking
 - [x] **PLAN-02**: User can review a plan via CLI with human-readable diff showing what each action will do before applying
 - [x] **PLAN-03**: User can apply a plan with SHA-256 verification, per-operation status tracking, resume on failure, and full audit trail
-- [ ] **PLAN-04**: User can import plans from CSV spreadsheets to bridge manual analysis into the plan system
+- [x] **PLAN-04**: User can import plans from CSV spreadsheets to bridge manual analysis into the plan system
 
 ### File Operations
 
@@ -64,7 +64,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLAN-01 | Phase 9 | Complete |
 | PLAN-02 | Phase 12 | Complete |
 | PLAN-03 | Phase 12 | Complete |
-| PLAN-04 | Phase 13 | Pending |
+| PLAN-04 | Phase 13 | Complete |
 | FOPS-01 | Phase 11 | Pending |
 | FOPS-02 | Phase 11 | Pending |
 | FOPS-03 | Phase 13 | Pending |
