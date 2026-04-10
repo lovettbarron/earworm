@@ -254,6 +254,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
 | 10. Deep Library Scanner | 0/3 | Planned | - |
 | 11. Structural Operations & Metadata | 1/2 | Complete    | 2026-04-07 |
-| 12. Plan Engine & CLI | 2/2 | Complete   | 2026-04-10 |
+| 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
 | 13. CSV Import & Guarded Cleanup | 0/0 | Not started | - |
 | 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |
