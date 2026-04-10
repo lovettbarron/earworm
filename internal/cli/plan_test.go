@@ -17,13 +17,15 @@ import (
 func setupPlanTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "earworm.db")
 
-	// Write a minimal config so earworm can find the DB.
+	// DB must be at ~/.config/earworm/earworm.db since config.DBPath() uses ConfigDir.
 	cfgDir := filepath.Join(tmpDir, ".config", "earworm")
 	require.NoError(t, os.MkdirAll(cfgDir, 0755))
+	dbPath := filepath.Join(cfgDir, "earworm.db")
+
+	// Write a minimal config file.
 	cfgPath := filepath.Join(cfgDir, "config.yaml")
-	require.NoError(t, os.WriteFile(cfgPath, []byte("db_path: "+dbPath+"\nlibrary_path: /tmp/lib\n"), 0644))
+	require.NoError(t, os.WriteFile(cfgPath, []byte("library_path: /tmp/lib\n"), 0644))
 
 	origHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)

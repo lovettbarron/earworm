@@ -38,6 +38,9 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	daemonVerbose = false
 	daemonOnce = false
 	daemonInterval = ""
+	planConfirm = false
+	planJSON = false
+	planStatus = ""
 
 	// Reset cobra flag Changed state and help flag on all subcommands
 	// to prevent cross-test contamination (--help sticks across tests).
@@ -55,6 +58,15 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 			_ = f.Value.Set("false")
 		}
 	})
+	// Reset nested plan subcommand flags
+	for _, sub := range planCmd.Commands() {
+		sub.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+			if f.Name == "help" {
+				_ = f.Value.Set("false")
+			}
+		})
+	}
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)

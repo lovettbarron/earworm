@@ -1,0 +1,255 @@
+package cli
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+
+	"github.com/lovettbarron/earworm/internal/config"
+	"github.com/lovettbarron/earworm/internal/db"
+	"github.com/lovettbarron/earworm/internal/planengine"
+	"github.com/spf13/cobra"
+)
+
+var (
+	planConfirm bool
+	planJSON    bool
+	planStatus  string
+)
+
+var planCmd = &cobra.Command{
+	Use:   "plan",
+	Short: "Manage library cleanup plans",
+	Long: `Manage library cleanup plans. Plans contain a set of operations
+(move, flatten, delete, write_metadata) that can be reviewed before applying.`,
+}
+
+var planListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all plans",
+	RunE:  runPlanList,
+}
+
+var planReviewCmd = &cobra.Command{
+	Use:   "review [plan-id]",
+	Short: "Review a plan's operations before applying",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runPlanReview,
+}
+
+var planApplyCmd = &cobra.Command{
+	Use:   "apply [plan-id]",
+	Short: "Apply a plan's operations",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runPlanApply,
+}
+
+func init() {
+	planListCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
+	planListCmd.Flags().StringVar(&planStatus, "status", "", "filter by plan status")
+	planReviewCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
+	planApplyCmd.Flags().BoolVar(&planConfirm, "confirm", false, "actually apply the plan (default is dry-run)")
+	planApplyCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
+	planCmd.AddCommand(planListCmd, planReviewCmd, planApplyCmd)
+	rootCmd.AddCommand(planCmd)
+}
+
+func runPlanList(cmd *cobra.Command, args []string) error {
+	dbPath, err := config.DBPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine database path: %w", err)
+	}
+	database, err := db.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer database.Close()
+
+	plans, err := db.ListPlans(database, planStatus)
+	if err != nil {
+		return fmt.Errorf("failed to list plans: %w", err)
+	}
+
+	if planJSON {
+		type jsonPlan struct {
+			ID          int64  `json:"id"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Status      string `json:"status"`
+			CreatedAt   string `json:"created_at"`
+		}
+		items := make([]jsonPlan, len(plans))
+		for i, p := range plans {
+			items[i] = jsonPlan{
+				ID:          p.ID,
+				Name:        p.Name,
+				Description: p.Description,
+				Status:      p.Status,
+				CreatedAt:   p.CreatedAt.Format("2006-01-02 15:04:05"),
+			}
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(items)
+	}
+
+	if len(plans) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "No plans found.")
+		return nil
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "%-6s %-30s %-12s %s\n", "ID", "Name", "Status", "Created")
+	fmt.Fprintf(cmd.OutOrStdout(), "%-6s %-30s %-12s %s\n", "---", "---", "---", "---")
+	for _, p := range plans {
+		fmt.Fprintf(cmd.OutOrStdout(), "%-6d %-30s %-12s %s\n",
+			p.ID, p.Name, p.Status, p.CreatedAt.Format("2006-01-02 15:04"))
+	}
+	return nil
+}
+
+func runPlanReview(cmd *cobra.Command, args []string) error {
+	planID, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid plan ID %q: %w", args[0], err)
+	}
+
+	dbPath, err := config.DBPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine database path: %w", err)
+	}
+	database, err := db.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer database.Close()
+
+	plan, err := db.GetPlan(database, planID)
+	if err != nil {
+		return fmt.Errorf("failed to get plan: %w", err)
+	}
+	if plan == nil {
+		return fmt.Errorf("plan %d not found", planID)
+	}
+
+	ops, err := db.ListOperations(database, planID)
+	if err != nil {
+		return fmt.Errorf("failed to list operations: %w", err)
+	}
+
+	if planJSON {
+		result := struct {
+			Plan       *db.Plan            `json:"plan"`
+			Operations []db.PlanOperation  `json:"operations"`
+		}{
+			Plan:       plan,
+			Operations: ops,
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(result)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Plan #%d: %s\n", plan.ID, plan.Name)
+	fmt.Fprintf(cmd.OutOrStdout(), "Status: %s\n", plan.Status)
+	fmt.Fprintf(cmd.OutOrStdout(), "Operations: %d\n\n", len(ops))
+
+	fmt.Fprintf(cmd.OutOrStdout(), "%-4s %-16s %-10s %s\n", "#", "Type", "Status", "Path")
+	fmt.Fprintf(cmd.OutOrStdout(), "%-4s %-16s %-10s %s\n", "---", "---", "---", "---")
+	for _, op := range ops {
+		pathStr := op.SourcePath
+		if op.DestPath != "" {
+			pathStr = op.SourcePath + " -> " + op.DestPath
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%-4d %-16s %-10s %s\n",
+			op.Seq, op.OpType, op.Status, pathStr)
+	}
+	return nil
+}
+
+func runPlanApply(cmd *cobra.Command, args []string) error {
+	planID, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid plan ID %q: %w", args[0], err)
+	}
+
+	dbPath, err := config.DBPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine database path: %w", err)
+	}
+	database, err := db.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer database.Close()
+
+	// If no --confirm, show dry-run output (same as review) and exit.
+	if !planConfirm {
+		plan, err := db.GetPlan(database, planID)
+		if err != nil {
+			return fmt.Errorf("failed to get plan: %w", err)
+		}
+		if plan == nil {
+			return fmt.Errorf("plan %d not found", planID)
+		}
+
+		ops, err := db.ListOperations(database, planID)
+		if err != nil {
+			return fmt.Errorf("failed to list operations: %w", err)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "Plan #%d: %s\n", plan.ID, plan.Name)
+		fmt.Fprintf(cmd.OutOrStdout(), "Status: %s\n", plan.Status)
+		fmt.Fprintf(cmd.OutOrStdout(), "Operations: %d\n\n", len(ops))
+
+		fmt.Fprintf(cmd.OutOrStdout(), "%-4s %-16s %-10s %s\n", "#", "Type", "Status", "Path")
+		fmt.Fprintf(cmd.OutOrStdout(), "%-4s %-16s %-10s %s\n", "---", "---", "---", "---")
+		for _, op := range ops {
+			pathStr := op.SourcePath
+			if op.DestPath != "" {
+				pathStr = op.SourcePath + " -> " + op.DestPath
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%-4d %-16s %-10s %s\n",
+				op.Seq, op.OpType, op.Status, pathStr)
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "\nDry run — no changes made. Add --confirm to apply this plan.\n")
+		return nil
+	}
+
+	// --confirm: actually execute the plan.
+	executor := &planengine.Executor{DB: database}
+	results, err := executor.Apply(cmd.Context(), planID)
+	if err != nil {
+		return fmt.Errorf("failed to apply plan: %w", err)
+	}
+
+	if planJSON {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(results)
+	}
+
+	completed := 0
+	failed := 0
+	for i, r := range results {
+		status := "completed"
+		if !r.Success {
+			status = "failed"
+			failed++
+		} else {
+			completed++
+		}
+		detail := ""
+		if r.SHA256 != "" {
+			detail = fmt.Sprintf(" [sha256:%s]", r.SHA256[:12])
+		}
+		if r.Error != "" {
+			detail = fmt.Sprintf(" error: %s", r.Error)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "  %d. %s%s\n", i+1, status, detail)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "\nApplied: %d completed, %d failed out of %d operations\n",
+		completed, failed, len(results))
+	return nil
+}
