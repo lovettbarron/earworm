@@ -307,6 +307,54 @@ func ListOperations(db *sql.DB, planID int64) ([]PlanOperation, error) {
 	return ops, nil
 }
 
+// ListDeleteOperations returns all delete operations from plans with the given status.
+// If planID > 0, filters to only that plan.
+// Returns an empty slice (not nil) when no operations match.
+func ListDeleteOperations(db *sql.DB, planStatus string, planID int64) ([]PlanOperation, error) {
+	query := `SELECT po.id, po.plan_id, po.seq, po.op_type, po.source_path, po.dest_path,
+		po.status, po.error_message, po.completed_at, po.created_at, po.updated_at
+		FROM plan_operations po
+		JOIN plans p ON po.plan_id = p.id
+		WHERE po.op_type = 'delete' AND p.status = ?`
+	args := []interface{}{planStatus}
+	if planID > 0 {
+		query += " AND po.plan_id = ?"
+		args = append(args, planID)
+	}
+	query += " ORDER BY po.plan_id, po.seq"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list delete operations: %w", err)
+	}
+	defer rows.Close()
+
+	var ops []PlanOperation
+	for rows.Next() {
+		var op PlanOperation
+		var completedAt sql.NullTime
+		err := rows.Scan(
+			&op.ID, &op.PlanID, &op.Seq, &op.OpType, &op.SourcePath, &op.DestPath,
+			&op.Status, &op.ErrorMessage, &completedAt, &op.CreatedAt, &op.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan delete operation row: %w", err)
+		}
+		if completedAt.Valid {
+			op.CompletedAt = &completedAt.Time
+		}
+		ops = append(ops, op)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate delete operations: %w", err)
+	}
+
+	if ops == nil {
+		ops = []PlanOperation{}
+	}
+	return ops, nil
+}
+
 // UpdateOperationStatus updates an operation's status and error message.
 // If status is "completed", completed_at is set to CURRENT_TIMESTAMP.
 func UpdateOperationStatus(db *sql.DB, id int64, status, errorMsg string) error {
