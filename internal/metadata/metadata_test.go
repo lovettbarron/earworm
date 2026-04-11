@@ -447,6 +447,74 @@ func TestExtractMetadata_AllFallbacksToFolder(t *testing.T) {
 	assert.Equal(t, 1, meta.FileCount)
 }
 
+func TestExtractFileMetadata_TagSuccess(t *testing.T) {
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "book.m4a")
+	mp4Data := buildMinimalMP4("File Title", "Narrator", "File Author", "Fiction", 2023)
+	require.NoError(t, os.WriteFile(f, mp4Data, 0644))
+
+	meta, err := ExtractFileMetadata(f)
+	require.NoError(t, err)
+	assert.Equal(t, "File Title", meta.Title)
+	assert.Equal(t, "File Author", meta.Author)
+	assert.Equal(t, SourceTag, meta.Source)
+	assert.Equal(t, 1, meta.FileCount)
+}
+
+func TestExtractFileMetadata_FfprobeFallback(t *testing.T) {
+	origLookPath := lookPathFn
+	origExecCmd := execCommandCtx
+	defer func() {
+		lookPathFn = origLookPath
+		execCommandCtx = origExecCmd
+	}()
+
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "book.m4a")
+	// Write invalid M4A so tag fails
+	require.NoError(t, os.WriteFile(f, []byte("not real m4a"), 0644))
+
+	lookPathFn = func(file string) (string, error) {
+		return "/usr/bin/ffprobe", nil
+	}
+	ffprobeJSON := `{"format":{"duration":"3600","tags":{"title":"FFprobe File Title","artist":"FFprobe Artist"}},"chapters":[]}`
+	execCommandCtx = fakeExecCommand(ffprobeJSON, 0)
+
+	meta, err := ExtractFileMetadata(f)
+	require.NoError(t, err)
+	assert.Equal(t, "FFprobe File Title", meta.Title)
+	assert.Equal(t, SourceFFprobe, meta.Source)
+	assert.Equal(t, 1, meta.FileCount)
+}
+
+func TestExtractFileMetadata_NonexistentFile(t *testing.T) {
+	_, err := ExtractFileMetadata("/nonexistent/file.m4a")
+	assert.Error(t, err)
+}
+
+func TestExtractFileMetadata_NoFolderFallback(t *testing.T) {
+	origLookPath := lookPathFn
+	origExecCmd := execCommandCtx
+	defer func() {
+		lookPathFn = origLookPath
+		execCommandCtx = origExecCmd
+	}()
+
+	// Make ffprobe fail too
+	lookPathFn = func(file string) (string, error) {
+		return "", fmt.Errorf("not found")
+	}
+
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "book.m4a")
+	require.NoError(t, os.WriteFile(f, []byte("not real"), 0644))
+
+	// Both tag and ffprobe fail — should return error, NOT folder fallback
+	meta, err := ExtractFileMetadata(f)
+	assert.Error(t, err)
+	assert.Nil(t, meta)
+}
+
 func TestExtractWithFFprobe_ArtistFallback(t *testing.T) {
 	origLookPath := lookPathFn
 	origExecCmd := execCommandCtx
