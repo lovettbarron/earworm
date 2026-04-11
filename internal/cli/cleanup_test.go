@@ -219,6 +219,22 @@ func TestCleanup_PermanentDeleteAudit(t *testing.T) {
 	}
 }
 
+func TestConfirmCleanup_PermanentPrompt(t *testing.T) {
+	var buf strings.Builder
+	result := confirmCleanup(&buf, strings.NewReader("y\ny\n"), 5, true)
+	assert.True(t, result)
+	assert.Contains(t, buf.String(), "PERMANENTLY DELETE 5 files")
+	assert.Contains(t, buf.String(), "PERMANENTLY DELETED")
+}
+
+func TestConfirmCleanup_TrashPrompt(t *testing.T) {
+	var buf strings.Builder
+	result := confirmCleanup(&buf, strings.NewReader("y\ny\n"), 3, false)
+	assert.True(t, result)
+	assert.Contains(t, buf.String(), "Move 3 files to trash")
+	assert.NotContains(t, buf.String(), "PERMANENTLY")
+}
+
 func TestCleanup_PermanentDeleteAudit_Failure(t *testing.T) {
 	database := setupPlanTestDB(t)
 

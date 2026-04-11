@@ -90,6 +90,83 @@ func TestExecuteOp_SplitSharedJSON(t *testing.T) {
 	assert.NoError(t, err, "dest JSON should exist")
 }
 
+func TestSplitOp_MP3UsesVerifiedMove(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	src := createTempFile(t, tmpDir, "audiobook.mp3", "mp3 audio content")
+	dst := filepath.Join(tmpDir, "dest", "audiobook.mp3")
+
+	planID := createReadyPlan(t, sqlDB, "split-mp3-test", []db.PlanOperation{
+		{Seq: 1, OpType: "split", SourcePath: src, DestPath: dst},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	assert.True(t, results[0].Success, "split mp3 op should succeed")
+	assert.NotEmpty(t, results[0].SHA256)
+
+	// MP3 should be MOVED (source gone, dest exists)
+	_, err = os.Stat(src)
+	assert.True(t, os.IsNotExist(err), "source mp3 should be removed (moved via VerifiedMove)")
+	_, err = os.Stat(dst)
+	assert.NoError(t, err, "dest mp3 should exist")
+	content, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, "mp3 audio content", string(content))
+}
+
+func TestSplitOp_OGGUsesVerifiedMove(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	src := createTempFile(t, tmpDir, "audiobook.ogg", "ogg audio content")
+	dst := filepath.Join(tmpDir, "dest", "audiobook.ogg")
+
+	planID := createReadyPlan(t, sqlDB, "split-ogg-test", []db.PlanOperation{
+		{Seq: 1, OpType: "split", SourcePath: src, DestPath: dst},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	assert.True(t, results[0].Success)
+	// OGG should be MOVED
+	_, err = os.Stat(src)
+	assert.True(t, os.IsNotExist(err), "source ogg should be removed (moved)")
+	_, err = os.Stat(dst)
+	assert.NoError(t, err, "dest ogg should exist")
+}
+
+func TestSplitOp_JPGUsesVerifiedCopy(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	src := createTempFile(t, tmpDir, "cover.jpg", "jpg image content")
+	dst := filepath.Join(tmpDir, "dest", "cover.jpg")
+
+	planID := createReadyPlan(t, sqlDB, "split-jpg-copy-test", []db.PlanOperation{
+		{Seq: 1, OpType: "split", SourcePath: src, DestPath: dst},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	assert.True(t, results[0].Success)
+	// JPG should be COPIED (source still exists)
+	_, err = os.Stat(src)
+	assert.NoError(t, err, "source jpg should still exist (copied, not moved)")
+	_, err = os.Stat(dst)
+	assert.NoError(t, err, "dest jpg should exist")
+}
+
 func TestExecuteOp_SplitFailure(t *testing.T) {
 	sqlDB := setupTestDB(t)
 	tmpDir := t.TempDir()
