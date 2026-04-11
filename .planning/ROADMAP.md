@@ -263,7 +263,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
 | 13. CSV Import & Guarded Cleanup | 1/2 | Complete    | 2026-04-10 |
 | 14. Multi-Book Split & Claude Skill | 2/2 | Complete    | 2026-04-11 |
-| 15. Data Safety Hardening for NAS Ops | 0/2 | Planned | - |
+| 15. Data Safety Hardening for NAS Ops | 1/2 | In Progress|  |
 
 ### Phase 15: Data Safety Hardening for NAS Operations
 **Goal**: Make file operations safe for irreplaceable NAS data by fixing the compounding fsync/hash/delete chain, adding audit coverage to permanent delete, and guarding against partial-failure cleanup
@@ -278,5 +278,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
   6. All existing tests continue to pass, new tests cover each fix
 **Plans**: 2 plans
 Plans:
-- [ ] 15-01-PLAN.md — Fsync in all copy paths, SHA-256 for cross-fs moves, FlattenDir error guard
+- [x] 15-01-PLAN.md — Fsync in all copy paths, SHA-256 for cross-fs moves, FlattenDir error guard
 - [ ] 15-02-PLAN.md — Permanent delete audit logging, idempotent plan engine resume
