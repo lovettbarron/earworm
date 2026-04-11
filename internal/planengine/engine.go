@@ -228,7 +228,7 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 
 	case "split":
 		ext := strings.ToLower(filepath.Ext(op.SourcePath))
-		isAudio := ext == ".m4a" || ext == ".m4b"
+		isAudio := isAudioExt(ext)
 		if isAudio {
 			// Idempotent resume: if source is gone but dest exists with valid hash, skip
 			if _, statErr := os.Stat(op.SourcePath); os.IsNotExist(statErr) {
@@ -264,6 +264,15 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 	}
 
 	return result
+}
+
+// isAudioExt returns true for audio file extensions that should be moved (not copied) during split.
+func isAudioExt(ext string) bool {
+	switch ext {
+	case ".m4a", ".m4b", ".mp3", ".ogg", ".flac", ".wma", ".aac", ".opus":
+		return true
+	}
+	return false
 }
 
 // statusStr returns "completed" or "failed" based on success boolean.

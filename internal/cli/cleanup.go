@@ -48,10 +48,14 @@ func init() {
 
 // confirmCleanup asks the user to confirm cleanup with double confirmation.
 // Returns true only if both confirmations are affirmative.
-func confirmCleanup(w io.Writer, r io.Reader, fileCount int) bool {
+func confirmCleanup(w io.Writer, r io.Reader, fileCount int, isPermanent bool) bool {
 	scanner := bufio.NewScanner(r)
 
-	fmt.Fprintf(w, "\nMove %d files to trash? [y/N]: ", fileCount)
+	if isPermanent {
+		fmt.Fprintf(w, "\nPERMANENTLY DELETE %d files? This cannot be undone. [y/N]: ", fileCount)
+	} else {
+		fmt.Fprintf(w, "\nMove %d files to trash? [y/N]: ", fileCount)
+	}
 	if !scanner.Scan() {
 		return false
 	}
@@ -60,7 +64,11 @@ func confirmCleanup(w io.Writer, r io.Reader, fileCount int) bool {
 		return false
 	}
 
-	fmt.Fprintf(w, "Are you sure? This removes files from the library. [y/N]: ")
+	if isPermanent {
+		fmt.Fprintf(w, "Are you ABSOLUTELY sure? Files will be PERMANENTLY DELETED. [y/N]: ")
+	} else {
+		fmt.Fprintf(w, "Are you sure? This removes files from the library. [y/N]: ")
+	}
 	if !scanner.Scan() {
 		return false
 	}
@@ -99,7 +107,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	}
 
 	// Ask for confirmation
-	if !confirmCleanup(cmd.OutOrStdout(), stdinReader, len(ops)) {
+	if !confirmCleanup(cmd.OutOrStdout(), stdinReader, len(ops), cleanupPermanent) {
 		fmt.Fprintln(cmd.OutOrStdout(), "Cleanup cancelled.")
 		return nil
 	}
