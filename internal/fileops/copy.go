@@ -42,6 +42,13 @@ func VerifiedCopy(src, dst string) error {
 		return fmt.Errorf("verified copy: %w", err)
 	}
 
+	// Flush to disk before close (NAS safety)
+	if err := dstFile.Sync(); err != nil {
+		dstFile.Close()
+		os.Remove(dst)
+		return fmt.Errorf("verified copy sync: %w", err)
+	}
+
 	// Close both files before hashing
 	srcFile.Close()
 	dstFile.Close()

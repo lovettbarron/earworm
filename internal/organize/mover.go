@@ -1,6 +1,8 @@
 package organize
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -32,38 +34,58 @@ func MoveFile(src, dst string) error {
 	return fmt.Errorf("rename %s -> %s: %w", src, dst, err)
 }
 
-// copyVerifyDelete copies src to dst, verifies the sizes match, then deletes
-// the source. If the copy fails, any partial destination file is cleaned up.
-// If the sizes don't match after copy, the destination is removed and an error
-// is returned.
+// copyVerifyDelete copies src to dst, verifies SHA-256 hashes match, then
+// deletes the source. If the copy fails, any partial destination file is
+// cleaned up. If the hashes don't match after copy, the destination is removed
+// and an error is returned. The source is only deleted after hash verification.
 func copyVerifyDelete(src, dst string) error {
+	// Hash source BEFORE copy
+	srcHash, err := hashFileSHA256(src)
+	if err != nil {
+		return fmt.Errorf("hashing source: %w", err)
+	}
+
 	if err := copyFile(src, dst); err != nil {
 		// Clean up partial destination on failure (D-09)
 		os.Remove(dst)
 		return fmt.Errorf("copy failed: %w", err)
 	}
 
-	// Size verification before deleting source (D-10)
-	srcInfo, err := os.Stat(src)
+	// Hash destination AFTER copy (which now includes Sync())
+	dstHash, err := hashFileSHA256(dst)
 	if err != nil {
-		return fmt.Errorf("stat source after copy: %w", err)
-	}
-	dstInfo, err := os.Stat(dst)
-	if err != nil {
-		return fmt.Errorf("stat destination after copy: %w", err)
-	}
-
-	if srcInfo.Size() != dstInfo.Size() {
 		os.Remove(dst)
-		return fmt.Errorf("size mismatch: src=%d dst=%d", srcInfo.Size(), dstInfo.Size())
+		return fmt.Errorf("hashing destination: %w", err)
 	}
 
-	// Sizes match -- safe to remove source
+	if srcHash != dstHash {
+		os.Remove(dst)
+		return fmt.Errorf("hash mismatch: src=%s dst=%s", srcHash, dstHash)
+	}
+
+	// Hashes match -- safe to remove source
 	if err := os.Remove(src); err != nil {
 		return fmt.Errorf("removing source after verified copy: %w", err)
 	}
 
 	return nil
+}
+
+// hashFileSHA256 computes the SHA-256 hex digest of the file at path.
+// This is an unexported helper to avoid import cycles with fileops/hash.go.
+func hashFileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // copyFile copies the file at src to dst, preserving the source file's
@@ -88,6 +110,10 @@ func copyFile(src, dst string) error {
 
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
 		return fmt.Errorf("copying data: %w", err)
+	}
+
+	if err := dstFile.Sync(); err != nil {
+		return fmt.Errorf("syncing destination: %w", err)
 	}
 
 	return dstFile.Close()

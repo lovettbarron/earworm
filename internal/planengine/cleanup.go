@@ -1,7 +1,9 @@
 package planengine
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,8 +58,15 @@ func MoveToTrash(sourcePath, trashDir string) (string, error) {
 	return "", fmt.Errorf("rename to trash: %w", err)
 }
 
-// copyVerifyDelete copies src to dst, verifies sizes match, then deletes source.
+// copyVerifyDelete copies src to dst, verifies SHA-256 hashes match, then
+// deletes source. Data is fsynced before close for NAS safety.
 func copyVerifyDelete(src, dst string) error {
+	// Hash source BEFORE copy
+	srcHash, err := hashFileSHA256(src)
+	if err != nil {
+		return fmt.Errorf("hashing source: %w", err)
+	}
+
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("opening source: %w", err)
@@ -80,19 +89,27 @@ func copyVerifyDelete(src, dst string) error {
 		return fmt.Errorf("copying data: %w", err)
 	}
 
+	// Flush to disk before close (NAS safety)
+	if err := dstFile.Sync(); err != nil {
+		os.Remove(dst)
+		return fmt.Errorf("syncing destination: %w", err)
+	}
+
 	if err := dstFile.Close(); err != nil {
 		os.Remove(dst)
 		return fmt.Errorf("closing destination: %w", err)
 	}
 
-	// Size verification
-	dstInfo, err := os.Stat(dst)
+	// SHA-256 verification
+	dstHash, err := hashFileSHA256(dst)
 	if err != nil {
-		return fmt.Errorf("stat destination: %w", err)
-	}
-	if srcInfo.Size() != dstInfo.Size() {
 		os.Remove(dst)
-		return fmt.Errorf("size mismatch: src=%d dst=%d", srcInfo.Size(), dstInfo.Size())
+		return fmt.Errorf("hashing destination: %w", err)
+	}
+
+	if srcHash != dstHash {
+		os.Remove(dst)
+		return fmt.Errorf("hash mismatch: src=%s dst=%s", srcHash, dstHash)
 	}
 
 	if err := srcFile.Close(); err != nil {
@@ -104,6 +121,22 @@ func copyVerifyDelete(src, dst string) error {
 	}
 
 	return nil
+}
+
+// hashFileSHA256 computes the SHA-256 hex digest of the file at path.
+func hashFileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // ListPending returns pending delete operations from completed plans.
