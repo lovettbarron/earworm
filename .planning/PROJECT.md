@@ -11,7 +11,7 @@ Reliably download and organize Audible audiobooks into a local library with zero
 ## Current State
 
 **Shipped:** v1.0 MVP (2026-04-06)
-**In progress:** v1.1 Library Cleanup — Phase 14 complete (Multi-Book Split & Claude Skill)
+**In progress:** v1.1 Library Cleanup — Phase 15 complete (Data Safety Hardening for NAS Operations)
 **Codebase:** ~134k lines Go across 15 packages, 83.2% test coverage
 **Tech stack:** Go 1.23+, Cobra/Viper CLI, modernc.org/sqlite (pure Go, no CGo), charmbracelet/lipgloss
 **Commands:** auth, sync, scan, status, download, organize, notify, goodreads, daemon, config, version, skip, plan, cleanup, split
@@ -55,6 +55,7 @@ Reliably download and organize Audible audiobooks into a local library with zero
 - ✓ Execution logging and audit trail — Validated in Phase 9: Plan Infrastructure & DB Schema
 - ✓ Multi-book folder detection and split planning — Validated in Phase 14: Multi-Book Split & Claude Skill
 - ✓ Claude Code skill for conversational library cleanup — Validated in Phase 14: Multi-Book Split & Claude Skill
+- ✓ Data safety hardening (fsync, SHA-256 verification, FlattenDir guard, audit logging, idempotent resume) — Validated in Phase 15: Data Safety Hardening for NAS Operations
 
 ### Out of Scope
 
