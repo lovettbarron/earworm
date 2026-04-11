@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/fileops"
@@ -212,6 +214,28 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 			return result
 		}
 		result.Success = true
+
+	case "split":
+		ext := strings.ToLower(filepath.Ext(op.SourcePath))
+		isAudio := ext == ".m4a" || ext == ".m4b"
+		if isAudio {
+			if err := fileops.VerifiedMove(op.SourcePath, op.DestPath); err != nil {
+				result.Error = err.Error()
+				return result
+			}
+		} else {
+			if err := fileops.VerifiedCopy(op.SourcePath, op.DestPath); err != nil {
+				result.Error = err.Error()
+				return result
+			}
+		}
+		hash, err := fileops.HashFile(op.DestPath)
+		if err != nil {
+			result.Error = fmt.Sprintf("hash after split: %v", err)
+			return result
+		}
+		result.Success = true
+		result.SHA256 = hash
 
 	default:
 		result.Error = fmt.Sprintf("unknown operation type: %s", op.OpType)

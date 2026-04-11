@@ -45,6 +45,7 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	cleanupPlanID = 0
 	cleanupPermanent = false
 	cleanupJSON = false
+	splitJSON = false
 
 	// Reset cobra flag Changed state and help flag on all subcommands
 	// to prevent cross-test contamination (--help sticks across tests).
@@ -64,6 +65,15 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	})
 	// Reset nested plan subcommand flags
 	for _, sub := range planCmd.Commands() {
+		sub.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Changed = false
+			if f.Name == "help" {
+				_ = f.Value.Set("false")
+			}
+		})
+	}
+	// Reset nested split subcommand flags
+	for _, sub := range splitCmd.Commands() {
 		sub.Flags().VisitAll(func(f *pflag.Flag) {
 			f.Changed = false
 			if f.Name == "help" {
