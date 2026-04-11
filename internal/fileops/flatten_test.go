@@ -121,3 +121,46 @@ func TestFlattenDir_DeeplyNested(t *testing.T) {
 
 	assert.FileExists(t, filepath.Join(bookDir, "track.m4b"))
 }
+
+func TestFlattenDir_SkipsCleanupOnError(t *testing.T) {
+	bookDir := t.TempDir()
+	subdir := filepath.Join(bookDir, "sub")
+	createFile(t, filepath.Join(subdir, "track1.m4a"), "audio1")
+	createFile(t, filepath.Join(subdir, "track2.m4a"), "audio2")
+
+	// Make one file unreadable so VerifiedMove fails
+	unreadable := filepath.Join(subdir, "track2.m4a")
+	require.NoError(t, os.Chmod(unreadable, 0000))
+	t.Cleanup(func() { os.Chmod(unreadable, 0644) })
+
+	result, err := FlattenDir(bookDir)
+	require.NoError(t, err) // FlattenDir itself doesn't error, it records per-file errors
+
+	// Should have at least one error
+	assert.NotEmpty(t, result.Errors, "should have errors from unreadable file")
+
+	// Cleanup should be skipped -- DirsRemoved should be empty
+	assert.Empty(t, result.DirsRemoved, "should skip directory cleanup when errors occurred")
+
+	// Subdirectory should still exist
+	_, err = os.Stat(subdir)
+	assert.NoError(t, err, "subdirectory should be preserved when errors occurred")
+}
+
+func TestFlattenDir_CleansUpOnSuccess(t *testing.T) {
+	bookDir := t.TempDir()
+	subdir := filepath.Join(bookDir, "sub")
+	createFile(t, filepath.Join(subdir, "track.m4a"), "audio content")
+
+	result, err := FlattenDir(bookDir)
+	require.NoError(t, err)
+
+	// No errors
+	assert.Empty(t, result.Errors, "should have no errors")
+
+	// Cleanup should have run
+	assert.NotEmpty(t, result.DirsRemoved, "should remove empty dirs on success")
+
+	// File should be at root
+	assert.FileExists(t, filepath.Join(bookDir, "track.m4a"))
+}
