@@ -251,6 +251,31 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
 | 10. Deep Library Scanner | 0/3 | Planned | - |
 | 11. Structural Operations & Metadata | 1/2 | Complete    | 2026-04-07 |
+<<<<<<< HEAD
 | 12. Plan Engine & CLI | 0/0 | Not started | - |
 | 13. CSV Import & Guarded Cleanup | 0/0 | Not started | - |
 | 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |
+=======
+| 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
+| 13. CSV Import & Guarded Cleanup | 1/2 | Complete    | 2026-04-10 |
+| 14. Multi-Book Split & Claude Skill | 2/2 | Complete    | 2026-04-11 |
+| 15. Data Safety Hardening for NAS Ops | 1/2 | In Progress|  |
+
+### Phase 15: Data Safety Hardening for NAS Operations
+**Goal**: Make file operations safe for irreplaceable NAS data by fixing the compounding fsync/hash/delete chain, adding audit coverage to permanent delete, and guarding against partial-failure cleanup
+**Depends on**: Phase 11, Phase 12, Phase 13
+**Requirements**: SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-05
+**Success Criteria** (what must be TRUE):
+  1. VerifiedMove and VerifiedCopy call Sync() on destination file before Close() in all write paths (copyFile in mover.go, VerifiedCopy in copy.go)
+  2. Cross-filesystem move path uses SHA-256 verification (not size-only) before deleting source
+  3. FlattenDir does not call removeEmptyDirs when result.Errors is non-empty
+  4. executePermanentDelete calls db.LogAudit for each file deleted with before/after state
+  5. Plan engine resume detects already-moved files (destination exists with correct hash) and skips re-execution instead of failing
+  6. All existing tests continue to pass, new tests cover each fix
+**Plans**: 4 plans
+Plans:
+- [x] 15-01-PLAN.md — Fsync in all copy paths, SHA-256 for cross-fs moves, FlattenDir error guard
+- [x] 15-02-PLAN.md — Permanent delete audit logging, idempotent plan engine resume
+- [ ] 15-03-PLAN.md — Fix --permanent confirmation prompt, expand split audio extensions (gap closure)
+- [x] 15-04-PLAN.md — Pre-flight source existence and free space checks in plan engine (gap closure)
+>>>>>>> 181915e (docs(15): create gap closure plans for audit findings)
