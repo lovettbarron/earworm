@@ -26,8 +26,8 @@ func isValidPlanStatus(status string) bool {
 	return false
 }
 
-// isValidOpType checks whether an operation type string is in the allowed set.
-func isValidOpType(opType string) bool {
+// IsValidOpType checks whether an operation type string is in the allowed set.
+func IsValidOpType(opType string) bool {
 	for _, t := range ValidOpTypes {
 		if t == opType {
 			return true
@@ -240,7 +240,7 @@ func UpdatePlanStatusAudited(db *sql.DB, id int64, newStatus string) error {
 
 // AddOperation adds an operation to a plan after validating the op type and plan existence.
 func AddOperation(db *sql.DB, op PlanOperation) (int64, error) {
-	if !isValidOpType(op.OpType) {
+	if !IsValidOpType(op.OpType) {
 		return 0, fmt.Errorf("invalid op type %q", op.OpType)
 	}
 
@@ -299,6 +299,54 @@ func ListOperations(db *sql.DB, planID int64) ([]PlanOperation, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate operations: %w", err)
+	}
+
+	if ops == nil {
+		ops = []PlanOperation{}
+	}
+	return ops, nil
+}
+
+// ListDeleteOperations returns all delete operations from plans with the given status.
+// If planID > 0, filters to only that plan.
+// Returns an empty slice (not nil) when no operations match.
+func ListDeleteOperations(db *sql.DB, planStatus string, planID int64) ([]PlanOperation, error) {
+	query := `SELECT po.id, po.plan_id, po.seq, po.op_type, po.source_path, po.dest_path,
+		po.status, po.error_message, po.completed_at, po.created_at, po.updated_at
+		FROM plan_operations po
+		JOIN plans p ON po.plan_id = p.id
+		WHERE po.op_type = 'delete' AND p.status = ?`
+	args := []interface{}{planStatus}
+	if planID > 0 {
+		query += " AND po.plan_id = ?"
+		args = append(args, planID)
+	}
+	query += " ORDER BY po.plan_id, po.seq"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list delete operations: %w", err)
+	}
+	defer rows.Close()
+
+	var ops []PlanOperation
+	for rows.Next() {
+		var op PlanOperation
+		var completedAt sql.NullTime
+		err := rows.Scan(
+			&op.ID, &op.PlanID, &op.Seq, &op.OpType, &op.SourcePath, &op.DestPath,
+			&op.Status, &op.ErrorMessage, &completedAt, &op.CreatedAt, &op.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan delete operation row: %w", err)
+		}
+		if completedAt.Valid {
+			op.CompletedAt = &completedAt.Time
+		}
+		ops = append(ops, op)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate delete operations: %w", err)
 	}
 
 	if ops == nil {
