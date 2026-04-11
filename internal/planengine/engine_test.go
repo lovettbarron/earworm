@@ -144,13 +144,20 @@ func TestApplyPlan_FailedOpContinues(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	src1 := createTempFile(t, tmpDir, "src1.m4a", "content 1")
+	// Create src2 that exists (passes preflight) but dest is under a read-only dir (fails at execution)
+	src2 := createTempFile(t, tmpDir, "src2.m4a", "content 2")
 	src3 := createTempFile(t, tmpDir, "src3.m4a", "content 3")
 	dst1 := filepath.Join(tmpDir, "dst1.m4a")
+	// Use a read-only directory so the move will fail at execution time
+	noWriteDir := filepath.Join(tmpDir, "readonly")
+	require.NoError(t, os.MkdirAll(noWriteDir, 0555))
+	t.Cleanup(func() { os.Chmod(noWriteDir, 0755) })
+	dst2 := filepath.Join(noWriteDir, "subdir", "dst2.m4a")
 	dst3 := filepath.Join(tmpDir, "dst3.m4a")
 
 	planID := createReadyPlan(t, sqlDB, "fail-continue-test", []db.PlanOperation{
 		{Seq: 1, OpType: "move", SourcePath: src1, DestPath: dst1},
-		{Seq: 2, OpType: "move", SourcePath: "/nonexistent/file.m4a", DestPath: filepath.Join(tmpDir, "dst2.m4a")},
+		{Seq: 2, OpType: "move", SourcePath: src2, DestPath: dst2},
 		{Seq: 3, OpType: "move", SourcePath: src3, DestPath: dst3},
 	})
 
@@ -397,7 +404,7 @@ func TestApplyPlan_ResumeMissingBoth(t *testing.T) {
 	sqlDB := setupTestDB(t)
 	tmpDir := t.TempDir()
 
-	// Neither source nor destination exist
+	// Neither source nor destination exist -- preflight catches this
 	srcPath := filepath.Join(tmpDir, "nonexistent", "audio.m4a")
 	dstPath := filepath.Join(tmpDir, "also-nonexistent", "audio.m4a")
 
@@ -406,13 +413,10 @@ func TestApplyPlan_ResumeMissingBoth(t *testing.T) {
 	})
 
 	executor := &Executor{DB: sqlDB}
-	results, err := executor.Apply(context.Background(), planID)
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-
-	assert.False(t, results[0].Success, "should fail when both source and dest are missing")
-	assert.Contains(t, results[0].Error, "source missing")
-	assert.Contains(t, results[0].Error, "dest not valid")
+	_, err := executor.Apply(context.Background(), planID)
+	require.Error(t, err, "should fail at preflight when both source and dest are missing")
+	assert.Contains(t, err.Error(), "preflight check failed")
+	assert.Contains(t, err.Error(), "missing source files")
 }
 
 func TestApplyPlan_PreflightMissingSource(t *testing.T) {

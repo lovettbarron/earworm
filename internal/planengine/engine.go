@@ -66,6 +66,12 @@ func (e *Executor) Apply(ctx context.Context, planID int64) ([]OpResult, error) 
 		return nil, fmt.Errorf("apply plan list ops: %w", err)
 	}
 
+	// Pre-flight validation: check all sources exist and space is sufficient
+	if err := e.preflightCheck(ops); err != nil {
+		_ = db.UpdatePlanStatusAudited(e.DB, planID, "failed")
+		return nil, fmt.Errorf("apply plan: %w", err)
+	}
+
 	var results []OpResult
 	anyFailed := false
 	cancelled := false
@@ -144,6 +150,96 @@ func (e *Executor) Apply(ctx context.Context, planID int64) ([]OpResult, error) 
 	_ = db.UpdatePlanStatusAudited(e.DB, planID, finalStatus)
 
 	return results, nil
+}
+
+// preflightCheck validates all pending operations before execution:
+// - Verifies source files exist for non-completed operations
+// - For move/split ops where source is missing but dest exists, allows idempotent resume
+// - Checks destination filesystem has enough free space for copy/move ops
+// Returns an error listing all issues found, or nil if everything is OK.
+func (e *Executor) preflightCheck(ops []db.PlanOperation) error {
+	var missing []string
+	destDirs := make(map[string]uint64) // dir -> bytes needed
+
+	for _, op := range ops {
+		// Skip already completed operations (resume support)
+		if op.Status == "completed" {
+			continue
+		}
+
+		// Check source exists for operations that read from source
+		switch op.OpType {
+		case "move", "split":
+			info, err := os.Stat(op.SourcePath)
+			if os.IsNotExist(err) {
+				// Idempotent resume: source missing but dest exists is OK
+				if op.DestPath != "" {
+					if _, destErr := os.Stat(op.DestPath); destErr == nil {
+						continue // dest exists, will be handled by executeOp resume logic
+					}
+				}
+				missing = append(missing, op.SourcePath)
+				continue
+			}
+			if err != nil {
+				missing = append(missing, fmt.Sprintf("%s (stat error: %v)", op.SourcePath, err))
+				continue
+			}
+
+			// Accumulate space needed at destination for move/split
+			if op.DestPath != "" {
+				dir := existingAncestor(filepath.Dir(op.DestPath))
+				destDirs[dir] += uint64(info.Size())
+			}
+		case "flatten", "write_metadata":
+			_, err := os.Stat(op.SourcePath)
+			if os.IsNotExist(err) {
+				missing = append(missing, op.SourcePath)
+				continue
+			}
+			if err != nil {
+				missing = append(missing, fmt.Sprintf("%s (stat error: %v)", op.SourcePath, err))
+			}
+		case "delete":
+			// Delete ops: source missing is not fatal (idempotent)
+			// The executeOp will handle the error per-op
+		}
+	}
+
+	var errs []string
+	if len(missing) > 0 {
+		errs = append(errs, fmt.Sprintf("missing source files (%d):\n  %s", len(missing), strings.Join(missing, "\n  ")))
+	}
+
+	// Check free space at each unique destination directory
+	for dir, needed := range destDirs {
+		// Add 10% buffer for filesystem overhead
+		needed = needed + needed/10
+		if err := fileops.CheckFreeSpace(dir, needed); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("preflight check failed:\n%s", strings.Join(errs, "\n"))
+	}
+	return nil
+}
+
+// existingAncestor walks up from path until it finds a directory that exists.
+// Used to find a valid path for disk space checks when dest directories
+// haven't been created yet.
+func existingAncestor(path string) string {
+	for {
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			return path
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return path // reached root
+		}
+		path = parent
+	}
 }
 
 // prepareResume resets any "running" operations back to "pending" so they
