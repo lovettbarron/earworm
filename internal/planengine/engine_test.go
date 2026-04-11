@@ -144,13 +144,20 @@ func TestApplyPlan_FailedOpContinues(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	src1 := createTempFile(t, tmpDir, "src1.m4a", "content 1")
+	// Create src2 that exists (passes preflight) but dest is under a read-only dir (fails at execution)
+	src2 := createTempFile(t, tmpDir, "src2.m4a", "content 2")
 	src3 := createTempFile(t, tmpDir, "src3.m4a", "content 3")
 	dst1 := filepath.Join(tmpDir, "dst1.m4a")
+	// Use a read-only directory so the move will fail at execution time
+	noWriteDir := filepath.Join(tmpDir, "readonly")
+	require.NoError(t, os.MkdirAll(noWriteDir, 0555))
+	t.Cleanup(func() { os.Chmod(noWriteDir, 0755) })
+	dst2 := filepath.Join(noWriteDir, "subdir", "dst2.m4a")
 	dst3 := filepath.Join(tmpDir, "dst3.m4a")
 
 	planID := createReadyPlan(t, sqlDB, "fail-continue-test", []db.PlanOperation{
 		{Seq: 1, OpType: "move", SourcePath: src1, DestPath: dst1},
-		{Seq: 2, OpType: "move", SourcePath: "/nonexistent/file.m4a", DestPath: filepath.Join(tmpDir, "dst2.m4a")},
+		{Seq: 2, OpType: "move", SourcePath: src2, DestPath: dst2},
 		{Seq: 3, OpType: "move", SourcePath: src3, DestPath: dst3},
 	})
 
@@ -397,7 +404,7 @@ func TestApplyPlan_ResumeMissingBoth(t *testing.T) {
 	sqlDB := setupTestDB(t)
 	tmpDir := t.TempDir()
 
-	// Neither source nor destination exist
+	// Neither source nor destination exist -- preflight catches this
 	srcPath := filepath.Join(tmpDir, "nonexistent", "audio.m4a")
 	dstPath := filepath.Join(tmpDir, "also-nonexistent", "audio.m4a")
 
@@ -406,11 +413,115 @@ func TestApplyPlan_ResumeMissingBoth(t *testing.T) {
 	})
 
 	executor := &Executor{DB: sqlDB}
+	_, err := executor.Apply(context.Background(), planID)
+	require.Error(t, err, "should fail at preflight when both source and dest are missing")
+	assert.Contains(t, err.Error(), "preflight check failed")
+	assert.Contains(t, err.Error(), "missing source files")
+}
+
+func TestApplyPlan_PreflightMissingSource(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	// Create one source file but not the other
+	src1 := createTempFile(t, tmpDir, "exists.m4a", "audio content")
+	src2 := filepath.Join(tmpDir, "missing.m4a") // does NOT exist
+	dst1 := filepath.Join(tmpDir, "dst1.m4a")
+	dst2 := filepath.Join(tmpDir, "dst2.m4a")
+
+	planID := createReadyPlan(t, sqlDB, "preflight-missing", []db.PlanOperation{
+		{Seq: 1, OpType: "move", SourcePath: src1, DestPath: dst1},
+		{Seq: 2, OpType: "move", SourcePath: src2, DestPath: dst2},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	_, err := executor.Apply(context.Background(), planID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "preflight check failed")
+	assert.Contains(t, err.Error(), "missing.m4a")
+
+	// Verify NO operations were executed -- src1 should still be at original location
+	_, statErr := os.Stat(src1)
+	assert.NoError(t, statErr, "source file should NOT have been moved (preflight should prevent execution)")
+	_, statErr = os.Stat(dst1)
+	assert.True(t, os.IsNotExist(statErr), "destination should NOT exist (preflight should prevent execution)")
+}
+
+func TestApplyPlan_PreflightAllPresent(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	src1 := createTempFile(t, tmpDir, "a.m4a", "content a")
+	src2 := createTempFile(t, tmpDir, "b.m4a", "content b")
+	dst1 := filepath.Join(tmpDir, "dst_a.m4a")
+	dst2 := filepath.Join(tmpDir, "dst_b.m4a")
+
+	planID := createReadyPlan(t, sqlDB, "preflight-ok", []db.PlanOperation{
+		{Seq: 1, OpType: "move", SourcePath: src1, DestPath: dst1},
+		{Seq: 2, OpType: "move", SourcePath: src2, DestPath: dst2},
+	})
+
+	executor := &Executor{DB: sqlDB}
 	results, err := executor.Apply(context.Background(), planID)
 	require.NoError(t, err)
-	require.Len(t, results, 1)
+	require.Len(t, results, 2)
+	for _, r := range results {
+		assert.True(t, r.Success)
+	}
+}
 
-	assert.False(t, results[0].Success, "should fail when both source and dest are missing")
-	assert.Contains(t, results[0].Error, "source missing")
-	assert.Contains(t, results[0].Error, "dest not valid")
+func TestApplyPlan_PreflightSkipsCompleted(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	// Source for op1 will be deleted (simulating completed op)
+	src1 := filepath.Join(tmpDir, "completed.m4a")
+	dst1 := filepath.Join(tmpDir, "dst1.m4a")
+	// Create destination for the "completed" op
+	require.NoError(t, os.WriteFile(dst1, []byte("already moved"), 0644))
+
+	// Source for op2 exists (pending op)
+	src2 := createTempFile(t, tmpDir, "pending.m4a", "pending content")
+	dst2 := filepath.Join(tmpDir, "dst2.m4a")
+
+	planID := createReadyPlan(t, sqlDB, "preflight-skip-completed", []db.PlanOperation{
+		{Seq: 1, OpType: "move", SourcePath: src1, DestPath: dst1},
+		{Seq: 2, OpType: "move", SourcePath: src2, DestPath: dst2},
+	})
+
+	// Manually mark op1 as completed and plan as running
+	ops, err := db.ListOperations(sqlDB, planID)
+	require.NoError(t, err)
+	require.NoError(t, db.UpdateOperationStatus(sqlDB, ops[0].ID, "completed", ""))
+	require.NoError(t, db.UpdatePlanStatus(sqlDB, planID, "running"))
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err, "preflight should skip completed op whose source is missing")
+	// Only op2 should be executed
+	require.Len(t, results, 1)
+	assert.True(t, results[0].Success)
+}
+
+func TestApplyPlan_PreflightAggregatesAllMissing(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	// Both sources are missing
+	src1 := filepath.Join(tmpDir, "gone1.m4a")
+	src2 := filepath.Join(tmpDir, "gone2.m4a")
+	dst1 := filepath.Join(tmpDir, "dst1.m4a")
+	dst2 := filepath.Join(tmpDir, "dst2.m4a")
+
+	planID := createReadyPlan(t, sqlDB, "preflight-multi-missing", []db.PlanOperation{
+		{Seq: 1, OpType: "move", SourcePath: src1, DestPath: dst1},
+		{Seq: 2, OpType: "move", SourcePath: src2, DestPath: dst2},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	_, err := executor.Apply(context.Background(), planID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing source files (2)")
+	assert.Contains(t, err.Error(), "gone1.m4a")
+	assert.Contains(t, err.Error(), "gone2.m4a")
 }

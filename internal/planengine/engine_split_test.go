@@ -178,10 +178,9 @@ func TestExecuteOp_SplitFailure(t *testing.T) {
 	})
 
 	executor := &Executor{DB: sqlDB}
-	results, err := executor.Apply(context.Background(), planID)
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-
-	assert.False(t, results[0].Success, "split with missing source should fail")
-	assert.NotEmpty(t, results[0].Error, "should have error message")
+	_, err := executor.Apply(context.Background(), planID)
+	// Preflight catches missing source before execution begins
+	require.Error(t, err, "split with missing source should fail at preflight")
+	assert.Contains(t, err.Error(), "preflight check failed")
+	assert.Contains(t, err.Error(), "missing source files")
 }

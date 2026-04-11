@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 15-03-PLAN.md
-last_updated: "2026-04-11T20:24:38.516Z"
+stopped_at: Completed 15-04-PLAN.md
+last_updated: "2026-04-11T20:29:47.417Z"
 last_activity: 2026-04-11
 progress:
   total_phases: 15
   completed_phases: 6
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
   percent: 66
 ---
 
@@ -76,6 +76,7 @@ Progress: [██████▓░░░] 66%
 | Phase 15 P01 | 5min | 2 tasks | 8 files |
 | Phase 15 P02 | 4min | 1 tasks | 4 files |
 | Phase 15 P03 | 7min | 1 tasks | 4 files |
+| Phase 15 P04 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,8 @@ Recent decisions affecting current work:
 - [Phase 15]: Audit entries logged for all three permanent delete paths (success, failure, skip)
 - [Phase 15]: Idempotent resume checks destination hash before failing on missing source for move/split ops
 - [Phase 15]: Switch-based isAudioExt helper for expanded audio extension recognition in split ops
+- [Phase 15]: Preflight allows idempotent resume: source missing + dest exists is not an error
+- [Phase 15]: existingAncestor walks up dir tree for space checks on uncreated dest dirs
 
 ### Pending Todos
 
@@ -150,6 +153,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-11T20:24:38.511Z
-Stopped at: Completed 15-03-PLAN.md
+Last session: 2026-04-11T20:29:47.414Z
+Stopped at: Completed 15-04-PLAN.md
 Resume file: None
