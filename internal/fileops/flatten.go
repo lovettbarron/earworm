@@ -83,8 +83,12 @@ func FlattenDir(bookDir string) (*FlattenResult, error) {
 		})
 	}
 
-	// Clean up empty subdirectories bottom-up
-	result.DirsRemoved = removeEmptyDirs(bookDir)
+	// Clean up empty subdirectories bottom-up only when all moves succeeded.
+	// When errors exist, subdirectories may still contain source files that
+	// failed to move -- removing them could orphan or lose data.
+	if len(result.Errors) == 0 {
+		result.DirsRemoved = removeEmptyDirs(bookDir)
+	}
 
 	return result, nil
 }
