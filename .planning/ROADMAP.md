@@ -279,4 +279,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 **Plans**: 2 plans
 Plans:
 - [x] 15-01-PLAN.md — Fsync in all copy paths, SHA-256 for cross-fs moves, FlattenDir error guard
-- [ ] 15-02-PLAN.md — Permanent delete audit logging, idempotent plan engine resume
+- [x] 15-02-PLAN.md — Permanent delete audit logging, idempotent plan engine resume

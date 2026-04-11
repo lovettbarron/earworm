@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 15-01-PLAN.md
+stopped_at: Completed 15-02-PLAN.md
 last_updated: "2026-04-11T15:43:08.633Z"
 last_activity: 2026-04-11
 progress:
@@ -74,6 +74,7 @@ Progress: [██████▓░░░] 66%
 | Phase 12 P02 | 3min | 1 tasks | 3 files |
 | Phase 14 P02 | 5min | 2 tasks | 6 files |
 | Phase 15 P01 | 5min | 2 tasks | 8 files |
+| Phase 15 P02 | 4min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,8 @@ Recent decisions affecting current work:
 - [Phase 14]: File extension determines copy vs move in split ops: .m4a/.m4b VerifiedMove, others VerifiedCopy
 - [Phase 14]: Claude Code skill enforces detect->present->user approval->plan creation order (D-11)
 - [Phase 15]: Inline hashFileSHA256 in organize and planengine to avoid import cycle with fileops
+- [Phase 15]: Audit entries logged for all three permanent delete paths (success, failure, skip)
+- [Phase 15]: Idempotent resume checks destination hash before failing on missing source for move/split ops
 
 ### Pending Todos
 
@@ -146,5 +149,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-11T15:43:08.630Z
-Stopped at: Completed 15-01-PLAN.md
+Stopped at: Completed 15-02-PLAN.md
 Resume file: None

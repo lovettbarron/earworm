@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/lovettbarron/earworm/internal/config"
@@ -141,24 +142,65 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 }
 
 // executePermanentDelete permanently removes files instead of moving to trash.
+// Each deletion (success, failure, or skip) is recorded in the audit log.
 func executePermanentDelete(database *sql.DB, ops []db.PlanOperation) (*planengine.CleanupResult, error) {
 	result := &planengine.CleanupResult{}
 
 	for _, op := range ops {
+		entityID := strconv.FormatInt(op.ID, 10)
+		beforeJSON, _ := json.Marshal(map[string]string{
+			"source_path": op.SourcePath,
+			"action":      "permanent_delete",
+		})
+
 		if _, err := os.Stat(op.SourcePath); os.IsNotExist(err) {
 			result.Skipped++
 			_ = db.UpdateOperationStatus(database, op.ID, "skipped", "file not found")
+			afterJSON, _ := json.Marshal(map[string]string{
+				"skipped": "file not found",
+			})
+			_ = db.LogAudit(database, db.AuditEntry{
+				EntityType:  "operation",
+				EntityID:    entityID,
+				Action:      "permanent_delete",
+				BeforeState: string(beforeJSON),
+				AfterState:  string(afterJSON),
+				Success:     true,
+			})
 			continue
 		}
 
 		if err := os.Remove(op.SourcePath); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", op.SourcePath, err))
 			_ = db.UpdateOperationStatus(database, op.ID, "failed", err.Error())
+			afterJSON, _ := json.Marshal(map[string]string{
+				"error": err.Error(),
+			})
+			_ = db.LogAudit(database, db.AuditEntry{
+				EntityType:   "operation",
+				EntityID:     entityID,
+				Action:       "permanent_delete",
+				BeforeState:  string(beforeJSON),
+				AfterState:   string(afterJSON),
+				Success:      false,
+				ErrorMessage: err.Error(),
+			})
 			continue
 		}
 
 		result.Moved++
 		_ = db.UpdateOperationStatus(database, op.ID, "completed", "")
+		afterJSON, _ := json.Marshal(map[string]string{
+			"deleted": "true",
+		})
+		_ = db.LogAudit(database, db.AuditEntry{
+			EntityType:  "operation",
+			EntityID:    entityID,
+			Action:      "permanent_delete",
+			BeforeState: string(beforeJSON),
+			AfterState:  string(afterJSON),
+			Success:     true,
+		})
 	}
 
 	return result, nil

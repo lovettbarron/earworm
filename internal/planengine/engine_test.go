@@ -332,3 +332,85 @@ func TestApplyPlan_FlattenOperation(t *testing.T) {
 	_, err = os.Stat(subDir)
 	assert.True(t, os.IsNotExist(err), "CD1 subdirectory should be removed")
 }
+
+func TestApplyPlan_ResumeAlreadyMoved(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	// Create source and destination paths
+	srcPath := filepath.Join(tmpDir, "src", "audio.m4a")
+	dstPath := filepath.Join(tmpDir, "dst", "audio.m4a")
+
+	// Only create the destination (simulating a prior successful move where source is gone)
+	require.NoError(t, os.MkdirAll(filepath.Dir(dstPath), 0755))
+	require.NoError(t, os.WriteFile(dstPath, []byte("audio content"), 0644))
+
+	planID := createReadyPlan(t, sqlDB, "resume-moved-test", []db.PlanOperation{
+		{Seq: 1, OpType: "move", SourcePath: srcPath, DestPath: dstPath},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	assert.True(t, results[0].Success, "should succeed when dest exists with valid hash")
+	assert.NotEmpty(t, results[0].SHA256, "should have SHA256 from destination")
+	assert.Empty(t, results[0].Error)
+
+	// Operation should be marked completed
+	ops, err := db.ListOperations(sqlDB, planID)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", ops[0].Status)
+}
+
+func TestApplyPlan_ResumeAlreadyMoved_Split(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	srcPath := filepath.Join(tmpDir, "src", "audio.m4a")
+	dstPath := filepath.Join(tmpDir, "dst", "audio.m4a")
+
+	// Only create the destination
+	require.NoError(t, os.MkdirAll(filepath.Dir(dstPath), 0755))
+	require.NoError(t, os.WriteFile(dstPath, []byte("split audio content"), 0644))
+
+	planID := createReadyPlan(t, sqlDB, "resume-split-test", []db.PlanOperation{
+		{Seq: 1, OpType: "split", SourcePath: srcPath, DestPath: dstPath},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	assert.True(t, results[0].Success, "should succeed when dest exists with valid hash for split")
+	assert.NotEmpty(t, results[0].SHA256, "should have SHA256 from destination")
+	assert.Empty(t, results[0].Error)
+
+	ops, err := db.ListOperations(sqlDB, planID)
+	require.NoError(t, err)
+	assert.Equal(t, "completed", ops[0].Status)
+}
+
+func TestApplyPlan_ResumeMissingBoth(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	// Neither source nor destination exist
+	srcPath := filepath.Join(tmpDir, "nonexistent", "audio.m4a")
+	dstPath := filepath.Join(tmpDir, "also-nonexistent", "audio.m4a")
+
+	planID := createReadyPlan(t, sqlDB, "resume-missing-both", []db.PlanOperation{
+		{Seq: 1, OpType: "move", SourcePath: srcPath, DestPath: dstPath},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	assert.False(t, results[0].Success, "should fail when both source and dest are missing")
+	assert.Contains(t, results[0].Error, "source missing")
+	assert.Contains(t, results[0].Error, "dest not valid")
+}

@@ -165,6 +165,17 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 
 	switch op.OpType {
 	case "move":
+		// Idempotent resume: if source is gone but dest exists with valid hash, skip
+		if _, statErr := os.Stat(op.SourcePath); os.IsNotExist(statErr) {
+			hash, hashErr := fileops.HashFile(op.DestPath)
+			if hashErr == nil && hash != "" {
+				result.Success = true
+				result.SHA256 = hash
+				return result
+			}
+			result.Error = fmt.Sprintf("source missing, dest not valid: %s -> %s", op.SourcePath, op.DestPath)
+			return result
+		}
 		if err := fileops.VerifiedMove(op.SourcePath, op.DestPath); err != nil {
 			result.Error = err.Error()
 			return result
@@ -219,6 +230,17 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 		ext := strings.ToLower(filepath.Ext(op.SourcePath))
 		isAudio := ext == ".m4a" || ext == ".m4b"
 		if isAudio {
+			// Idempotent resume: if source is gone but dest exists with valid hash, skip
+			if _, statErr := os.Stat(op.SourcePath); os.IsNotExist(statErr) {
+				hash, hashErr := fileops.HashFile(op.DestPath)
+				if hashErr == nil && hash != "" {
+					result.Success = true
+					result.SHA256 = hash
+					return result
+				}
+				result.Error = fmt.Sprintf("source missing, dest not valid: %s -> %s", op.SourcePath, op.DestPath)
+				return result
+			}
 			if err := fileops.VerifiedMove(op.SourcePath, op.DestPath); err != nil {
 				result.Error = err.Error()
 				return result
