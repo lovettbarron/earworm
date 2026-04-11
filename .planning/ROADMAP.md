@@ -237,7 +237,10 @@ Plans:
   2. Split operations use SHA-256 verification and produce audit trail entries like all other file operations
   3. Claude Code skill can orchestrate scan and plan creation through conversation, producing plans the user reviews before applying
   4. Claude Code skill never executes plans — only creates them for human review and application
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 14-01-PLAN.md — Per-file metadata extraction, verified copy, split grouper and planner packages
+- [ ] 14-02-PLAN.md — Plan engine split execution, CLI split commands, Claude Code SKILL.md
 
 ## Progress
 
@@ -259,4 +262,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 11. Structural Operations & Metadata | 1/2 | Complete    | 2026-04-07 |
 | 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
 | 13. CSV Import & Guarded Cleanup | 1/2 | Complete    | 2026-04-10 |
-| 14. Multi-Book Split & Claude Skill | 0/0 | Not started | - |
+| 14. Multi-Book Split & Claude Skill | 0/2 | Planned | - |
