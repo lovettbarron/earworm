@@ -1,7 +1,9 @@
 package planengine
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -300,6 +302,35 @@ func TestCleanupExecutor_UpdatesOpStatus(t *testing.T) {
 	allOps, err := db.ListOperations(sqlDB, planID)
 	require.NoError(t, err)
 	assert.Equal(t, "completed", allOps[0].Status)
+}
+
+func TestCleanup_CopyVerifyDelete_SHA256(t *testing.T) {
+	tmpDir := t.TempDir()
+	src := filepath.Join(tmpDir, "source.m4a")
+	dst := filepath.Join(tmpDir, "verified.m4a")
+
+	content := []byte("audiobook content for planengine SHA-256 verification")
+	require.NoError(t, os.WriteFile(src, content, 0644))
+
+	// Compute expected SHA-256
+	h := sha256.New()
+	h.Write(content)
+	expectedHash := hex.EncodeToString(h.Sum(nil))
+
+	err := copyVerifyDelete(src, dst)
+	require.NoError(t, err)
+
+	// Source should be deleted
+	_, err = os.Stat(src)
+	assert.True(t, os.IsNotExist(err), "source should be deleted after verified copy")
+
+	// Destination should have correct SHA-256 hash
+	dstData, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	dstH := sha256.New()
+	dstH.Write(dstData)
+	actualHash := hex.EncodeToString(dstH.Sum(nil))
+	assert.Equal(t, expectedHash, actualHash, "destination SHA-256 should match source")
 }
 
 func TestCleanupExecutor_PlanIDFilter(t *testing.T) {

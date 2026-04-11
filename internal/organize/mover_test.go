@@ -1,6 +1,8 @@
 package organize
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -136,4 +138,50 @@ func TestCopyFile_UnreadableSource(t *testing.T) {
 	// Destination should not be created
 	_, err = os.Stat(dst)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func TestCopyFile_Fsync(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.m4a")
+	dst := filepath.Join(dir, "synced.m4a")
+
+	content := []byte("audiobook data requiring fsync for NAS safety")
+	require.NoError(t, os.WriteFile(src, content, 0644))
+
+	err := copyFile(src, dst)
+	require.NoError(t, err)
+
+	// Verify destination exists and content matches (proves Sync()+Close() path works)
+	got, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestCopyVerifyDelete_SHA256(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.m4a")
+	dst := filepath.Join(dir, "verified.m4a")
+
+	content := []byte("audiobook content for SHA-256 verification")
+	require.NoError(t, os.WriteFile(src, content, 0644))
+
+	// Compute expected SHA-256
+	h := sha256.New()
+	h.Write(content)
+	expectedHash := hex.EncodeToString(h.Sum(nil))
+
+	err := copyVerifyDelete(src, dst)
+	require.NoError(t, err)
+
+	// Source should be deleted
+	_, err = os.Stat(src)
+	assert.True(t, os.IsNotExist(err), "source should be deleted after verified copy")
+
+	// Destination should have correct SHA-256 hash
+	dstData, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	dstH := sha256.New()
+	dstH.Write(dstData)
+	actualHash := hex.EncodeToString(dstH.Sum(nil))
+	assert.Equal(t, expectedHash, actualHash, "destination SHA-256 should match source")
 }
