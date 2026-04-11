@@ -25,12 +25,12 @@ Requirements for Library Cleanup milestone. Each maps to roadmap phases.
 - [ ] **FOPS-01**: User can flatten nested audio directories, moving files up to the book folder level
 - [ ] **FOPS-02**: User can write Audiobookshelf-compatible metadata.json sidecars without modifying audio files
 - [x] **FOPS-03**: User can run a guarded cleanup command with trash-dir default, double confirmation, and audit logging — separated from plan apply
-- [ ] **FOPS-04**: User can split multi-book folders into separate directories with content-based detection
+- [x] **FOPS-04**: User can split multi-book folders into separate directories with content-based detection
 
 ### Integration
 
 - [x] **INTG-01**: All plan operations produce a full audit trail with timestamps, before/after state, and success/failure
-- [ ] **INTG-02**: Claude Code skill enables conversational plan creation (not execution) via Claude Code
+- [x] **INTG-02**: Claude Code skill enables conversational plan creation (not execution) via Claude Code
 
 ## Future Requirements
 
@@ -68,9 +68,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FOPS-01 | Phase 11 | Pending |
 | FOPS-02 | Phase 11 | Pending |
 | FOPS-03 | Phase 13 | Complete |
-| FOPS-04 | Phase 14 | Pending |
+| FOPS-04 | Phase 14 | Complete |
 | INTG-01 | Phase 9 | Complete |
-| INTG-02 | Phase 14 | Pending |
+| INTG-02 | Phase 14 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 13 total

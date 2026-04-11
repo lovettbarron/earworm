@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Structural Operations & Metadata** - Flatten nested audio, write metadata.json sidecars, SHA-256 verification (completed 2026-04-07)
 - [x] **Phase 12: Plan Engine & CLI** - Wire scan results into reviewable, executable plans with per-operation tracking (completed 2026-04-10)
 - [x] **Phase 13: CSV Import & Guarded Cleanup** - CSV-to-plan bridge and separated deletion command with safety guards (completed 2026-04-10)
-- [ ] **Phase 14: Multi-Book Split & Claude Skill** - Content-based folder splitting and conversational plan creation
+- [x] **Phase 14: Multi-Book Split & Claude Skill** - Content-based folder splitting and conversational plan creation (completed 2026-04-11)
 
 ## Phase Details
 
@@ -239,8 +239,8 @@ Plans:
   4. Claude Code skill never executes plans — only creates them for human review and application
 **Plans**: 2 plans
 Plans:
-- [ ] 14-01-PLAN.md — Per-file metadata extraction, verified copy, split grouper and planner packages
-- [ ] 14-02-PLAN.md — Plan engine split execution, CLI split commands, Claude Code SKILL.md
+- [x] 14-01-PLAN.md — Per-file metadata extraction, verified copy, split grouper and planner packages
+- [x] 14-02-PLAN.md — Plan engine split execution, CLI split commands, Claude Code SKILL.md
 
 ## Progress
 
@@ -262,4 +262,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 11. Structural Operations & Metadata | 1/2 | Complete    | 2026-04-07 |
 | 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
 | 13. CSV Import & Guarded Cleanup | 1/2 | Complete    | 2026-04-10 |
-| 14. Multi-Book Split & Claude Skill | 0/2 | Planned | - |
+| 14. Multi-Book Split & Claude Skill | 2/2 | Complete   | 2026-04-11 |
