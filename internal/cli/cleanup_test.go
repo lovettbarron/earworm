@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,4 +161,97 @@ func TestCleanupCommand_JSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(jsonStr), &result))
 	assert.Equal(t, float64(1), result["moved"])
 	assert.Equal(t, float64(0), result["skipped"])
+}
+
+func TestCleanup_PermanentDeleteAudit(t *testing.T) {
+	database := setupPlanTestDB(t)
+	tmpDir := t.TempDir()
+
+	// Create temp files to be permanently deleted
+	file1 := filepath.Join(tmpDir, "book1.m4a")
+	file2 := filepath.Join(tmpDir, "book2.m4a")
+	require.NoError(t, os.WriteFile(file1, []byte("audio data 1"), 0644))
+	require.NoError(t, os.WriteFile(file2, []byte("audio data 2"), 0644))
+
+	planID, err := db.CreatePlan(database, "audit-perm-delete", "test")
+	require.NoError(t, err)
+	require.NoError(t, db.UpdatePlanStatus(database, planID, "ready"))
+	require.NoError(t, db.UpdatePlanStatus(database, planID, "running"))
+	require.NoError(t, db.UpdatePlanStatus(database, planID, "completed"))
+
+	op1ID, err := db.AddOperation(database, db.PlanOperation{
+		PlanID: planID, Seq: 1, OpType: "delete", SourcePath: file1,
+	})
+	require.NoError(t, err)
+	op2ID, err := db.AddOperation(database, db.PlanOperation{
+		PlanID: planID, Seq: 2, OpType: "delete", SourcePath: file2,
+	})
+	require.NoError(t, err)
+
+	ops := []db.PlanOperation{
+		{ID: op1ID, PlanID: planID, Seq: 1, OpType: "delete", SourcePath: file1},
+		{ID: op2ID, PlanID: planID, Seq: 2, OpType: "delete", SourcePath: file2},
+	}
+
+	result, err := executePermanentDelete(database, ops)
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Moved)
+
+	// Check audit entries for each operation
+	for _, op := range ops {
+		entries, err := db.ListAuditEntries(database, "operation", fmt.Sprintf("%d", op.ID))
+		require.NoError(t, err)
+		require.NotEmpty(t, entries, "should have audit entry for op %d", op.ID)
+
+		entry := entries[0]
+		assert.Equal(t, "permanent_delete", entry.Action)
+		assert.True(t, entry.Success)
+
+		// Check before_state contains source_path
+		var beforeState map[string]string
+		require.NoError(t, json.Unmarshal([]byte(entry.BeforeState), &beforeState))
+		assert.Equal(t, op.SourcePath, beforeState["source_path"])
+
+		// Check after_state contains deleted: true
+		var afterState map[string]string
+		require.NoError(t, json.Unmarshal([]byte(entry.AfterState), &afterState))
+		assert.Equal(t, "true", afterState["deleted"])
+	}
+}
+
+func TestCleanup_PermanentDeleteAudit_Failure(t *testing.T) {
+	database := setupPlanTestDB(t)
+
+	// Point at a path that doesn't exist but is NOT skippable (use a directory to cause os.Remove failure)
+	tmpDir := t.TempDir()
+	dirPath := filepath.Join(tmpDir, "nonempty-dir")
+	require.NoError(t, os.MkdirAll(dirPath, 0755))
+	// Create a file inside so os.Remove on the dir fails
+	require.NoError(t, os.WriteFile(filepath.Join(dirPath, "child.txt"), []byte("data"), 0644))
+
+	planID, err := db.CreatePlan(database, "audit-fail-delete", "test")
+	require.NoError(t, err)
+	require.NoError(t, db.UpdatePlanStatus(database, planID, "ready"))
+	require.NoError(t, db.UpdatePlanStatus(database, planID, "running"))
+	require.NoError(t, db.UpdatePlanStatus(database, planID, "completed"))
+
+	opID, err := db.AddOperation(database, db.PlanOperation{
+		PlanID: planID, Seq: 1, OpType: "delete", SourcePath: dirPath,
+	})
+	require.NoError(t, err)
+
+	ops := []db.PlanOperation{
+		{ID: opID, PlanID: planID, Seq: 1, OpType: "delete", SourcePath: dirPath},
+	}
+
+	result, err := executePermanentDelete(database, ops)
+	require.NoError(t, err)
+	assert.Len(t, result.Errors, 1)
+
+	// Audit entry should record failure
+	entries, err := db.ListAuditEntries(database, "operation", fmt.Sprintf("%d", opID))
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+	assert.False(t, entries[0].Success)
+	assert.NotEmpty(t, entries[0].ErrorMessage)
 }
