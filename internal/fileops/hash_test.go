@@ -72,6 +72,61 @@ func TestVerifiedMove_CreatesParentDirs(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
+func TestVerifiedCopy_Success(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.m4a")
+	dst := filepath.Join(dir, "dest.m4a")
+
+	content := []byte("audiobook content for verified copy")
+	require.NoError(t, os.WriteFile(src, content, 0644))
+
+	err := VerifiedCopy(src, dst)
+	require.NoError(t, err)
+
+	// Source should still exist
+	_, err = os.Stat(src)
+	assert.NoError(t, err, "source should still exist after copy")
+
+	// Destination should have same content
+	got, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+
+	// SHA-256 should match
+	srcHash, _ := HashFile(src)
+	dstHash, _ := HashFile(dst)
+	assert.Equal(t, srcHash, dstHash)
+}
+
+func TestVerifiedCopy_CreatesParentDirs(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.m4a")
+	dst := filepath.Join(dir, "sub", "deep", "dest.m4a")
+
+	content := []byte("audiobook with parent dir creation for copy")
+	require.NoError(t, os.WriteFile(src, content, 0644))
+
+	err := VerifiedCopy(src, dst)
+	require.NoError(t, err)
+
+	// Source still exists
+	_, err = os.Stat(src)
+	assert.NoError(t, err)
+
+	got, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestVerifiedCopy_SourceNotFound(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "nonexistent.m4a")
+	dst := filepath.Join(dir, "dest.m4a")
+
+	err := VerifiedCopy(src, dst)
+	require.Error(t, err)
+}
+
 func TestVerifiedMove_SourceNotFound(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "nonexistent.m4a")
