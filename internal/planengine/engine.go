@@ -366,7 +366,18 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 		result.Success = true
 
 	case "write_metadata":
-		bookMeta, asin := e.resolveBookMetadata(op.SourcePath)
+		var bookMeta *metadata.BookMetadata
+		var asin string
+
+		// Prefer metadata from operation (CSV-provided)
+		if op.Metadata != "" {
+			bookMeta, asin = parseOperationMetadata(op.Metadata)
+		}
+		// Fallback to existing resolution chain
+		if bookMeta == nil {
+			bookMeta, asin = e.resolveBookMetadata(op.SourcePath)
+		}
+
 		absMeta := fileops.BuildABSMetadata(bookMeta, asin)
 		if err := fileops.WriteMetadataSidecar(op.SourcePath, absMeta); err != nil {
 			result.Error = err.Error()
@@ -421,6 +432,42 @@ func isAudioExt(ext string) bool {
 		return true
 	}
 	return false
+}
+
+// parseOperationMetadata extracts BookMetadata and ASIN from a JSON metadata string
+// stored in a plan operation. Returns nil, "" if the string is empty or unparseable.
+func parseOperationMetadata(metadataJSON string) (*metadata.BookMetadata, string) {
+	if metadataJSON == "" {
+		return nil, ""
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(metadataJSON), &raw); err != nil {
+		return nil, ""
+	}
+	meta := &metadata.BookMetadata{}
+	if v, ok := raw["title"].(string); ok {
+		meta.Title = v
+	}
+	if v, ok := raw["author"].(string); ok {
+		meta.Author = v
+	}
+	if v, ok := raw["narrator"].(string); ok {
+		meta.Narrator = v
+	}
+	if v, ok := raw["genre"].(string); ok {
+		meta.Genre = v
+	}
+	if v, ok := raw["series"].(string); ok {
+		meta.Series = v
+	}
+	if v, ok := raw["year"].(float64); ok {
+		meta.Year = int(v)
+	}
+	asin := ""
+	if v, ok := raw["asin"].(string); ok {
+		asin = v
+	}
+	return meta, asin
 }
 
 // statusStr returns "completed" or "failed" based on success boolean.
