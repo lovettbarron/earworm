@@ -266,7 +266,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 15. Data Safety Hardening for NAS Ops | 4/4 | Complete    | 2026-04-11 |
 | 16. Plan Lifecycle — Draft Promotion | 1/1 | Complete    | 2026-04-12 |
 | 17. Scan-to-Plan Bridge & JSON Output | 0/2 | Planned | - |
-| 18. Metadata Wiring & Artifact Cleanup | 0/2 | Planned | - |
+| 18. Metadata Wiring & Artifact Cleanup | 1/2 | In Progress|  |
 
 ### Phase 15: Data Safety Hardening for NAS Operations
 **Goal**: Make file operations safe for irreplaceable NAS data by fixing the compounding fsync/hash/delete chain, adding audit coverage to permanent delete, and guarding against partial-failure cleanup
@@ -331,5 +331,5 @@ Plans:
   6. Tests cover metadata wiring with real book data
 **Plans**: 2 plans
 Plans:
-- [ ] 18-01-PLAN.md — Wire BuildABSMetadata into plan engine with real book metadata
+- [x] 18-01-PLAN.md — Wire BuildABSMetadata into plan engine with real book metadata
 - [ ] 18-02-PLAN.md — Fix stale documentation artifacts from v1.1 audit
