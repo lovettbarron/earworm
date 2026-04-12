@@ -265,7 +265,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 14. Multi-Book Split & Claude Skill | 2/2 | Complete    | 2026-04-11 |
 | 15. Data Safety Hardening for NAS Ops | 4/4 | Complete    | 2026-04-11 |
 | 16. Plan Lifecycle — Draft Promotion | 1/1 | Complete    | 2026-04-12 |
-| 17. Scan-to-Plan Bridge & JSON Output | 1/2 | In Progress|  |
+| 17. Scan-to-Plan Bridge & JSON Output | 2/2 | Complete    | 2026-04-12 |
 | 18. Metadata Wiring & Artifact Cleanup | 2/2 | Complete    | 2026-04-12 |
 
 ### Phase 15: Data Safety Hardening for NAS Operations
@@ -315,7 +315,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 17-01-PLAN.md — Scan-to-plan bridge (CreatePlanFromIssues) with unit tests
-- [ ] 17-02-PLAN.md — CLI scan issues subcommand, --json output, integration tests
+- [x] 17-02-PLAN.md — CLI scan issues subcommand, --json output, integration tests
 
 ### Phase 18: Metadata Wiring & Artifact Cleanup
 **Goal:** Wire BuildABSMetadata into the plan engine and fix all stale documentation artifacts identified by the milestone audit
