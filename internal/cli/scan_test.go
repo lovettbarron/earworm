@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lovettbarron/earworm/internal/config"
+	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -176,4 +179,150 @@ func TestScanWithoutDeep_Unchanged(t *testing.T) {
 	// Existing behavior unchanged: shows "Scan complete:" not "Deep scan complete:"
 	assert.Contains(t, out, "Scan complete:")
 	assert.NotContains(t, out, "Deep scan complete")
+}
+
+// setupTestDB opens the DB at the config-derived path and inserts test issues.
+// Must be called AFTER writeTestConfig (which sets HOME).
+func setupTestDB(t *testing.T, issues []db.ScanIssue) {
+	t.Helper()
+	dbPath, err := config.DBPath()
+	require.NoError(t, err)
+	database, err := db.Open(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+	for _, issue := range issues {
+		require.NoError(t, db.InsertScanIssue(database, issue))
+	}
+}
+
+func TestScanIssues_ListAll(t *testing.T) {
+	tmpLib := t.TempDir()
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	setupTestDB(t, []db.ScanIssue{
+		{Path: "/lib/Author/Book1", IssueType: "nested_audio", Severity: "warning", Message: "Nested audio files found", SuggestedAction: "flatten", ScanRunID: "run1"},
+		{Path: "/lib/Author/Empty", IssueType: "empty_dir", Severity: "info", Message: "Empty directory", SuggestedAction: "delete", ScanRunID: "run1"},
+		{Path: "/lib/Unknown", IssueType: "no_asin", Severity: "warning", Message: "No ASIN found", SuggestedAction: "manual review", ScanRunID: "run1"},
+	})
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan", "issues")
+	require.NoError(t, err)
+	assert.Contains(t, out, "nested_audio")
+	assert.Contains(t, out, "empty_dir")
+	assert.Contains(t, out, "no_asin")
+	assert.Contains(t, out, "3)")
+}
+
+func TestScanIssues_FilterByType(t *testing.T) {
+	tmpLib := t.TempDir()
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	setupTestDB(t, []db.ScanIssue{
+		{Path: "/lib/Author/Book1", IssueType: "nested_audio", Severity: "warning", Message: "Nested audio", SuggestedAction: "flatten", ScanRunID: "run1"},
+		{Path: "/lib/Author/Empty", IssueType: "empty_dir", Severity: "info", Message: "Empty directory", SuggestedAction: "delete", ScanRunID: "run1"},
+		{Path: "/lib/Unknown", IssueType: "no_asin", Severity: "warning", Message: "No ASIN", SuggestedAction: "manual review", ScanRunID: "run1"},
+	})
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan", "issues", "--type", "nested_audio")
+	require.NoError(t, err)
+	assert.Contains(t, out, "nested_audio")
+	assert.NotContains(t, out, "empty_dir")
+	assert.NotContains(t, out, "no_asin")
+}
+
+func TestScanIssues_JSONOutput(t *testing.T) {
+	tmpLib := t.TempDir()
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	setupTestDB(t, []db.ScanIssue{
+		{Path: "/lib/Author/Book1", IssueType: "nested_audio", Severity: "warning", Message: "Nested audio", SuggestedAction: "flatten", ScanRunID: "run1"},
+		{Path: "/lib/Author/Empty", IssueType: "empty_dir", Severity: "info", Message: "Empty", SuggestedAction: "delete", ScanRunID: "run1"},
+	})
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan", "issues", "--json")
+	require.NoError(t, err)
+
+	var issues []db.ScanIssue
+	require.NoError(t, json.Unmarshal([]byte(out), &issues))
+	assert.Len(t, issues, 2)
+	assert.Equal(t, "nested_audio", issues[0].IssueType)
+	assert.Equal(t, "empty_dir", issues[1].IssueType)
+}
+
+func TestScanIssues_CreatePlan(t *testing.T) {
+	tmpLib := t.TempDir()
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	setupTestDB(t, []db.ScanIssue{
+		{Path: "/lib/Author/Book1", IssueType: "nested_audio", Severity: "warning", Message: "Nested audio", SuggestedAction: "flatten", ScanRunID: "run1"},
+		{Path: "/lib/Author/Empty", IssueType: "empty_dir", Severity: "info", Message: "Empty", SuggestedAction: "delete", ScanRunID: "run1"},
+		{Path: "/lib/Unknown", IssueType: "no_asin", Severity: "warning", Message: "No ASIN", SuggestedAction: "manual", ScanRunID: "run1"},
+	})
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan", "issues", "--create-plan")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Plan created")
+	assert.Contains(t, out, "2 operations")
+	assert.Contains(t, out, "1 issues skipped")
+
+	// Verify plan exists in DB
+	dbPath, err := config.DBPath()
+	require.NoError(t, err)
+	database, err := db.Open(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	plan, err := db.GetPlan(database, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "draft", plan.Status)
+}
+
+func TestScanIssues_CreatePlan_NoActionable(t *testing.T) {
+	tmpLib := t.TempDir()
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	setupTestDB(t, []db.ScanIssue{
+		{Path: "/lib/Unknown", IssueType: "no_asin", Severity: "warning", Message: "No ASIN", SuggestedAction: "manual", ScanRunID: "run1"},
+		{Path: "/lib/NoCover", IssueType: "cover_missing", Severity: "info", Message: "No cover", SuggestedAction: "manual", ScanRunID: "run1"},
+	})
+
+	_, err := executeCommand(t, "--config", cfgPath, "scan", "issues", "--create-plan")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no actionable issues")
+}
+
+func TestScanIssues_EmptyList(t *testing.T) {
+	tmpLib := t.TempDir()
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	// Create DB but no issues
+	setupTestDB(t, nil)
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan", "issues")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No issues found")
+}
+
+func TestScanDeep_JSONOutput(t *testing.T) {
+	tmpLib := t.TempDir()
+
+	// Create a dir with ASIN
+	bookDir := filepath.Join(tmpLib, "Author", "Book [B08C6YJ1LS]")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "book.m4a"), []byte("fake"), 0644))
+
+	// Create an empty dir to trigger empty_dir issue
+	emptyDir := filepath.Join(tmpLib, "EmptyBook")
+	require.NoError(t, os.MkdirAll(emptyDir, 0755))
+
+	cfgPath := writeTestConfig(t, tmpLib)
+
+	out, err := executeCommand(t, "--config", cfgPath, "scan", "--deep", "--json")
+	require.NoError(t, err)
+
+	var result deepScanJSON
+	require.NoError(t, json.Unmarshal([]byte(out), &result), "output should be valid JSON: %s", out)
+	assert.Greater(t, result.TotalDirs, 0)
+	assert.NotNil(t, result.Issues)
+	assert.Greater(t, result.IssuesFound, 0)
 }
