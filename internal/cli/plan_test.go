@@ -213,3 +213,64 @@ func TestPlanImport_NoArgs(t *testing.T) {
 	_, err := executeCommand(t, "plan", "import")
 	require.Error(t, err)
 }
+
+func TestPlanApprove_DraftToReady(t *testing.T) {
+	database := setupPlanTestDB(t)
+	_, err := db.CreatePlan(database, "Draft plan", "needs approval")
+	require.NoError(t, err)
+
+	out, err := executeCommand(t, "plan", "approve", "1")
+	assert.NoError(t, err)
+	assert.Contains(t, out, "Approved plan 1")
+	assert.Contains(t, out, "ready")
+}
+
+func TestPlanApprove_NotDraft(t *testing.T) {
+	database := setupPlanTestDB(t)
+	planID, err := db.CreatePlan(database, "Ready plan", "already ready")
+	require.NoError(t, err)
+	require.NoError(t, db.UpdatePlanStatus(database, planID, "ready"))
+
+	_, err = executeCommand(t, "plan", "approve", "1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "can only approve draft plans, current status: ready")
+}
+
+func TestPlanApprove_CompletedPlan(t *testing.T) {
+	database := setupPlanTestDB(t)
+	planID, err := db.CreatePlan(database, "Done plan", "completed")
+	require.NoError(t, err)
+	require.NoError(t, db.UpdatePlanStatus(database, planID, "completed"))
+
+	_, err = executeCommand(t, "plan", "approve", "1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "can only approve draft plans, current status: completed")
+}
+
+func TestPlanApprove_NotFound(t *testing.T) {
+	_ = setupPlanTestDB(t)
+	_, err := executeCommand(t, "plan", "approve", "999")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestPlanApprove_InvalidID(t *testing.T) {
+	_ = setupPlanTestDB(t)
+	_, err := executeCommand(t, "plan", "approve", "abc")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid plan ID")
+}
+
+func TestPlanApprove_JSON(t *testing.T) {
+	database := setupPlanTestDB(t)
+	_, err := db.CreatePlan(database, "JSON approve", "for json output")
+	require.NoError(t, err)
+
+	out, err := executeCommand(t, "plan", "approve", "1", "--json")
+	assert.NoError(t, err)
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(out), &result))
+	assert.Equal(t, float64(1), result["id"])
+	assert.Equal(t, "ready", result["status"])
+}
