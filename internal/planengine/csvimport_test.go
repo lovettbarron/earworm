@@ -156,6 +156,7 @@ func TestImportCSV_ColumnAliases(t *testing.T) {
 		{"type/source/destination", "type,source,destination"},
 		{"operation/path/dest", "operation,path,dest"},
 		{"action/src/target", "action,src,target"},
+		{"type/current_path/dest", "type,current_path,dest"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
