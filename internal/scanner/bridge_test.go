@@ -33,23 +33,47 @@ func insertTestIssue(t *testing.T, database *sql.DB, issueType, path string) {
 func TestCreatePlanFromIssues_ActionableOnly(t *testing.T) {
 	database := setupBridgeDB(t)
 
-	// Insert 5 issues: 3 actionable, 2 non-actionable
+	// Insert 6 issues: 4 actionable, 2 non-actionable
 	insertTestIssue(t, database, string(IssueNestedAudio), "/lib/Author/Book1")
 	insertTestIssue(t, database, string(IssueEmptyDir), "/lib/Author/EmptyBook")
 	insertTestIssue(t, database, string(IssueOrphanFiles), "/lib/Author/Book2")
+	insertTestIssue(t, database, string(IssueMissingMetadata), "/lib/Author/NoMeta")
 	insertTestIssue(t, database, string(IssueNoASIN), "/lib/Author/NoAsin")
 	insertTestIssue(t, database, string(IssueMultiBook), "/lib/Author/MultiBook")
 
 	issues, err := db.ListScanIssues(database)
 	require.NoError(t, err)
-	require.Len(t, issues, 5)
+	require.Len(t, issues, 6)
 
 	result, err := CreatePlanFromIssues(database, issues)
 	require.NoError(t, err)
 
-	assert.Equal(t, 3, result.Created)
+	assert.Equal(t, 4, result.Created)
 	assert.Equal(t, 2, result.Skipped)
 	assert.Greater(t, result.PlanID, int64(0))
+}
+
+func TestCreatePlanFromIssues_MissingMetadata(t *testing.T) {
+	database := setupBridgeDB(t)
+
+	insertTestIssue(t, database, string(IssueMissingMetadata), "/lib/Author/MetalessBook")
+
+	issues, err := db.ListScanIssues(database)
+	require.NoError(t, err)
+	require.Len(t, issues, 1)
+
+	result, err := CreatePlanFromIssues(database, issues)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Created)
+	assert.Equal(t, 0, result.Skipped)
+
+	ops, err := db.ListOperations(database, result.PlanID)
+	require.NoError(t, err)
+	require.Len(t, ops, 1)
+	assert.Equal(t, "write_metadata", ops[0].OpType)
+	assert.Equal(t, "/lib/Author/MetalessBook", ops[0].SourcePath)
+	assert.Empty(t, ops[0].DestPath)
 }
 
 func TestCreatePlanFromIssues_AllSkipped(t *testing.T) {
