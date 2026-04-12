@@ -333,3 +333,21 @@ Plans:
 Plans:
 - [x] 18-01-PLAN.md — Wire BuildABSMetadata into plan engine with real book metadata
 - [x] 18-02-PLAN.md — Fix stale documentation artifacts from v1.1 audit
+
+### Phase 18.1: CSV Metadata Flow & Format Flexibility (INSERTED)
+
+**Goal:** Make the CSV import pipeline accept real-world column name variants and carry metadata fields through to the write_metadata executor, and bridge missing_metadata scan issues to write_metadata operations
+**Depends on:** Phase 18
+**Requirements:** CSV-FLEX-01, CSV-FLEX-02, CSV-FLEX-03, CSV-FLEX-04, BRIDGE-01, MIGRATION-01
+**Success Criteria** (what must be TRUE):
+  1. CSV import accepts common column name aliases (type, source, destination, operation, etc.)
+  2. CSV import extracts metadata columns (title, author, narrator, genre, year, series, asin) into JSON stored on plan operations
+  3. write_metadata executor prefers operation-embedded metadata over DB/file fallback
+  4. missing_metadata scan issues are bridged to write_metadata operations in auto-plan creation
+  5. Migration 007 adds metadata column without breaking existing data
+  6. All existing tests continue to pass
+**Plans**: 2 plans
+
+Plans:
+- [ ] 18.1-01-PLAN.md — Migration 007, PlanOperation.Metadata field, CSV column aliasing and metadata extraction
+- [ ] 18.1-02-PLAN.md — Executor metadata preference for write_metadata, bridge missing_metadata to write_metadata
