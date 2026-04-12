@@ -632,6 +632,67 @@ func TestResolveBookMetadata_DBLookup(t *testing.T) {
 	assert.Equal(t, "BABC123456", asin)
 }
 
+func TestExecuteOp_WriteMetadataFromOp(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	dir := t.TempDir()
+	bookDir := filepath.Join(dir, "Author", "Test Book [B0TEST]")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	// Create a dummy audio file so the directory is valid
+	createTempFile(t, bookDir, "audio.m4a", "fake audio")
+
+	metaJSON := `{"title":"Test Book","author":"Test Author","narrator":"Narrator One","genre":"Fiction","year":2023,"series":"Series A","asin":"B0TEST"}`
+
+	planID := createReadyPlan(t, sqlDB, "meta-op-test", []db.PlanOperation{
+		{Seq: 1, OpType: "write_metadata", SourcePath: bookDir, Metadata: metaJSON},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.True(t, results[0].Success, "expected success, got error: %s", results[0].Error)
+
+	// Verify metadata.json was written with CSV-provided values
+	data, err := os.ReadFile(filepath.Join(bookDir, "metadata.json"))
+	require.NoError(t, err)
+	var meta map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &meta))
+	assert.Equal(t, "Test Book", meta["title"])
+	assert.Equal(t, "Test Author", meta["authors"].([]interface{})[0])
+	assert.Equal(t, "Narrator One", meta["narrators"].([]interface{})[0])
+	assert.Equal(t, "B0TEST", meta["asin"])
+	// Verify year was passed through
+	assert.Equal(t, "2023", meta["publishedYear"])
+}
+
+func TestParseOperationMetadata(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantNil   bool
+		wantASIN  string
+		wantTitle string
+	}{
+		{"empty string", "", true, "", ""},
+		{"invalid JSON", "{bad", true, "", ""},
+		{"valid full", `{"title":"Book","author":"Auth","asin":"B0X","year":2023}`, false, "B0X", "Book"},
+		{"partial", `{"title":"Partial"}`, false, "", "Partial"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			meta, asin := parseOperationMetadata(tt.input)
+			if tt.wantNil {
+				assert.Nil(t, meta)
+				assert.Empty(t, asin)
+			} else {
+				require.NotNil(t, meta)
+				assert.Equal(t, tt.wantASIN, asin)
+				assert.Equal(t, tt.wantTitle, meta.Title)
+			}
+		})
+	}
+}
+
 func TestResolveBookMetadata_ASINFromFolder(t *testing.T) {
 	// No DB match, no audio files, just ASIN in folder name
 	executor := &Executor{DB: setupTestDB(t)}

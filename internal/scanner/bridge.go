@@ -16,16 +16,17 @@ type BridgeResult struct {
 
 // actionableTypes maps issue types that can be auto-planned to their operation type.
 var actionableTypes = map[IssueType]string{
-	IssueNestedAudio: "flatten",
-	IssueEmptyDir:    "delete",
-	IssueOrphanFiles: "delete",
+	IssueNestedAudio:     "flatten",
+	IssueEmptyDir:        "delete",
+	IssueOrphanFiles:     "delete",
+	IssueMissingMetadata: "write_metadata",
 }
 
 // CreatePlanFromIssues translates scan issues into a plan with operations.
-// Only actionable issue types get operations (nested_audio -> flatten, empty_dir -> delete,
-// orphan_files -> delete). Non-actionable types (no_asin, multi_book, cover_missing,
-// missing_metadata, wrong_structure) are skipped because they require human judgment
-// or separate workflows.
+// Actionable issue types: nested_audio -> flatten, empty_dir -> delete,
+// orphan_files -> delete, missing_metadata -> write_metadata.
+// Non-actionable types (no_asin, multi_book, cover_missing, wrong_structure)
+// are skipped because they require human judgment or separate workflows.
 // Returns BridgeResult with plan ID and counts, or error if no actionable issues found.
 func CreatePlanFromIssues(database *sql.DB, issues []db.ScanIssue) (*BridgeResult, error) {
 	// Filter to actionable issues
