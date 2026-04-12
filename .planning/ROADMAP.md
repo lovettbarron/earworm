@@ -259,14 +259,14 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
 | 10. Deep Library Scanner | 0/3 | Planned | - |
-| 11. Structural Operations & Metadata | 1/2 | Complete    | 2026-04-07 |
+| 11. Structural Operations & Metadata | 2/2 | Complete    | 2026-04-07 |
 | 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
-| 13. CSV Import & Guarded Cleanup | 1/2 | Complete    | 2026-04-10 |
+| 13. CSV Import & Guarded Cleanup | 2/2 | Complete    | 2026-04-10 |
 | 14. Multi-Book Split & Claude Skill | 2/2 | Complete    | 2026-04-11 |
 | 15. Data Safety Hardening for NAS Ops | 4/4 | Complete    | 2026-04-11 |
 | 16. Plan Lifecycle — Draft Promotion | 1/1 | Complete    | 2026-04-12 |
 | 17. Scan-to-Plan Bridge & JSON Output | 0/2 | Planned | - |
-| 18. Metadata Wiring & Artifact Cleanup | 0/0 | Planned | - |
+| 18. Metadata Wiring & Artifact Cleanup | 0/2 | Planned | - |
 
 ### Phase 15: Data Safety Hardening for NAS Operations
 **Goal**: Make file operations safe for irreplaceable NAS data by fixing the compounding fsync/hash/delete chain, adding audit coverage to permanent delete, and guarding against partial-failure cleanup
@@ -329,3 +329,7 @@ Plans:
   4. ROADMAP.md progress table and phase checkboxes reflect actual completion state
   5. SUMMARY frontmatter gaps fixed for 09-02, 11-01, 11-02
   6. Tests cover metadata wiring with real book data
+**Plans**: 2 plans
+Plans:
+- [ ] 18-01-PLAN.md — Wire BuildABSMetadata into plan engine with real book metadata
+- [ ] 18-02-PLAN.md — Fix stale documentation artifacts from v1.1 audit
