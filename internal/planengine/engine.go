@@ -11,6 +11,8 @@ import (
 
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/fileops"
+	"github.com/lovettbarron/earworm/internal/metadata"
+	"github.com/lovettbarron/earworm/internal/scanner"
 )
 
 // Executor applies plans by dispatching operations to fileops primitives.
@@ -255,6 +257,61 @@ func (e *Executor) prepareResume(planID int64) error {
 	return nil
 }
 
+// bookToMetadata converts a db.Book to a metadata.BookMetadata.
+func bookToMetadata(book *db.Book) *metadata.BookMetadata {
+	return &metadata.BookMetadata{
+		Title:        book.Title,
+		Author:       book.Author,
+		Narrator:     book.Narrator,
+		Genre:        book.Genre,
+		Year:         book.Year,
+		Series:       book.Series,
+		HasCover:     book.HasCover,
+		Duration:     book.Duration,
+		ChapterCount: book.ChapterCount,
+		FileCount:    book.FileCount,
+	}
+}
+
+// resolveBookMetadata resolves metadata for a book directory using a layered fallback chain:
+// 1. DB lookup by local_path
+// 2. Library items -> books lookup by ASIN
+// 3. File-based metadata extraction
+// 4. Empty metadata with ASIN from folder name
+func (e *Executor) resolveBookMetadata(bookDir string) (*metadata.BookMetadata, string) {
+	// 1. Try DB lookup by local_path
+	book, err := db.GetBookByLocalPath(e.DB, bookDir)
+	if err == nil && book != nil {
+		return bookToMetadata(book), book.ASIN
+	}
+
+	// 2. Try library_items -> books lookup
+	item, err := db.GetLibraryItem(e.DB, bookDir)
+	if err == nil && item != nil && item.ASIN != "" {
+		book, err := db.GetBook(e.DB, item.ASIN)
+		if err == nil && book != nil {
+			return bookToMetadata(book), book.ASIN
+		}
+	}
+
+	// 3. Fallback to file-based extraction
+	meta, err := metadata.ExtractMetadata(bookDir)
+	if err == nil && meta != nil {
+		asin := ""
+		if extracted, ok := scanner.ExtractASIN(filepath.Base(bookDir)); ok {
+			asin = extracted
+		}
+		return meta, asin
+	}
+
+	// 4. Empty metadata with ASIN from folder name
+	asin := ""
+	if extracted, ok := scanner.ExtractASIN(filepath.Base(bookDir)); ok {
+		asin = extracted
+	}
+	return &metadata.BookMetadata{}, asin
+}
+
 // executeOp dispatches a single operation to the appropriate fileops function.
 func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult {
 	result := OpResult{OperationID: op.ID}
@@ -309,14 +366,9 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 		result.Success = true
 
 	case "write_metadata":
-		if err := fileops.WriteMetadataSidecar(op.SourcePath, fileops.ABSMetadata{
-			Tags:      []string{},
-			Chapters:  []fileops.ABSChapter{},
-			Authors:   []string{},
-			Narrators: []string{},
-			Series:    []string{},
-			Genres:    []string{},
-		}); err != nil {
+		bookMeta, asin := e.resolveBookMetadata(op.SourcePath)
+		absMeta := fileops.BuildABSMetadata(bookMeta, asin)
+		if err := fileops.WriteMetadataSidecar(op.SourcePath, absMeta); err != nil {
 			result.Error = err.Error()
 			return result
 		}

@@ -525,3 +525,121 @@ func TestApplyPlan_PreflightAggregatesAllMissing(t *testing.T) {
 	assert.Contains(t, err.Error(), "gone1.m4a")
 	assert.Contains(t, err.Error(), "gone2.m4a")
 }
+
+func TestWriteMetadata_WithDBBook(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	// Create a book directory
+	bookDir := filepath.Join(tmpDir, "Author Name", "My Book [B08XYZ1234]")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+
+	// Insert a book with local_path matching the temp dir
+	err := db.UpsertBook(sqlDB, db.Book{
+		ASIN:      "B08XYZ1234",
+		Title:     "My Book",
+		Author:    "Author Name",
+		Narrator:  "Narrator Person",
+		Genre:     "Fiction",
+		Year:      2023,
+		Status:    "organized",
+		LocalPath: bookDir,
+	})
+	require.NoError(t, err)
+
+	planID := createReadyPlan(t, sqlDB, "write-meta-db", []db.PlanOperation{
+		{Seq: 1, OpType: "write_metadata", SourcePath: bookDir},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.True(t, results[0].Success)
+
+	// Read and verify metadata.json
+	metaPath := filepath.Join(bookDir, "metadata.json")
+	data, err := os.ReadFile(metaPath)
+	require.NoError(t, err)
+
+	var meta map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &meta))
+	assert.Equal(t, "My Book", meta["title"])
+	assert.Equal(t, "B08XYZ1234", meta["asin"])
+	authors, ok := meta["authors"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, authors, 1)
+	assert.Equal(t, "Author Name", authors[0])
+}
+
+func TestWriteMetadata_FallbackEmpty(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	// Create a directory with no DB match and no audio files
+	bookDir := filepath.Join(tmpDir, "Unknown", "No Match")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+
+	planID := createReadyPlan(t, sqlDB, "write-meta-fallback", []db.PlanOperation{
+		{Seq: 1, OpType: "write_metadata", SourcePath: bookDir},
+	})
+
+	executor := &Executor{DB: sqlDB}
+	results, err := executor.Apply(context.Background(), planID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.True(t, results[0].Success, "should succeed with graceful degradation")
+
+	// Read and verify metadata.json has valid structure
+	metaPath := filepath.Join(bookDir, "metadata.json")
+	data, err := os.ReadFile(metaPath)
+	require.NoError(t, err)
+
+	var meta map[string]interface{}
+	require.NoError(t, json.Unmarshal(data, &meta))
+	// Tags, chapters, authors, narrators should be arrays (not null)
+	assert.IsType(t, []interface{}{}, meta["tags"])
+	assert.IsType(t, []interface{}{}, meta["chapters"])
+}
+
+func TestResolveBookMetadata_DBLookup(t *testing.T) {
+	sqlDB := setupTestDB(t)
+	tmpDir := t.TempDir()
+
+	bookDir := filepath.Join(tmpDir, "Author", "Title [BABC123456]")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+
+	err := db.UpsertBook(sqlDB, db.Book{
+		ASIN:      "BABC123456",
+		Title:     "Title",
+		Author:    "Author",
+		Narrator:  "Narrator",
+		Genre:     "SciFi",
+		Year:      2020,
+		Status:    "organized",
+		LocalPath: bookDir,
+	})
+	require.NoError(t, err)
+
+	executor := &Executor{DB: sqlDB}
+	meta, asin := executor.resolveBookMetadata(bookDir)
+	require.NotNil(t, meta)
+	assert.Equal(t, "Title", meta.Title)
+	assert.Equal(t, "Author", meta.Author)
+	assert.Equal(t, "Narrator", meta.Narrator)
+	assert.Equal(t, "SciFi", meta.Genre)
+	assert.Equal(t, 2020, meta.Year)
+	assert.Equal(t, "BABC123456", asin)
+}
+
+func TestResolveBookMetadata_ASINFromFolder(t *testing.T) {
+	// No DB match, no audio files, just ASIN in folder name
+	executor := &Executor{DB: setupTestDB(t)}
+	tmpDir := t.TempDir()
+	bookDir := filepath.Join(tmpDir, "Author", "Title [B08XYZ1234]")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+
+	meta, asin := executor.resolveBookMetadata(bookDir)
+	require.NotNil(t, meta)
+	assert.Equal(t, "B08XYZ1234", asin)
+}
