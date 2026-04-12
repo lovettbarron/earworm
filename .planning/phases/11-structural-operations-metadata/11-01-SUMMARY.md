@@ -25,6 +25,7 @@ decisions:
 metrics:
   duration: 2min
   completed: 2026-04-07
+requirements_completed: [FOPS-01]
 ---
 
 # Phase 11 Plan 01: SHA-256 Hash, Verified Move, and FlattenDir Summary
