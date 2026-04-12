@@ -181,9 +181,9 @@ Plans:
   7. Unit tests cover all 8 issue detectors, deep scan traversal, DB persistence, and CLI integration
 **Plans**: 3 plans
 Plans:
-- [ ] 10-01-PLAN.md — Migration 006 (scan_issues table), ScanIssue CRUD functions and tests
-- [ ] 10-02-PLAN.md — Issue detection heuristics (8 detectors as pure functions) with tests
-- [ ] 10-03-PLAN.md — DeepScanLibrary orchestrator, CLI --deep flag wiring, integration tests
+- [x] 10-01-PLAN.md — Migration 006 (scan_issues table), ScanIssue CRUD functions and tests
+- [x] 10-02-PLAN.md — Issue detection heuristics (8 detectors as pure functions) with tests
+- [x] 10-03-PLAN.md — DeepScanLibrary orchestrator, CLI --deep flag wiring, integration tests
 
 ### Phase 11: Structural Operations & Metadata
 **Goal**: The file operation primitives exist for plan execution — flatten nested directories, write metadata sidecars, and verify file integrity via SHA-256
@@ -196,8 +196,8 @@ Plans:
   4. Failed operations leave source files intact (no data loss on verification failure)
 **Plans**: 2 plans
 Plans:
-- [ ] 11-01-PLAN.md — SHA-256 hash utility, verified move, FlattenDir with collision handling
-- [ ] 11-02-PLAN.md — Audiobookshelf metadata.json sidecar writer (ABSMetadata, BuildABSMetadata, WriteMetadataSidecar)
+- [x] 11-01-PLAN.md — SHA-256 hash utility, verified move, FlattenDir with collision handling
+- [x] 11-02-PLAN.md — Audiobookshelf metadata.json sidecar writer (ABSMetadata, BuildABSMetadata, WriteMetadataSidecar)
 
 ### Phase 12: Plan Engine & CLI
 **Goal**: Users can go from scan results to reviewed, executed plans through CLI commands — the full scan-to-plan-to-apply workflow works end to end
@@ -258,7 +258,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 7. Fix Download→Organize Pipeline | 2/2 | Complete | Yes |
 | 8. Test Coverage & Doc Cleanup | 3/3 | Complete | Yes |
 | 9. Plan Infrastructure & DB Schema | 2/2 | Complete | 2026-04-07 |
-| 10. Deep Library Scanner | 0/3 | Planned | - |
+| 10. Deep Library Scanner | 3/3 | Complete | 2026-04-07 |
 | 11. Structural Operations & Metadata | 2/2 | Complete    | 2026-04-07 |
 | 12. Plan Engine & CLI | 2/2 | Complete    | 2026-04-10 |
 | 13. CSV Import & Guarded Cleanup | 2/2 | Complete    | 2026-04-10 |
@@ -266,7 +266,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 15. Data Safety Hardening for NAS Ops | 4/4 | Complete    | 2026-04-11 |
 | 16. Plan Lifecycle — Draft Promotion | 1/1 | Complete    | 2026-04-12 |
 | 17. Scan-to-Plan Bridge & JSON Output | 1/2 | In Progress|  |
-| 18. Metadata Wiring & Artifact Cleanup | 0/2 | Planned | - |
+| 18. Metadata Wiring & Artifact Cleanup | 2/2 | Complete | 2026-04-12 |
 
 ### Phase 15: Data Safety Hardening for NAS Operations
 **Goal**: Make file operations safe for irreplaceable NAS data by fixing the compounding fsync/hash/delete chain, adding audit coverage to permanent delete, and guarding against partial-failure cleanup
@@ -331,5 +331,5 @@ Plans:
   6. Tests cover metadata wiring with real book data
 **Plans**: 2 plans
 Plans:
-- [ ] 18-01-PLAN.md — Wire BuildABSMetadata into plan engine with real book metadata
-- [ ] 18-02-PLAN.md — Fix stale documentation artifacts from v1.1 audit
+- [x] 18-01-PLAN.md — Wire BuildABSMetadata into plan engine with real book metadata
+- [x] 18-02-PLAN.md — Fix stale documentation artifacts from v1.1 audit

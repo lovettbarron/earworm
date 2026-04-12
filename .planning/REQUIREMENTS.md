@@ -66,7 +66,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLAN-03 | Phase 12, Phase 16 | Complete (draft promotion gap closure in Ph16) |
 | PLAN-04 | Phase 13, Phase 16 | Complete (draft promotion gap closure in Ph16) |
 | FOPS-01 | Phase 11, Phase 18 | Complete (checkbox fix in Ph18) |
-| FOPS-02 | Phase 11, Phase 18 | Pending (metadata wiring in Ph18) |
+| FOPS-02 | Phase 11, Phase 18 | Complete (metadata wiring in Ph18) |
 | FOPS-03 | Phase 13 | Complete |
 | FOPS-04 | Phase 14, Phase 16 | Complete (draft promotion gap closure in Ph16) |
 | INTG-01 | Phase 9, Phase 18 | Complete (frontmatter fix in Ph18) |
