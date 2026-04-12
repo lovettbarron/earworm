@@ -26,6 +26,10 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	filterStatus = ""
 	scanRecursive = false
 	scanDeep = false
+	scanJSON = false
+	scanIssuesJSON = false
+	scanCreatePlan = false
+	scanFilterType = ""
 	syncJSON = false
 	dryRun = false
 	downloadJSON = false
@@ -48,6 +52,15 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 				_ = f.Value.Set("false")
 			}
 		})
+		// Reset nested subcommand flags (e.g., scan issues)
+		for _, sub := range cmd.Commands() {
+			sub.Flags().VisitAll(func(f *pflag.Flag) {
+				f.Changed = false
+				if f.Name == "help" {
+					_ = f.Value.Set("false")
+				}
+			})
+		}
 	}
 	rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
 		f.Changed = false

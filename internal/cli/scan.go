@@ -2,6 +2,7 @@ package cli
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -15,6 +16,10 @@ import (
 
 var scanRecursive bool
 var scanDeep bool
+var scanJSON bool
+var scanIssuesJSON bool
+var scanCreatePlan bool
+var scanFilterType string
 
 var scanCmd = &cobra.Command{
 	Use:   "scan",
@@ -27,10 +32,46 @@ Use --recursive to search deeply nested directory structures.`,
 	RunE: runScan,
 }
 
+var scanIssuesCmd = &cobra.Command{
+	Use:   "issues",
+	Short: "List detected issues from the last deep scan",
+	Long: `List issues detected by the last 'earworm scan --deep' run.
+Use --type to filter by issue type (e.g., nested_audio, empty_dir).
+Use --create-plan to generate a remediation plan from actionable issues.`,
+	RunE: runScanIssues,
+}
+
 func init() {
 	scanCmd.Flags().BoolVarP(&scanRecursive, "recursive", "r", false, "recursively scan nested directories")
 	scanCmd.Flags().BoolVar(&scanDeep, "deep", false, "scan all folders including those without ASINs and detect issues")
+	scanCmd.Flags().BoolVar(&scanJSON, "json", false, "output in JSON format (only with --deep)")
+
+	scanIssuesCmd.Flags().BoolVar(&scanIssuesJSON, "json", false, "output in JSON format")
+	scanIssuesCmd.Flags().BoolVar(&scanCreatePlan, "create-plan", false, "create a plan from detected issues")
+	scanIssuesCmd.Flags().StringVar(&scanFilterType, "type", "", "filter issues by type")
+	scanCmd.AddCommand(scanIssuesCmd)
+
 	rootCmd.AddCommand(scanCmd)
+}
+
+// deepScanJSON is the JSON output structure for scan --deep --json.
+type deepScanJSON struct {
+	TotalDirs   int              `json:"total_dirs"`
+	WithASIN    int              `json:"with_asin"`
+	WithoutASIN int              `json:"without_asin"`
+	IssuesFound int              `json:"issues_found"`
+	IssueCounts map[string]int   `json:"issue_counts"`
+	Issues      []scanIssueJSON  `json:"issues"`
+}
+
+// scanIssueJSON is the JSON representation of a single scan issue.
+type scanIssueJSON struct {
+	ID              int64  `json:"id"`
+	Path            string `json:"path"`
+	IssueType       string `json:"issue_type"`
+	Severity        string `json:"severity"`
+	Message         string `json:"message"`
+	SuggestedAction string `json:"suggested_action"`
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -139,9 +180,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 }
 
 func runDeepScan(cmd *cobra.Command, database *sql.DB, libPath string) error {
-	// Start spinner
+	// Start spinner (skip in JSON mode to keep output clean)
 	spin := NewSpinner(cmd.ErrOrStderr(), "Deep scanning")
-	if !quiet {
+	if !quiet && !scanJSON {
 		spin.Start()
 	}
 
@@ -167,11 +208,52 @@ func runDeepScan(cmd *cobra.Command, database *sql.DB, libPath string) error {
 	}
 
 	result, err := scanner.DeepScanLibrary(libPath, database, metadataFn)
-	if !quiet {
+	if !quiet && !scanJSON {
 		spin.Stop()
 	}
 	if err != nil {
 		return fmt.Errorf("deep scan failed: %w", err)
+	}
+
+	// JSON output mode
+	if scanJSON {
+		// Query persisted issues for full details
+		issues, err := db.ListScanIssues(database)
+		if err != nil {
+			return fmt.Errorf("list scan issues: %w", err)
+		}
+
+		// Convert IssueCounts keys from scanner.IssueType to string
+		issueCounts := make(map[string]int, len(result.IssueCounts))
+		for k, v := range result.IssueCounts {
+			issueCounts[string(k)] = v
+		}
+
+		// Build JSON issue list
+		jsonIssues := make([]scanIssueJSON, len(issues))
+		for i, issue := range issues {
+			jsonIssues[i] = scanIssueJSON{
+				ID:              issue.ID,
+				Path:            issue.Path,
+				IssueType:       issue.IssueType,
+				Severity:        issue.Severity,
+				Message:         issue.Message,
+				SuggestedAction: issue.SuggestedAction,
+			}
+		}
+
+		out := deepScanJSON{
+			TotalDirs:   result.TotalDirs,
+			WithASIN:    result.WithASIN,
+			WithoutASIN: result.WithoutASIN,
+			IssuesFound: result.IssuesFound,
+			IssueCounts: issueCounts,
+			Issues:      jsonIssues,
+		}
+
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(out)
 	}
 
 	// Print summary to stdout
@@ -187,6 +269,62 @@ func runDeepScan(cmd *cobra.Command, database *sql.DB, libPath string) error {
 		for issueType, count := range result.IssueCounts {
 			fmt.Fprintf(cmd.ErrOrStderr(), "  %-20s %d\n", issueType, count)
 		}
+	}
+
+	return nil
+}
+
+func runScanIssues(cmd *cobra.Command, args []string) error {
+	// Open database
+	dbPath, err := config.DBPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine database path: %w", err)
+	}
+	database, err := db.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer database.Close()
+
+	// Fetch issues (filtered or all)
+	var issues []db.ScanIssue
+	if scanFilterType != "" {
+		issues, err = db.ListScanIssuesByType(database, scanFilterType)
+	} else {
+		issues, err = db.ListScanIssues(database)
+	}
+	if err != nil {
+		return fmt.Errorf("list scan issues: %w", err)
+	}
+
+	// Create plan mode
+	if scanCreatePlan {
+		result, err := scanner.CreatePlanFromIssues(database, issues)
+		if err != nil {
+			return fmt.Errorf("create plan: %w", err)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Plan created: ID %d\n", result.PlanID)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %d operations created\n", result.Created)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %d issues skipped (require manual review)\n", result.Skipped)
+		return nil
+	}
+
+	// JSON output mode
+	if scanIssuesJSON {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(issues)
+	}
+
+	// Human-readable output
+	if len(issues) == 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "No issues found.\n")
+		return nil
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Scan issues (%d):\n", len(issues))
+	for _, issue := range issues {
+		fmt.Fprintf(cmd.OutOrStdout(), "  %-12s %-8s %s\n    %s\n", issue.IssueType, issue.Severity, issue.Path, issue.Message)
 	}
 
 	return nil
