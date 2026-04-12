@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 )
 
@@ -183,6 +184,23 @@ func GetBook(db *sql.DB, asin string) (*Book, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get book %s: %w", asin, err)
+	}
+	return b, nil
+}
+
+// GetBookByLocalPath retrieves a book by its local_path. Returns nil and no error if not found.
+func GetBookByLocalPath(db *sql.DB, localPath string) (*Book, error) {
+	localPath = filepath.Clean(localPath)
+	row := db.QueryRow(
+		`SELECT `+allColumns+` FROM books WHERE local_path = ?`,
+		localPath,
+	)
+	b, err := scanBook(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get book by local path %s: %w", localPath, err)
 	}
 	return b, nil
 }

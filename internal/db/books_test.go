@@ -340,6 +340,54 @@ func TestUpdateOrganizeResult_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestGetBookByLocalPath_Found(t *testing.T) {
+	db := setupTestDB(t)
+
+	err := UpsertBook(db, Book{
+		ASIN:      "GBLP001",
+		Title:     "Found Book",
+		Author:    "Test Author",
+		Status:    "organized",
+		LocalPath: "/library/Test Author/Found Book [GBLP001]",
+	})
+	require.NoError(t, err)
+
+	got, err := GetBookByLocalPath(db, "/library/Test Author/Found Book [GBLP001]")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, "GBLP001", got.ASIN)
+	assert.Equal(t, "Found Book", got.Title)
+	assert.Equal(t, "Test Author", got.Author)
+	assert.Equal(t, "/library/Test Author/Found Book [GBLP001]", got.LocalPath)
+}
+
+func TestGetBookByLocalPath_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+
+	got, err := GetBookByLocalPath(db, "/nonexistent/path")
+	require.NoError(t, err)
+	assert.Nil(t, got, "should return nil for nonexistent path")
+}
+
+func TestGetBookByLocalPath_CleanPath(t *testing.T) {
+	db := setupTestDB(t)
+
+	err := UpsertBook(db, Book{
+		ASIN:      "GBLP002",
+		Title:     "Clean Path Book",
+		Author:    "Author",
+		Status:    "organized",
+		LocalPath: "/library/Author/Clean Path Book [GBLP002]",
+	})
+	require.NoError(t, err)
+
+	// Query with trailing slash — filepath.Clean should normalize
+	got, err := GetBookByLocalPath(db, "/library/Author/Clean Path Book [GBLP002]/")
+	require.NoError(t, err)
+	require.NotNil(t, got, "should find book after path normalization")
+	assert.Equal(t, "GBLP002", got.ASIN)
+}
+
 func TestMigration004Applied(t *testing.T) {
 	db := setupTestDB(t)
 
