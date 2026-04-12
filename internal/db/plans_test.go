@@ -217,6 +217,72 @@ func TestUpdatePlanStatusAudited(t *testing.T) {
 	assert.True(t, entries[0].Success)
 }
 
+func TestAddOperationWithMetadata(t *testing.T) {
+	db := setupTestDB(t)
+
+	planID, err := CreatePlan(db, "meta-plan", "desc")
+	require.NoError(t, err)
+
+	opID, err := AddOperation(db, PlanOperation{
+		PlanID:     planID,
+		Seq:        1,
+		OpType:     "write_metadata",
+		SourcePath: "/lib/Book1",
+		Metadata:   `{"title":"Great Book","author":"Jane"}`,
+	})
+	require.NoError(t, err)
+	assert.Greater(t, opID, int64(0))
+
+	ops, err := ListOperations(db, planID)
+	require.NoError(t, err)
+	require.Len(t, ops, 1)
+	assert.Equal(t, `{"title":"Great Book","author":"Jane"}`, ops[0].Metadata)
+}
+
+func TestAddOperationEmptyMetadata(t *testing.T) {
+	db := setupTestDB(t)
+
+	planID, err := CreatePlan(db, "no-meta", "desc")
+	require.NoError(t, err)
+
+	_, err = AddOperation(db, PlanOperation{
+		PlanID:     planID,
+		Seq:        1,
+		OpType:     "move",
+		SourcePath: "/src",
+		DestPath:   "/dst",
+	})
+	require.NoError(t, err)
+
+	ops, err := ListOperations(db, planID)
+	require.NoError(t, err)
+	require.Len(t, ops, 1)
+	assert.Equal(t, "", ops[0].Metadata)
+}
+
+func TestListDeleteOperationsMetadata(t *testing.T) {
+	db := setupTestDB(t)
+
+	planID, err := CreatePlan(db, "del-meta", "desc")
+	require.NoError(t, err)
+	err = UpdatePlanStatus(db, planID, "ready")
+	require.NoError(t, err)
+
+	_, err = AddOperation(db, PlanOperation{
+		PlanID:     planID,
+		Seq:        1,
+		OpType:     "delete",
+		SourcePath: "/lib/old",
+		Metadata:   `{"reason":"duplicate"}`,
+	})
+	require.NoError(t, err)
+
+	ops, err := ListDeleteOperations(db, "ready", 0)
+	require.NoError(t, err)
+	require.Len(t, ops, 1)
+	assert.Equal(t, `{"reason":"duplicate"}`, ops[0].Metadata)
+}
+
 func TestCreatePlanAudited(t *testing.T) {
 	db := setupTestDB(t)
 

@@ -64,6 +64,7 @@ type PlanOperation struct {
 	OpType       string
 	SourcePath   string
 	DestPath     string
+	Metadata     string // JSON blob for operation-specific data; empty for most ops
 	Status       string
 	ErrorMessage string
 	CompletedAt  *time.Time
@@ -254,8 +255,8 @@ func AddOperation(db *sql.DB, op PlanOperation) (int64, error) {
 	}
 
 	result, err := db.Exec(
-		`INSERT INTO plan_operations (plan_id, seq, op_type, source_path, dest_path) VALUES (?, ?, ?, ?, ?)`,
-		op.PlanID, op.Seq, op.OpType, op.SourcePath, op.DestPath,
+		`INSERT INTO plan_operations (plan_id, seq, op_type, source_path, dest_path, metadata) VALUES (?, ?, ?, ?, ?, ?)`,
+		op.PlanID, op.Seq, op.OpType, op.SourcePath, op.DestPath, op.Metadata,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("add operation: %w", err)
@@ -272,7 +273,7 @@ func AddOperation(db *sql.DB, op PlanOperation) (int64, error) {
 // Returns an empty slice (not nil) when no operations exist.
 func ListOperations(db *sql.DB, planID int64) ([]PlanOperation, error) {
 	rows, err := db.Query(
-		`SELECT id, plan_id, seq, op_type, source_path, dest_path, status, error_message, completed_at, created_at, updated_at
+		`SELECT id, plan_id, seq, op_type, source_path, dest_path, metadata, status, error_message, completed_at, created_at, updated_at
 		FROM plan_operations WHERE plan_id = ? ORDER BY seq ASC`,
 		planID,
 	)
@@ -287,7 +288,7 @@ func ListOperations(db *sql.DB, planID int64) ([]PlanOperation, error) {
 		var completedAt sql.NullTime
 		err := rows.Scan(
 			&op.ID, &op.PlanID, &op.Seq, &op.OpType, &op.SourcePath, &op.DestPath,
-			&op.Status, &op.ErrorMessage, &completedAt, &op.CreatedAt, &op.UpdatedAt,
+			&op.Metadata, &op.Status, &op.ErrorMessage, &completedAt, &op.CreatedAt, &op.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan operation row: %w", err)
@@ -312,7 +313,7 @@ func ListOperations(db *sql.DB, planID int64) ([]PlanOperation, error) {
 // Returns an empty slice (not nil) when no operations match.
 func ListDeleteOperations(db *sql.DB, planStatus string, planID int64) ([]PlanOperation, error) {
 	query := `SELECT po.id, po.plan_id, po.seq, po.op_type, po.source_path, po.dest_path,
-		po.status, po.error_message, po.completed_at, po.created_at, po.updated_at
+		po.metadata, po.status, po.error_message, po.completed_at, po.created_at, po.updated_at
 		FROM plan_operations po
 		JOIN plans p ON po.plan_id = p.id
 		WHERE po.op_type = 'delete' AND p.status = ?`
@@ -335,7 +336,7 @@ func ListDeleteOperations(db *sql.DB, planStatus string, planID int64) ([]PlanOp
 		var completedAt sql.NullTime
 		err := rows.Scan(
 			&op.ID, &op.PlanID, &op.Seq, &op.OpType, &op.SourcePath, &op.DestPath,
-			&op.Status, &op.ErrorMessage, &completedAt, &op.CreatedAt, &op.UpdatedAt,
+			&op.Metadata, &op.Status, &op.ErrorMessage, &completedAt, &op.CreatedAt, &op.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan delete operation row: %w", err)
