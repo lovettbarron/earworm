@@ -4,12 +4,80 @@ import (
 	"bufio"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/lovettbarron/earworm/internal/db"
 )
+
+// columnAliases maps common real-world header variants to canonical names.
+// Keys are lowercase, space/hyphen-normalized.
+var columnAliases = map[string]string{
+	"op_type":     "op_type",
+	"type":        "op_type",
+	"operation":   "op_type",
+	"action":      "op_type",
+	"source_path": "source_path",
+	"source":      "source_path",
+	"path":        "source_path",
+	"src":         "source_path",
+	"dest_path":   "dest_path",
+	"destination": "dest_path",
+	"dest":        "dest_path",
+	"target":      "dest_path",
+	"title":       "title",
+	"author":      "author",
+	"narrator":    "narrator",
+	"genre":       "genre",
+	"year":        "year",
+	"series":      "series",
+	"asin":        "asin",
+}
+
+// metadataColumns lists CSV columns that map to BookMetadata fields.
+var metadataColumns = []string{"title", "author", "narrator", "genre", "year", "series", "asin"}
+
+// normalizeHeader converts a raw CSV header to its canonical form.
+func normalizeHeader(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	s = strings.ReplaceAll(s, " ", "_")
+	s = strings.ReplaceAll(s, "-", "_")
+	if canonical, ok := columnAliases[s]; ok {
+		return canonical
+	}
+	return s
+}
+
+// extractMetadataJSON builds a JSON string from metadata columns in a CSV row.
+// Returns empty string if no metadata columns have values.
+func extractMetadataJSON(colIndex map[string]int, record []string) string {
+	m := make(map[string]interface{})
+	for _, col := range metadataColumns {
+		idx, ok := colIndex[col]
+		if !ok || idx >= len(record) {
+			continue
+		}
+		val := strings.TrimSpace(record[idx])
+		if val == "" {
+			continue
+		}
+		if col == "year" {
+			if y, err := strconv.Atoi(val); err == nil {
+				m["year"] = y
+			}
+			continue
+		}
+		m[col] = val
+	}
+	if len(m) == 0 {
+		return ""
+	}
+	data, _ := json.Marshal(m)
+	return string(data)
+}
 
 // CSVRowError records a validation error for a specific CSV row.
 type CSVRowError struct {
@@ -52,10 +120,16 @@ func ImportCSV(database *sql.DB, planName string, r io.Reader) (*CSVImportResult
 		return nil, fmt.Errorf("read CSV header: %w", err)
 	}
 
-	// Build case-insensitive column index map
+	// Build alias-normalized column index map with ambiguity detection
 	colIndex := make(map[string]int, len(header))
+	seen := make(map[string]string) // canonical -> original raw header
 	for i, h := range header {
-		colIndex[strings.ToLower(strings.TrimSpace(h))] = i
+		canonical := normalizeHeader(h)
+		if prev, exists := seen[canonical]; exists {
+			return nil, fmt.Errorf("ambiguous columns: %q and %q both map to %q", prev, strings.TrimSpace(h), canonical)
+		}
+		seen[canonical] = strings.TrimSpace(h)
+		colIndex[canonical] = i
 	}
 
 	// Validate required columns
@@ -76,9 +150,10 @@ func ImportCSV(database *sql.DB, planName string, r io.Reader) (*CSVImportResult
 
 	// Read all data rows and validate
 	type rowData struct {
-		opType string
-		source string
-		dest   string
+		opType   string
+		source   string
+		dest     string
+		metadata string
 	}
 	var rows []rowData
 	var csvErrors []CSVRowError
@@ -128,7 +203,8 @@ func ImportCSV(database *sql.DB, planName string, r io.Reader) (*CSVImportResult
 			})
 		}
 
-		rows = append(rows, rowData{opType: opType, source: source, dest: dest})
+		metadataStr := extractMetadataJSON(colIndex, record)
+		rows = append(rows, rowData{opType: opType, source: source, dest: dest, metadata: metadataStr})
 	}
 
 	// If any errors, return without creating plan
@@ -156,6 +232,7 @@ func ImportCSV(database *sql.DB, planName string, r io.Reader) (*CSVImportResult
 			OpType:     row.opType,
 			SourcePath: row.source,
 			DestPath:   row.dest,
+			Metadata:   row.metadata,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("add operation %d from CSV: %w", i+1, err)
