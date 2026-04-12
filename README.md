@@ -8,6 +8,11 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 - Audible library sync via audible-cli
 - Fault-tolerant batch downloads with rate limiting and crash recovery
 - Automatic organization into `Author/Title [ASIN]/` folder structure
+- Deep library scanning with structural issue detection
+- Plan-based cleanup workflow (review before applying)
+- CSV import for bulk operations with flexible column names and metadata
+- Multi-book folder detection and splitting
+- Skip management for unwanted books
 - Audiobookshelf library scan integration
 - Goodreads CSV export
 - Daemon/polling mode for unattended operation
@@ -113,11 +118,31 @@ Scan a local library directory for existing audiobooks. The library is expected 
 ```bash
 earworm scan
 earworm scan --recursive
+earworm scan --deep          # Also detect structural issues
+earworm scan --deep --json
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--recursive` / `-r` | Recursively scan nested directories |
+| `--deep` | Scan all folders including those without ASINs and detect issues |
+| `--json` | Output in JSON format (only with `--deep`) |
+
+#### `earworm scan issues`
+
+List issues detected by the last `earworm scan --deep` run.
+
+```bash
+earworm scan issues
+earworm scan issues --type nested_audio
+earworm scan issues --create-plan
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
+| `--type <type>` | Filter issues by type (e.g., `nested_audio`, `empty_dir`, `missing_metadata`) |
+| `--create-plan` | Create a remediation plan from actionable issues |
 
 ### `earworm status`
 
@@ -209,6 +234,128 @@ earworm daemon --once --verbose
 | `--interval <duration>` | Polling interval (default: `6h`) |
 | `--verbose` | Enable verbose logging |
 | `--once` | Run one cycle and exit |
+
+### `earworm skip`
+
+Mark books as skipped so they are excluded from future downloads. Use for subscription books you no longer have access to, or books you don't want.
+
+```bash
+earworm skip B08G9PRS1K
+earworm skip B08G9PRS1K B09FKZQ843
+earworm skip B08G9PRS1K --undo    # Un-skip, make downloadable again
+```
+
+| Flag | Description |
+|------|-------------|
+| `--undo` | Un-skip books (mark as unknown again) |
+
+### `earworm plan`
+
+Manage library cleanup plans. Plans contain a set of operations (`move`, `flatten`, `delete`, `write_metadata`) that can be reviewed before applying.
+
+```bash
+earworm plan list
+earworm plan list --status draft
+earworm plan review 5
+earworm plan apply 5              # Dry-run by default
+earworm plan apply 5 --confirm    # Actually apply
+earworm plan import operations.csv
+earworm plan approve 5
+```
+
+#### `earworm plan list`
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
+| `--status <status>` | Filter by plan status |
+
+#### `earworm plan review <plan-id>`
+
+Review a plan's operations before applying.
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
+
+#### `earworm plan apply <plan-id>`
+
+Apply a plan's operations. Dry-run by default -- use `--confirm` to actually apply.
+
+| Flag | Description |
+|------|-------------|
+| `--confirm` | Actually apply the plan (default is dry-run preview) |
+| `--json` | Output in JSON format |
+
+#### `earworm plan import <file.csv>`
+
+Import a plan from a CSV file. The CSV must have columns for operation type, source path, and optionally destination path. Column names are flexible -- common aliases are accepted:
+
+| Canonical | Accepted aliases |
+|-----------|-----------------|
+| `op_type` | `type`, `operation`, `action` |
+| `source_path` | `source`, `path`, `src`, `current_path` |
+| `dest_path` | `destination`, `dest`, `target` |
+
+Metadata columns (`title`, `author`, `narrator`, `genre`, `year`, `series`, `asin`) are extracted as JSON and attached to operations for `write_metadata` use.
+
+| Flag | Description |
+|------|-------------|
+| `--name <name>` | Plan name (defaults to filename without extension) |
+| `--json` | Output in JSON format |
+
+#### `earworm plan approve <plan-id>`
+
+Transition a draft plan to ready status so it can be applied.
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
+
+### `earworm cleanup`
+
+Process delete operations from completed plans by moving files to a trash directory. Requires double confirmation before any files are moved.
+
+```bash
+earworm cleanup
+earworm cleanup --plan-id 5
+earworm cleanup --permanent    # DANGEROUS: permanently deletes
+```
+
+| Flag | Description |
+|------|-------------|
+| `--plan-id <id>` | Only process deletes from this plan |
+| `--permanent` | Permanently delete instead of moving to trash (**dangerous**) |
+| `--json` | Output in JSON format |
+
+### `earworm split`
+
+Detect and split multi-book folders (folders containing audio files from multiple audiobooks).
+
+#### `earworm split detect <path>`
+
+Detect book groupings in a multi-book folder.
+
+```bash
+earworm split detect /path/to/multi-book-folder
+earworm split detect /path/to/multi-book-folder --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
+
+#### `earworm split plan <path>`
+
+Create a split plan for a multi-book folder. Run `detect` first to preview groupings.
+
+```bash
+earworm split plan /path/to/multi-book-folder
+```
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format |
 
 ### `earworm config init`
 
