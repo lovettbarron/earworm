@@ -3,6 +3,7 @@ package cli
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -273,4 +274,56 @@ func TestPlanApprove_JSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &result))
 	assert.Equal(t, float64(1), result["id"])
 	assert.Equal(t, "ready", result["status"])
+}
+
+func TestPlanImport_Approve_Apply(t *testing.T) {
+	database := setupPlanTestDB(t)
+
+	// Create source files that the plan will operate on.
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "book.m4a")
+	dstDir := filepath.Join(tmpDir, "dest")
+	dstFile := filepath.Join(dstDir, "book.m4a")
+	require.NoError(t, os.WriteFile(srcFile, []byte("audio content"), 0644))
+
+	// Write a CSV with a move operation using real paths.
+	csvFile := filepath.Join(t.TempDir(), "import.csv")
+	csvContent := fmt.Sprintf("op_type,source_path,dest_path\nmove,%s,%s\n", srcFile, dstFile)
+	require.NoError(t, os.WriteFile(csvFile, []byte(csvContent), 0644))
+
+	// Step 1: Import creates a draft plan.
+	out, err := executeCommand(t, "plan", "import", csvFile)
+	require.NoError(t, err)
+	assert.Contains(t, out, "Created plan")
+
+	// Verify plan is in draft status.
+	out, err = executeCommand(t, "plan", "list", "--json")
+	require.NoError(t, err)
+	assert.Contains(t, out, `"status": "draft"`)
+
+	// Use the DB directly to verify status is still draft.
+	plan, err := db.GetPlan(database, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "draft", plan.Status)
+
+	// Step 2: Approve the plan.
+	out, err = executeCommand(t, "plan", "approve", "1")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Approved plan 1")
+
+	// Verify status changed to ready.
+	plan, err = db.GetPlan(database, 1)
+	require.NoError(t, err)
+	assert.Equal(t, "ready", plan.Status)
+
+	// Step 3: Apply with --confirm now succeeds.
+	out, err = executeCommand(t, "plan", "apply", "1", "--confirm")
+	require.NoError(t, err)
+	assert.Contains(t, out, "completed")
+
+	// Verify the file was actually moved.
+	_, statErr := os.Stat(srcFile)
+	assert.True(t, os.IsNotExist(statErr), "source should be gone after apply")
+	_, statErr = os.Stat(dstFile)
+	assert.NoError(t, statErr, "dest should exist after apply")
 }
