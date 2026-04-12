@@ -264,6 +264,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 13. CSV Import & Guarded Cleanup | 1/2 | Complete    | 2026-04-10 |
 | 14. Multi-Book Split & Claude Skill | 2/2 | Complete    | 2026-04-11 |
 | 15. Data Safety Hardening for NAS Ops | 4/4 | Complete    | 2026-04-11 |
+| 16. Plan Lifecycle — Draft Promotion | 0/0 | Planned | - |
+| 17. Scan-to-Plan Bridge & JSON Output | 0/0 | Planned | - |
+| 18. Metadata Wiring & Artifact Cleanup | 0/0 | Planned | - |
 
 ### Phase 15: Data Safety Hardening for NAS Operations
 **Goal**: Make file operations safe for irreplaceable NAS data by fixing the compounding fsync/hash/delete chain, adding audit coverage to permanent delete, and guarding against partial-failure cleanup
@@ -282,3 +285,40 @@ Plans:
 - [x] 15-02-PLAN.md — Permanent delete audit logging, idempotent plan engine resume
 - [x] 15-03-PLAN.md — Fix --permanent confirmation prompt, expand split audio extensions (gap closure)
 - [x] 15-04-PLAN.md — Pre-flight source existence and free space checks in plan engine (gap closure)
+
+### Phase 16: Plan Lifecycle — Draft Promotion
+**Goal:** Close the critical draft-to-ready gap so plans created by import, split, and other commands can actually be applied
+**Depends on:** Phase 12
+**Requirements:** PLAN-03, PLAN-04, FOPS-04
+**Gap Closure:** Closes critical integration gap from v1.1 audit — no CLI command to promote draft plans to ready status
+**Success Criteria** (what must be TRUE):
+  1. User can run `earworm plan approve <id>` to transition a plan from draft to ready status
+  2. Plans created by `earworm plan import` can be approved and then applied end-to-end
+  3. Plans created by `earworm split plan` can be approved and then applied end-to-end
+  4. Attempting to approve a non-draft plan returns a clear error
+  5. Tests cover approve command, status transitions, and integration with apply
+
+### Phase 17: Scan-to-Plan Bridge & JSON Output
+**Goal:** Connect deep scan results to the plan system and add machine-readable scan output so the full scan→plan→apply workflow works end-to-end
+**Depends on:** Phase 10, Phase 12
+**Requirements:** SCAN-01, SCAN-03, INTG-02
+**Gap Closure:** Closes high-severity scan-to-plan bridge gap and medium --json gap from v1.1 audit
+**Success Criteria** (what must be TRUE):
+  1. User can run `earworm scan issues` to list persisted scan issues from the last deep scan
+  2. User can create a plan from scan issues (e.g., `earworm scan issues --create-plan`)
+  3. `earworm scan --deep --json` produces machine-readable JSON output
+  4. Created plans follow the standard draft→approve→apply lifecycle
+  5. Tests cover issue listing, plan creation from issues, and JSON output format
+
+### Phase 18: Metadata Wiring & Artifact Cleanup
+**Goal:** Wire BuildABSMetadata into the plan engine and fix all stale documentation artifacts identified by the milestone audit
+**Depends on:** Phase 11, Phase 12
+**Requirements:** FOPS-02, SCAN-02, FOPS-01, PLAN-01, INTG-01
+**Gap Closure:** Closes medium write_metadata integration gap and all documentation/artifact gaps from v1.1 audit
+**Success Criteria** (what must be TRUE):
+  1. Plan engine write_metadata case calls BuildABSMetadata with real book metadata instead of empty ABSMetadata{}
+  2. REQUIREMENTS.md checkboxes for SCAN-02 and FOPS-01 updated to [x] Complete
+  3. REQUIREMENTS.md traceability table includes SAFE-01 through SAFE-05 with Phase 15
+  4. ROADMAP.md progress table and phase checkboxes reflect actual completion state
+  5. SUMMARY frontmatter gaps fixed for 09-02, 11-01, 11-02
+  6. Tests cover metadata wiring with real book data

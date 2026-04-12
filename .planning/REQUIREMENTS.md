@@ -10,7 +10,7 @@ Requirements for Library Cleanup milestone. Each maps to roadmap phases.
 ### Scanning
 
 - [x] **SCAN-01**: User can deep-scan all library folders (not just ASIN-bearing) and detect issues: no_asin, nested_audio, multi_book, missing_metadata, wrong_structure, orphan_files, empty_dir, cover_missing
-- [ ] **SCAN-02**: Library items are tracked in a path-keyed DB table so plans can reference non-Audible content
+- [x] **SCAN-02**: Library items are tracked in a path-keyed DB table so plans can reference non-Audible content
 - [x] **SCAN-03**: Detected scan issues are persisted in DB with severity, category, and suggested action
 
 ### Plan Infrastructure
@@ -22,7 +22,7 @@ Requirements for Library Cleanup milestone. Each maps to roadmap phases.
 
 ### File Operations
 
-- [ ] **FOPS-01**: User can flatten nested audio directories, moving files up to the book folder level
+- [x] **FOPS-01**: User can flatten nested audio directories, moving files up to the book folder level
 - [ ] **FOPS-02**: User can write Audiobookshelf-compatible metadata.json sidecars without modifying audio files
 - [x] **FOPS-03**: User can run a guarded cleanup command with trash-dir default, double confirmation, and audit logging — separated from plan apply
 - [x] **FOPS-04**: User can split multi-book folders into separate directories with content-based detection
@@ -58,23 +58,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCAN-01 | Phase 10 | Complete |
-| SCAN-02 | Phase 9 | Pending |
-| SCAN-03 | Phase 10 | Complete |
-| PLAN-01 | Phase 9 | Complete |
+| SCAN-01 | Phase 10, Phase 17 | Complete (bridge gap closure in Ph17) |
+| SCAN-02 | Phase 9 | Complete |
+| SCAN-03 | Phase 10, Phase 17 | Complete (bridge gap closure in Ph17) |
+| PLAN-01 | Phase 9, Phase 18 | Complete (frontmatter fix in Ph18) |
 | PLAN-02 | Phase 12 | Complete |
-| PLAN-03 | Phase 12 | Complete |
-| PLAN-04 | Phase 13 | Complete |
-| FOPS-01 | Phase 11 | Pending |
-| FOPS-02 | Phase 11 | Pending |
+| PLAN-03 | Phase 12, Phase 16 | Complete (draft promotion gap closure in Ph16) |
+| PLAN-04 | Phase 13, Phase 16 | Complete (draft promotion gap closure in Ph16) |
+| FOPS-01 | Phase 11, Phase 18 | Complete (checkbox fix in Ph18) |
+| FOPS-02 | Phase 11, Phase 18 | Pending (metadata wiring in Ph18) |
 | FOPS-03 | Phase 13 | Complete |
-| FOPS-04 | Phase 14 | Complete |
-| INTG-01 | Phase 9 | Complete |
-| INTG-02 | Phase 14 | Complete |
+| FOPS-04 | Phase 14, Phase 16 | Complete (draft promotion gap closure in Ph16) |
+| INTG-01 | Phase 9, Phase 18 | Complete (frontmatter fix in Ph18) |
+| INTG-02 | Phase 14, Phase 17 | Complete (--json gap closure in Ph17) |
+| SAFE-01 | Phase 15 | Complete |
+| SAFE-02 | Phase 15 | Complete |
+| SAFE-03 | Phase 15 | Complete |
+| SAFE-04 | Phase 15 | Complete |
+| SAFE-05 | Phase 15 | Complete |
 
 **Coverage:**
-- v1.1 requirements: 13 total
-- Mapped to phases: 13
+- v1.1 requirements: 13 total + 5 SAFE (phase-local)
+- Mapped to phases: 18
 - Unmapped: 0
 
 ---
