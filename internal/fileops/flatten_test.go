@@ -90,6 +90,19 @@ func TestFlattenDir_CleansEmptyDirs(t *testing.T) {
 	assert.GreaterOrEqual(t, len(result.DirsRemoved), 3)
 }
 
+func TestFlattenDir_MovesMP3Files(t *testing.T) {
+	bookDir := t.TempDir()
+	createFile(t, filepath.Join(bookDir, "sub", "chapter01.mp3"), "mp3audio")
+	createFile(t, filepath.Join(bookDir, "sub", "chapter02.mp3"), "mp3audio2")
+
+	result, err := FlattenDir(bookDir)
+	require.NoError(t, err)
+	assert.Len(t, result.FilesMoved, 2)
+
+	assert.FileExists(t, filepath.Join(bookDir, "chapter01.mp3"))
+	assert.FileExists(t, filepath.Join(bookDir, "chapter02.mp3"))
+}
+
 func TestFlattenDir_IgnoresNonAudioFiles(t *testing.T) {
 	bookDir := t.TempDir()
 	createFile(t, filepath.Join(bookDir, "sub", "notes.txt"), "not audio")

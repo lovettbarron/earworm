@@ -26,7 +26,7 @@ type FileMoveResult struct {
 	Error      string
 }
 
-// FlattenDir moves all nested audio files (.m4a/.m4b) up to the book folder
+// FlattenDir moves all nested audio files (.m4a/.m4b/.mp3) up to the book folder
 // root. It handles filename collisions with numeric suffixes, verifies each
 // move with SHA-256 hashing, and cleans up empty subdirectories bottom-up.
 // Per-file errors do not abort the remaining files.
@@ -48,7 +48,7 @@ func FlattenDir(bookDir string) (*FlattenResult, error) {
 		}
 		// Match audio extensions case-insensitively
 		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".m4a" || ext == ".m4b" {
+		if ext == ".m4a" || ext == ".m4b" || ext == ".mp3" {
 			nestedFiles = append(nestedFiles, path)
 		}
 		return nil
