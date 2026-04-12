@@ -264,7 +264,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 13. CSV Import & Guarded Cleanup | 1/2 | Complete    | 2026-04-10 |
 | 14. Multi-Book Split & Claude Skill | 2/2 | Complete    | 2026-04-11 |
 | 15. Data Safety Hardening for NAS Ops | 4/4 | Complete    | 2026-04-11 |
-| 16. Plan Lifecycle — Draft Promotion | 0/0 | Planned | - |
+| 16. Plan Lifecycle — Draft Promotion | 0/1 | Planned | - |
 | 17. Scan-to-Plan Bridge & JSON Output | 0/0 | Planned | - |
 | 18. Metadata Wiring & Artifact Cleanup | 0/0 | Planned | - |
 
@@ -297,6 +297,9 @@ Plans:
   3. Plans created by `earworm split plan` can be approved and then applied end-to-end
   4. Attempting to approve a non-draft plan returns a clear error
   5. Tests cover approve command, status transitions, and integration with apply
+**Plans**: 1 plan
+Plans:
+- [ ] 16-01-PLAN.md — Add plan approve command with tests and import->approve->apply integration
 
 ### Phase 17: Scan-to-Plan Bridge & JSON Output
 **Goal:** Connect deep scan results to the plan system and add machine-readable scan output so the full scan→plan→apply workflow works end-to-end
