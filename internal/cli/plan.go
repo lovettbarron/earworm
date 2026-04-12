@@ -55,6 +55,14 @@ var planImportCmd = &cobra.Command{
 	RunE:  runPlanImport,
 }
 
+var planApproveCmd = &cobra.Command{
+	Use:   "approve [plan-id]",
+	Short: "Approve a draft plan for execution",
+	Long:  "Transition a plan from draft to ready status so it can be applied.",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runPlanApprove,
+}
+
 func init() {
 	planListCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
 	planListCmd.Flags().StringVar(&planStatus, "status", "", "filter by plan status")
@@ -63,7 +71,8 @@ func init() {
 	planApplyCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
 	planImportCmd.Flags().StringVar(&planImportName, "name", "", "plan name (defaults to filename without extension)")
 	planImportCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
-	planCmd.AddCommand(planListCmd, planReviewCmd, planApplyCmd, planImportCmd)
+	planApproveCmd.Flags().BoolVar(&planJSON, "json", false, "output in JSON format")
+	planCmd.AddCommand(planListCmd, planReviewCmd, planApplyCmd, planImportCmd, planApproveCmd)
 	rootCmd.AddCommand(planCmd)
 }
 
@@ -317,5 +326,50 @@ func runPlanImport(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Created plan %d (%q) with %d operations\n",
 		result.PlanID, planName, result.RowCount)
+	return nil
+}
+
+func runPlanApprove(cmd *cobra.Command, args []string) error {
+	planID, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid plan ID %q: %w", args[0], err)
+	}
+
+	dbPath, err := config.DBPath()
+	if err != nil {
+		return fmt.Errorf("failed to determine database path: %w", err)
+	}
+	database, err := db.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer database.Close()
+
+	plan, err := db.GetPlan(database, planID)
+	if err != nil {
+		return fmt.Errorf("failed to get plan: %w", err)
+	}
+	if plan == nil {
+		return fmt.Errorf("plan %d not found", planID)
+	}
+	if plan.Status != "draft" {
+		return fmt.Errorf("can only approve draft plans, current status: %s", plan.Status)
+	}
+
+	if err := db.UpdatePlanStatusAudited(database, planID, "ready"); err != nil {
+		return fmt.Errorf("failed to approve plan: %w", err)
+	}
+
+	if planJSON {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]interface{}{
+			"id":     planID,
+			"name":   plan.Name,
+			"status": "ready",
+		})
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Approved plan %d (%q) — status is now ready\n", planID, plan.Name)
 	return nil
 }
