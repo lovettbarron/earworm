@@ -350,4 +350,4 @@ Plans:
 
 Plans:
 - [x] 18.1-01-PLAN.md — Migration 007, PlanOperation.Metadata field, CSV column aliasing and metadata extraction
-- [ ] 18.1-02-PLAN.md — Executor metadata preference for write_metadata, bridge missing_metadata to write_metadata
+- [x] 18.1-02-PLAN.md — Executor metadata preference for write_metadata, bridge missing_metadata to write_metadata
