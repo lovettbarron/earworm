@@ -1,5 +1,29 @@
 # Milestones
 
+## v1.1 Library Cleanup (Shipped: 2026-04-14)
+
+**Phases completed:** 11 phases, 24 plans, 34 tasks
+**Timeline:** 2026-04-07 → 2026-04-12 (6 days, 172 commits)
+
+**Key accomplishments:**
+
+- Plan infrastructure with DB-backed plans, operations, audit trail, and library_items tracking for non-ASIN content
+- Deep library scanner detecting 8 issue types (no_asin, nested_audio, multi_book, missing_metadata, wrong_structure, orphan_files, empty_dir, cover_missing) with severity and suggested actions
+- File operation primitives: flatten nested audio dirs, SHA-256 verified moves/copies, Audiobookshelf metadata.json sidecars
+- Plan engine with review→approve→apply lifecycle, dry-run default, resume-on-failure, and full audit trail
+- CSV import bridge with flexible column aliases, multi-book folder splitting with content detection, and guarded cleanup with trash-dir safety
+- Data safety hardening: fsync in all copy paths, SHA-256 cross-filesystem verification, idempotent resume, pre-flight checks
+- Scan-to-plan bridge connecting deep scan issues to actionable plans, with JSON output for machine consumption
+- Claude Code skill for conversational library management with mandatory human approval gate
+
+### Known Gaps
+
+- Cleanup command unreachable in normal plan apply flow (plan apply executes deletes directly)
+- SKILL.md missing `scan issues`, `--create-plan`, `plan approve` commands
+- Human verification pending: NAS fsync on NFS/SMB, split on real multi-book folder, scan→plan on real library
+
+---
+
 ## v1.0 MVP (Shipped: 2026-04-06)
 
 **Phases completed:** 8 phases, 22 plans, 31 tasks

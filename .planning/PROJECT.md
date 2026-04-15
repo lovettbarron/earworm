@@ -10,11 +10,13 @@ Reliably download and organize Audible audiobooks into a local library with zero
 
 ## Current State
 
-**Shipped:** v1.0 MVP (2026-04-06)
-**In progress:** v1.1 Library Cleanup — Phase 18.1 complete (CSV Metadata Flow & Format Flexibility)
-**Codebase:** ~134k lines Go across 15 packages, 83.2% test coverage
+**Shipped:** v1.1 Library Cleanup (2026-04-14)
+**Previous:** v1.0 MVP (2026-04-06)
+**Next milestone:** Not yet planned
+**Codebase:** ~134k lines Go across 15+ packages, 83.2% test coverage
 **Tech stack:** Go 1.23+, Cobra/Viper CLI, modernc.org/sqlite (pure Go, no CGo), charmbracelet/lipgloss
 **Commands:** auth, sync, scan, status, download, organize, notify, goodreads, daemon, config, version, skip, plan, cleanup, split
+**DB migrations:** 7 (schema_versions, books, audible metadata, download tracking, plan infrastructure, scan issues, operation metadata)
 
 ## Requirements
 
@@ -42,21 +44,21 @@ Reliably download and organize Audible audiobooks into a local library with zero
 - ✓ Daemon/polling mode for unattended operation — v1.0
 - ✓ Comprehensive README with all commands — v1.0
 - ✓ >80% test coverage across all packages — v1.0
+- ✓ Deep library scanning (all folders, 8 issue types) — v1.1
+- ✓ Plan infrastructure (plan→review→approve→apply DB-backed workflow) — v1.1
+- ✓ Metadata application (write metadata.json sidecars, no audio modification) — v1.1
+- ✓ Structural operations (flatten nested audio, SHA-256 verification) — v1.1
+- ✓ Plan execution engine (dry-run default, resume-on-failure, audit trail) — v1.1
+- ✓ CSV import for plan creation with flexible column aliases — v1.1
+- ✓ Guarded cleanup command (trash-dir default, double confirmation) — v1.1
+- ✓ Multi-book folder detection and split planning — v1.1
+- ✓ Data safety hardening (fsync, SHA-256 cross-FS verification, idempotent resume) — v1.1
+- ✓ Scan-to-plan bridge (scan issues → auto-plan creation) — v1.1
+- ✓ Claude Code skill for conversational library management — v1.1
 
 ### Active
 
-- ✓ Deep library scanning (all folders, issue detection) — Validated in Phase 10: Deep Library Scanner
-- ✓ Plan infrastructure (plan→review→apply DB-backed workflow) — Validated in Phase 9: Plan Infrastructure & DB Schema
-- ✓ Metadata application (write `metadata.json`, no audio modification) — Validated in Phase 11: Structural Operations & Metadata
-- ✓ Structural operations (flatten nested audio, SHA-256 verification) — Validated in Phase 11: Structural Operations & Metadata
-- ✓ Plan execution engine (review, apply with dry-run default, resume-on-failure) — Validated in Phase 12: Plan Engine & CLI
-- ✓ CSV import for plan creation — Validated in Phase 13: CSV Import & Guarded Cleanup
-- ✓ Guarded cleanup command (separated deletions, explicit confirmation) — Validated in Phase 13: CSV Import & Guarded Cleanup
-- ✓ Execution logging and audit trail — Validated in Phase 9: Plan Infrastructure & DB Schema
-- ✓ Multi-book folder detection and split planning — Validated in Phase 14: Multi-Book Split & Claude Skill
-- ✓ Claude Code skill for conversational library cleanup — Validated in Phase 14: Multi-Book Split & Claude Skill
-- ✓ Data safety hardening (fsync, SHA-256 verification, FlattenDir guard, audit logging, idempotent resume) — Validated in Phase 15: Data Safety Hardening for NAS Operations
-- ✓ Draft plan promotion (`plan approve` command for draft-to-ready lifecycle transition) — Validated in Phase 16: Plan Lifecycle — Draft Promotion
+(None yet — define in next milestone)
 
 ### Out of Scope
 
@@ -69,19 +71,23 @@ Reliably download and organize Audible audiobooks into a local library with zero
 - Multi-service support (Libro.fm, etc.) — scope explosion; v1 is Audible-only
 - Real-time webhook notifications — users can wrap CLI with their own scripts
 
-## Current Milestone: v1.1 Library Cleanup
+## Milestone History
 
-**Goal:** Extend Earworm with safe, plan-based library cleanup capabilities for organizing non-Audible books, fixing metadata, and restructuring folders — all with zero destructive defaults.
+<details>
+<summary>v1.1 Library Cleanup (shipped 2026-04-14)</summary>
 
-**Target features:**
-- Deep library scanning (all folders, not just ASIN-bearing)
-- Plan infrastructure (plan→review→apply→cleanup flow with DB persistence)
-- Metadata application (`metadata.json` writes, no audio file modification)
-- Structural operations (flatten nested audio, split multi-book folders with SHA-256 verification)
-- CSV import (bridge manual analysis to plan system)
-- Guarded cleanup command (only deletions, separated and explicit)
-- Execution logging and audit trail
-- Claude Code skill for conversational orchestration
+Extended Earworm with safe, plan-based library cleanup capabilities for organizing non-Audible books, fixing metadata, and restructuring folders — all with zero destructive defaults. 11 phases, 24 plans, 172 commits.
+
+See `.planning/milestones/v1.1-ROADMAP.md` for full details.
+</details>
+
+<details>
+<summary>v1.0 MVP (shipped 2026-04-06)</summary>
+
+Core audiobook library manager: scan, sync, download, organize, notify. 8 phases, 22 plans.
+
+See `.planning/milestones/v1.0-ROADMAP.md` for full details.
+</details>
 
 ## Context
 
@@ -115,6 +121,12 @@ Reliably download and organize Audible audiobooks into a local library with zero
 | Separate download and organize steps | Clean pipeline: download to staging, organize to library, notify ABS | ✓ Good — validated after Phase 7 fix |
 | Auto-managed audible-cli venv | User doesn't need to install audible-cli manually | ✓ Good — v1.0 |
 | cmdFactory injection for subprocess testing | Avoids interface-based exec abstraction, simpler test seams | ✓ Good — v1.0 |
+| Path-keyed library_items table | Tracks non-ASIN content alongside books; NormalizePath prevents duplicates | ✓ Good — v1.1 |
+| Plan-based file operations | All structural changes go through plan→review→approve→apply; dry-run default | ✓ Good — v1.1 |
+| Inline hashFileSHA256 to avoid import cycles | Duplicated hash helper in organize and planengine packages | ⚠️ Revisit — consider shared internal package |
+| Operation metadata in JSON column | Flexible metadata storage on plan operations; CSV columns flow through to executor | ✓ Good — v1.1 |
+| fsync before Close() in all copy paths | Prevents silent data loss on NAS write caches | ✓ Good — v1.1 |
+| 3 actionable issue types for auto-planning | Only nested_audio, empty_dir, orphan_files, missing_metadata auto-plan; others need human judgment | ✓ Good — v1.1 |
 
 ## Evolution
 
@@ -134,4 +146,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after Phase 18.1 complete*
+*Last updated: 2026-04-14 after v1.1 milestone*
