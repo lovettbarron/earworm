@@ -13,7 +13,7 @@ import (
 // into individual book directories using Libation-compatible naming.
 // Shared files (covers, metadata) are included in every group's operations.
 // Returns the plan ID or an error if the GroupResult is skipped.
-func CreateSplitPlan(database *sql.DB, result *GroupResult, libraryRoot string) (int64, error) {
+func CreateSplitPlan(database *sql.DB, result *GroupResult, libraryRoot, layout string) (int64, error) {
 	if result.Skipped {
 		return 0, fmt.Errorf("cannot create plan for skipped folder: %s", result.SkipReason)
 	}
@@ -36,7 +36,7 @@ func CreateSplitPlan(database *sql.DB, result *GroupResult, libraryRoot string) 
 			title = "Unknown Title"
 		}
 
-		relPath, err := organize.BuildBookPath(author, title, group.ASIN)
+		relPath, err := organize.BuildBookPath(author, title, group.ASIN, layout)
 		if err != nil {
 			return 0, fmt.Errorf("build book path for %q/%q: %w", author, title, err)
 		}

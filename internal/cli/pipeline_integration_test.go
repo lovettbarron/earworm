@@ -34,7 +34,7 @@ func TestDownloadOrganizeHandoff(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "chapter.json"), []byte(`{"chapters":[]}`), 0644))
 
 	// Run organize
-	results, err := organize.OrganizeAll(database, stagingDir, libraryDir)
+	results, err := organize.OrganizeAll(database, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.True(t, results[0].Success)
@@ -80,7 +80,7 @@ func TestDownloadOrganizeHandoff_M4A(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "B000TEST02.m4a"), []byte("audio"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "cover(500).jpg"), []byte("img"), 0644))
 
-	results, err := organize.OrganizeAll(database, stagingDir, libraryDir)
+	results, err := organize.OrganizeAll(database, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.True(t, results[0].Success)
@@ -106,7 +106,7 @@ func TestDownloadOrganizeHandoff_MissingStagingDir(t *testing.T) {
 	require.NoError(t, db.UpdateDownloadComplete(database, "B000MISS01", ""))
 	// Note: no staging files created
 
-	results, err := organize.OrganizeAll(database, stagingDir, libraryDir)
+	results, err := organize.OrganizeAll(database, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.False(t, results[0].Success)

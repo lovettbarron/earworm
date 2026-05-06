@@ -43,8 +43,9 @@ type DetectedIssue struct {
 }
 
 // DetectIssues runs all 8 issue detectors against a book directory and returns
-// all detected issues. Each detector is a pure function that can be tested in isolation.
-func DetectIssues(dirPath string, entries []os.DirEntry, meta *BookMetadata, libraryRoot string) []DetectedIssue {
+// all detected issues. The layout parameter ("flat" or "author-title") controls
+// the expected directory depth for wrong_structure detection.
+func DetectIssues(dirPath string, entries []os.DirEntry, meta *BookMetadata, libraryRoot, layout string) []DetectedIssue {
 	var issues []DetectedIssue
 	issues = append(issues, detectEmptyDir(dirPath, entries)...)
 	issues = append(issues, detectNoASIN(dirPath, entries)...)
@@ -52,7 +53,7 @@ func DetectIssues(dirPath string, entries []os.DirEntry, meta *BookMetadata, lib
 	issues = append(issues, detectOrphanFiles(dirPath, entries)...)
 	issues = append(issues, detectCoverMissing(dirPath, entries, meta)...)
 	issues = append(issues, detectMissingMetadata(dirPath, entries, meta)...)
-	issues = append(issues, detectWrongStructure(dirPath, entries, libraryRoot)...)
+	issues = append(issues, detectWrongStructure(dirPath, entries, libraryRoot, layout)...)
 	issues = append(issues, detectMultiBook(dirPath, entries)...)
 	return issues
 }
@@ -205,8 +206,9 @@ func detectMissingMetadata(dirPath string, entries []os.DirEntry, meta *BookMeta
 }
 
 // detectWrongStructure checks if a directory is nested too deeply from the library root.
-// Expected structure is Author/Title [ASIN] (depth 2 from root). Deeper nesting is flagged.
-func detectWrongStructure(dirPath string, entries []os.DirEntry, libraryRoot string) []DetectedIssue {
+// For "flat" layout, max depth is 1 (Title [ASIN]). For "author-title", max depth is 2
+// (Author/Title [ASIN]). Deeper nesting is flagged.
+func detectWrongStructure(dirPath string, entries []os.DirEntry, libraryRoot, layout string) []DetectedIssue {
 	if !hasAudioFiles(entries) {
 		return nil
 	}
@@ -214,9 +216,14 @@ func detectWrongStructure(dirPath string, entries []os.DirEntry, libraryRoot str
 	if err != nil {
 		return nil
 	}
-	// Count path separators to determine depth
 	depth := strings.Count(rel, string(filepath.Separator)) + 1
-	if depth <= 2 {
+	maxDepth := 1
+	expectedFormat := "Title [ASIN]"
+	if layout == "author-title" {
+		maxDepth = 2
+		expectedFormat = "Author/Title [ASIN]"
+	}
+	if depth <= maxDepth {
 		return nil
 	}
 	return []DetectedIssue{{
@@ -224,7 +231,7 @@ func detectWrongStructure(dirPath string, entries []os.DirEntry, libraryRoot str
 		IssueType:       IssueWrongStructure,
 		Severity:        SeverityInfo,
 		Message:         fmt.Sprintf("Directory is nested too deeply (%d levels from library root)", depth),
-		SuggestedAction: "Restructure: move to Author/Title [ASIN] format",
+		SuggestedAction: fmt.Sprintf("Restructure: move to %s format", expectedFormat),
 	}}
 }
 

@@ -33,7 +33,7 @@ func TestCreateSplitPlan_Basic(t *testing.T) {
 		Skipped:     false,
 	}
 
-	planID, err := CreateSplitPlan(database, result, "/library")
+	planID, err := CreateSplitPlan(database, result, "/library", "author-title")
 	require.NoError(t, err)
 	assert.Greater(t, planID, int64(0))
 
@@ -74,7 +74,7 @@ func TestCreateSplitPlan_UsesLibationNaming(t *testing.T) {
 		Skipped:     false,
 	}
 
-	planID, err := CreateSplitPlan(database, result, "/library")
+	planID, err := CreateSplitPlan(database, result, "/library", "author-title")
 	require.NoError(t, err)
 
 	ops, err := db.ListOperations(database, planID)
@@ -98,7 +98,7 @@ func TestCreateSplitPlan_SkippedResult(t *testing.T) {
 		SkipReason: "confidence below threshold",
 	}
 
-	_, err = CreateSplitPlan(database, result, "/library")
+	_, err = CreateSplitPlan(database, result, "/library", "author-title")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "skipped")
 }
@@ -128,7 +128,7 @@ func TestCreateSplitPlan_SharedFilesInAllGroups(t *testing.T) {
 		Skipped:     false,
 	}
 
-	planID, err := CreateSplitPlan(database, result, "/library")
+	planID, err := CreateSplitPlan(database, result, "/library", "author-title")
 	require.NoError(t, err)
 
 	ops, err := db.ListOperations(database, planID)

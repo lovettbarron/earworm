@@ -24,8 +24,9 @@ type DeepScanResult struct {
 
 // DeepScanLibrary walks all directories under root (not just ASIN-bearing),
 // populates library_items, runs issue detection, and persists results.
+// The layout parameter ("flat" or "author-title") controls wrong_structure detection.
 // metadataFn is optional; when nil, metadata extraction is skipped.
-func DeepScanLibrary(root string, database *sql.DB, metadataFn func(string) (*BookMetadata, error)) (*DeepScanResult, error) {
+func DeepScanLibrary(root string, database *sql.DB, metadataFn func(string) (*BookMetadata, error), layout string) (*DeepScanResult, error) {
 	runID := time.Now().Format("20060102T150405")
 
 	// Clear all previous scan issues before fresh scan
@@ -115,7 +116,7 @@ func DeepScanLibrary(root string, database *sql.DB, metadataFn func(string) (*Bo
 		}
 
 		// Detect issues
-		issues := DetectIssues(path, entries, meta, root)
+		issues := DetectIssues(path, entries, meta, root, layout)
 		for _, issue := range issues {
 			scanIssue := db.ScanIssue{
 				Path:            db.NormalizePath(issue.Path),

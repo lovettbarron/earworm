@@ -27,6 +27,7 @@ func SetDefaults() {
 	viper.SetDefault("download.backoff_multiplier", 2.0)
 	viper.SetDefault("download.timeout_minutes", 30)
 	viper.SetDefault("scan.recursive", false)
+	viper.SetDefault("library.layout", "flat")
 	viper.SetDefault("audible.profile_path", "")
 	if configDir, err := ConfigDir(); err == nil {
 		viper.SetDefault("cleanup.trash_dir", filepath.Join(configDir, "trash"))
@@ -87,6 +88,11 @@ func Validate() error {
 		return fmt.Errorf("download.timeout_minutes must be >= 0, got %d", viper.GetInt("download.timeout_minutes"))
 	}
 
+	layout := viper.GetString("library.layout")
+	if layout != "flat" && layout != "author-title" {
+		return fmt.Errorf("library.layout must be \"flat\" or \"author-title\", got %q", layout)
+	}
+
 	return nil
 }
 
@@ -103,6 +109,7 @@ func ValidKeys() []string {
 		"download.max_retries",
 		"download.rate_limit_seconds",
 		"download.timeout_minutes",
+		"library.layout",
 		"library_path",
 		"audible.profile_path",
 		"scan.recursive",

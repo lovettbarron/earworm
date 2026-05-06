@@ -207,7 +207,8 @@ func runDeepScan(cmd *cobra.Command, database *sql.DB, libPath string) error {
 		}, nil
 	}
 
-	result, err := scanner.DeepScanLibrary(libPath, database, metadataFn)
+	layout := viper.GetString("library.layout")
+	result, err := scanner.DeepScanLibrary(libPath, database, metadataFn, layout)
 	if !quiet && !scanJSON {
 		spin.Stop()
 	}

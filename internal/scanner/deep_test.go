@@ -34,7 +34,7 @@ func TestDeepScanAllDirs(t *testing.T) {
 	createTestDir(t, root, "Author/NoASIN Book", "book.m4a")
 	createTestDir(t, root, "Misc/Random Folder", "track.m4a")
 
-	result, err := DeepScanLibrary(root, database, nil)
+	result, err := DeepScanLibrary(root, database, nil, "author-title")
 	require.NoError(t, err)
 
 	// Should find all 5 leaf dirs + 2 parent dirs (Author, Misc) = 7 total dirs
@@ -54,7 +54,7 @@ func TestDeepScanNonASIN(t *testing.T) {
 	// Non-ASIN directory with audio
 	createTestDir(t, root, "NoASIN Book", "chapter1.m4a")
 
-	result, err := DeepScanLibrary(root, database, nil)
+	result, err := DeepScanLibrary(root, database, nil, "author-title")
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.TotalDirs)
 	assert.Equal(t, 0, result.WithASIN)
@@ -76,7 +76,7 @@ func TestDeepScanPopulatesLibraryItems(t *testing.T) {
 	createTestDir(t, root, "Author/Book [B08C6YJ1LS]", "book.m4a")
 	createTestDir(t, root, "Author/Other Book", "track.m4a")
 
-	_, err = DeepScanLibrary(root, database, nil)
+	_, err = DeepScanLibrary(root, database, nil, "author-title")
 	require.NoError(t, err)
 
 	items, err := db.ListLibraryItems(database)
@@ -105,7 +105,7 @@ func TestDeepScanPersistsIssues(t *testing.T) {
 	emptyDir := filepath.Join(root, "EmptyBook")
 	require.NoError(t, os.MkdirAll(emptyDir, 0755))
 
-	result, err := DeepScanLibrary(root, database, nil)
+	result, err := DeepScanLibrary(root, database, nil, "author-title")
 	require.NoError(t, err)
 	assert.Greater(t, result.IssuesFound, 0)
 
@@ -148,7 +148,7 @@ func TestDeepScanClearsOldIssues(t *testing.T) {
 	// Create a simple directory with audio (no issues expected besides maybe cover_missing)
 	createTestDir(t, root, "Author/Book [B08C6YJ1LS]", "book.m4a")
 
-	_, err = DeepScanLibrary(root, database, nil)
+	_, err = DeepScanLibrary(root, database, nil, "author-title")
 	require.NoError(t, err)
 
 	// Old issue should be gone
@@ -170,7 +170,7 @@ func TestDeepScanSkipsRoot(t *testing.T) {
 	// And one subdirectory
 	createTestDir(t, root, "SubDir", "book.m4a")
 
-	result, err := DeepScanLibrary(root, database, nil)
+	result, err := DeepScanLibrary(root, database, nil, "author-title")
 	require.NoError(t, err)
 	// Only the subdirectory should be counted, not root
 	assert.Equal(t, 1, result.TotalDirs)
@@ -199,7 +199,7 @@ func TestDeepScanPermissionError(t *testing.T) {
 	require.NoError(t, os.MkdirAll(noReadDir, 0000))
 	t.Cleanup(func() { os.Chmod(noReadDir, 0755) })
 
-	result, err := DeepScanLibrary(root, database, nil)
+	result, err := DeepScanLibrary(root, database, nil, "author-title")
 	require.NoError(t, err, "permission errors should not be fatal")
 	// Should still have processed the readable dir
 	assert.GreaterOrEqual(t, result.TotalDirs, 1)

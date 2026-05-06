@@ -56,26 +56,32 @@ func FirstAuthor(authors string) string {
 	return authors
 }
 
-// BuildBookPath constructs a Libation-compatible relative path in the form
-// "Author/Title [ASIN]" from the given book metadata fields. It returns an
-// error if author or title is empty before or after sanitization.
-func BuildBookPath(author, title, asin string) (string, error) {
-	if strings.TrimSpace(author) == "" {
-		return "", fmt.Errorf("author is required")
-	}
+// BuildBookPath constructs a relative path for a book in the library.
+// When layout is "flat", it returns "Title [ASIN]".
+// When layout is "author-title", it returns "Author/Title [ASIN]".
+// It returns an error if title is empty, or if author is empty in author-title mode.
+func BuildBookPath(author, title, asin, layout string) (string, error) {
 	if strings.TrimSpace(title) == "" {
 		return "", fmt.Errorf("title is required")
-	}
-
-	sanitizedAuthor := SanitizeName(FirstAuthor(author))
-	if sanitizedAuthor == "" {
-		return "", fmt.Errorf("author is empty after sanitization")
 	}
 
 	titleWithASIN := fmt.Sprintf("%s [%s]", title, asin)
 	sanitizedTitle := SanitizeName(titleWithASIN)
 	if sanitizedTitle == "" {
 		return "", fmt.Errorf("title is empty after sanitization")
+	}
+
+	if layout == "flat" {
+		return sanitizedTitle, nil
+	}
+
+	if strings.TrimSpace(author) == "" {
+		return "", fmt.Errorf("author is required for author-title layout")
+	}
+
+	sanitizedAuthor := SanitizeName(FirstAuthor(author))
+	if sanitizedAuthor == "" {
+		return "", fmt.Errorf("author is empty after sanitization")
 	}
 
 	return filepath.Join(sanitizedAuthor, sanitizedTitle), nil

@@ -58,28 +58,48 @@ func TestBuildBookPath(t *testing.T) {
 		author    string
 		title     string
 		asin      string
+		layout    string
 		expected  string
 		expectErr bool
 	}{
 		{
-			name:     "basic path",
+			name:     "author-title layout",
 			author:   "Stephen King",
 			title:    "The Shining",
 			asin:     "B000000001",
+			layout:   "author-title",
 			expected: "Stephen King/The Shining [B000000001]",
 		},
 		{
-			name:     "multi-author uses first",
+			name:     "flat layout",
+			author:   "Stephen King",
+			title:    "The Shining",
+			asin:     "B000000001",
+			layout:   "flat",
+			expected: "The Shining [B000000001]",
+		},
+		{
+			name:     "flat layout ignores author",
+			author:   "",
+			title:    "The Shining",
+			asin:     "B000000001",
+			layout:   "flat",
+			expected: "The Shining [B000000001]",
+		},
+		{
+			name:     "multi-author uses first in author-title",
 			author:   "Author One, Author Two",
 			title:    "Title",
 			asin:     "B123456789",
+			layout:   "author-title",
 			expected: "Author One/Title [B123456789]",
 		},
 		{
-			name:      "empty author returns error",
+			name:      "empty author errors in author-title",
 			author:    "",
 			title:     "Title",
 			asin:      "B123",
+			layout:    "author-title",
 			expectErr: true,
 		},
 		{
@@ -87,26 +107,29 @@ func TestBuildBookPath(t *testing.T) {
 			author:    "Author",
 			title:     "",
 			asin:      "B123",
+			layout:    "flat",
 			expectErr: true,
 		},
 		{
-			name:      "whitespace-only author returns error",
+			name:      "whitespace-only author errors in author-title",
 			author:    "  ",
 			title:     "Title",
 			asin:      "B123",
+			layout:    "author-title",
 			expectErr: true,
 		},
 		{
-			name:      "all-illegal author returns error",
+			name:      "all-illegal author errors in author-title",
 			author:    "???",
 			title:     "Title",
 			asin:      "B123",
+			layout:    "author-title",
 			expectErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := BuildBookPath(tt.author, tt.title, tt.asin)
+			result, err := BuildBookPath(tt.author, tt.title, tt.asin, tt.layout)
 			if tt.expectErr {
 				require.Error(t, err)
 			} else {
