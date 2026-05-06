@@ -318,29 +318,54 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 
 	switch op.OpType {
 	case "move":
-		// Idempotent resume: if source is gone but dest exists with valid hash, skip
-		if _, statErr := os.Stat(op.SourcePath); os.IsNotExist(statErr) {
-			hash, hashErr := fileops.HashFile(op.DestPath)
-			if hashErr == nil && hash != "" {
-				result.Success = true
-				result.SHA256 = hash
-				return result
+		srcInfo, statErr := os.Stat(op.SourcePath)
+		if os.IsNotExist(statErr) {
+			// Idempotent resume: source gone but dest exists
+			if op.DestPath != "" {
+				if destInfo, destErr := os.Stat(op.DestPath); destErr == nil {
+					if destInfo.IsDir() {
+						result.Success = true
+						return result
+					}
+					hash, hashErr := fileops.HashFile(op.DestPath)
+					if hashErr == nil && hash != "" {
+						result.Success = true
+						result.SHA256 = hash
+						return result
+					}
+				}
 			}
 			result.Error = fmt.Sprintf("source missing, dest not valid: %s -> %s", op.SourcePath, op.DestPath)
 			return result
 		}
-		if err := fileops.VerifiedMove(op.SourcePath, op.DestPath); err != nil {
-			result.Error = err.Error()
+		if statErr != nil {
+			result.Error = fmt.Sprintf("stat source: %v", statErr)
 			return result
 		}
-		// Get SHA-256 of the moved file
-		hash, err := fileops.HashFile(op.DestPath)
-		if err != nil {
-			result.Error = fmt.Sprintf("hash after move: %v", err)
-			return result
+
+		if srcInfo.IsDir() {
+			if err := os.MkdirAll(filepath.Dir(op.DestPath), 0755); err != nil {
+				result.Error = fmt.Sprintf("create parent dir: %v", err)
+				return result
+			}
+			if err := os.Rename(op.SourcePath, op.DestPath); err != nil {
+				result.Error = fmt.Sprintf("rename directory: %v", err)
+				return result
+			}
+			result.Success = true
+		} else {
+			if err := fileops.VerifiedMove(op.SourcePath, op.DestPath); err != nil {
+				result.Error = err.Error()
+				return result
+			}
+			hash, err := fileops.HashFile(op.DestPath)
+			if err != nil {
+				result.Error = fmt.Sprintf("hash after move: %v", err)
+				return result
+			}
+			result.Success = true
+			result.SHA256 = hash
 		}
-		result.Success = true
-		result.SHA256 = hash
 
 	case "flatten":
 		flatResult, err := fileops.FlattenDir(op.SourcePath)
@@ -359,9 +384,25 @@ func (e *Executor) executeOp(ctx context.Context, op db.PlanOperation) OpResult 
 		}
 
 	case "delete":
-		if err := os.Remove(op.SourcePath); err != nil {
-			result.Error = err.Error()
+		info, statErr := os.Stat(op.SourcePath)
+		if os.IsNotExist(statErr) {
+			result.Success = true
 			return result
+		}
+		if statErr != nil {
+			result.Error = fmt.Sprintf("stat: %v", statErr)
+			return result
+		}
+		if info.IsDir() {
+			if err := os.RemoveAll(op.SourcePath); err != nil {
+				result.Error = err.Error()
+				return result
+			}
+		} else {
+			if err := os.Remove(op.SourcePath); err != nil {
+				result.Error = err.Error()
+				return result
+			}
 		}
 		result.Success = true
 
