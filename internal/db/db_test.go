@@ -573,6 +573,36 @@ func TestSyncRemoteBook_PreservesLocalFields(t *testing.T) {
 	assert.Equal(t, 15, got.ChapterCount)
 }
 
+func TestSyncRemoteBook_ResetsUnavailableStatus(t *testing.T) {
+	db := setupTestDB(t)
+
+	// Simulate a pre-order that was previously marked unavailable
+	book := Book{
+		ASIN:          "B0PREORDER",
+		Title:         "Pre-Order Book",
+		Author:        "Future Author",
+		AudibleStatus: "new",
+	}
+	err := SyncRemoteBook(db, book)
+	require.NoError(t, err)
+
+	// Mark it unavailable (simulates failed download of unreleased pre-order)
+	err = UpdateBookStatus(db, "B0PREORDER", "unavailable")
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "B0PREORDER")
+	require.NoError(t, err)
+	assert.Equal(t, "unavailable", got.Status)
+
+	// Re-sync the same book (simulates next sync after book is released)
+	err = SyncRemoteBook(db, book)
+	require.NoError(t, err)
+
+	got, err = GetBook(db, "B0PREORDER")
+	require.NoError(t, err)
+	assert.Equal(t, "unknown", got.Status, "unavailable books should be reset to unknown on re-sync")
+}
+
 func TestListNewBooks(t *testing.T) {
 	db := setupTestDB(t)
 

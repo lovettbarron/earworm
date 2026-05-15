@@ -262,6 +262,8 @@ func UpdateBookStatus(db *sql.DB, asin string, status string) error {
 // On insert, sets local-only fields to defaults (status="unknown", local_path="", metadata_source="", file_count=0).
 // On conflict, updates remote metadata fields but preserves local-only fields
 // (status, local_path, metadata_source, file_count, has_cover, duration, chapter_count).
+// Books previously marked "unavailable" (e.g. pre-orders) are reset to "unknown"
+// so they become downloadable once released.
 func SyncRemoteBook(db *sql.DB, book Book) error {
 	_, err := db.Exec(
 		`INSERT INTO books (asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position)
@@ -279,6 +281,7 @@ func SyncRemoteBook(db *sql.DB, book Book) error {
 			narrators = excluded.narrators,
 			series_name = excluded.series_name,
 			series_position = excluded.series_position,
+			status = CASE WHEN books.status = 'unavailable' THEN 'unknown' ELSE books.status END,
 			updated_at = CURRENT_TIMESTAMP`,
 		book.ASIN, book.Title, book.Author, book.Narrator, book.Genre, book.Year,
 		book.Series, hasCoverToInt(book.HasCover), book.Duration, book.ChapterCount,
