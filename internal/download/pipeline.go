@@ -365,7 +365,7 @@ func (p *Pipeline) downloadWithRetry(ctx context.Context, book db.Book, backoff 
 		// Not available (expired subscription) — mark unavailable, don't retry.
 		var notAvailErr *audible.NotAvailableError
 		if errors.As(downloadErr, &notAvailErr) {
-			if err := db.UpdateBookStatus(p.db, book.ASIN, "unavailable"); err != nil {
+			if err := db.UpdateBookUnavailable(p.db, book.ASIN); err != nil {
 				slog.Warn("failed to mark book unavailable", "asin", book.ASIN, "error", err)
 			}
 			return downloadErr
@@ -421,7 +421,7 @@ func (p *Pipeline) verifyStaged(ctx context.Context, asin string, stagingDir str
 	}
 	if !hasAudio {
 		// Mark as unavailable — audible-cli didn't error but no audio was downloaded
-		if err := db.UpdateBookStatus(p.db, asin, "unavailable"); err != nil {
+		if err := db.UpdateBookUnavailable(p.db, asin); err != nil {
 			slog.Warn("failed to mark book unavailable", "asin", asin, "error", err)
 		}
 		return &audible.NotAvailableError{

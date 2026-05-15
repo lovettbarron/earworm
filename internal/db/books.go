@@ -258,12 +258,27 @@ func UpdateBookStatus(db *sql.DB, asin string, status string) error {
 	return nil
 }
 
+// UpdateBookUnavailable marks a book as unavailable and increments retry_count
+// to track how many times unavailability has been confirmed.
+func UpdateBookUnavailable(db *sql.DB, asin string) error {
+	_, err := db.Exec(
+		`UPDATE books SET status = 'unavailable',
+			retry_count = retry_count + 1,
+			updated_at = CURRENT_TIMESTAMP
+		WHERE asin = ?`, asin)
+	if err != nil {
+		return fmt.Errorf("update book unavailable %s: %w", asin, err)
+	}
+	return nil
+}
+
 // SyncRemoteBook upserts a book from Audible remote metadata.
 // On insert, sets local-only fields to defaults (status="unknown", local_path="", metadata_source="", file_count=0).
 // On conflict, updates remote metadata fields but preserves local-only fields
 // (status, local_path, metadata_source, file_count, has_cover, duration, chapter_count).
-// Books previously marked "unavailable" (e.g. pre-orders) are reset to "unknown"
-// so they become downloadable once released.
+// Books marked "unavailable" with fewer than 3 confirmation attempts are reset
+// to "unknown" so pre-orders become downloadable once released. Books that have
+// been confirmed unavailable 3+ times stay unavailable.
 func SyncRemoteBook(db *sql.DB, book Book) error {
 	_, err := db.Exec(
 		`INSERT INTO books (asin, title, author, narrator, genre, year, series, has_cover, duration, chapter_count, metadata_source, file_count, status, local_path, audible_status, purchase_date, runtime_minutes, narrators, series_name, series_position)
@@ -281,7 +296,7 @@ func SyncRemoteBook(db *sql.DB, book Book) error {
 			narrators = excluded.narrators,
 			series_name = excluded.series_name,
 			series_position = excluded.series_position,
-			status = CASE WHEN books.status = 'unavailable' THEN 'unknown' ELSE books.status END,
+			status = CASE WHEN books.status = 'unavailable' AND books.retry_count < 3 THEN 'unknown' ELSE books.status END,
 			updated_at = CURRENT_TIMESTAMP`,
 		book.ASIN, book.Title, book.Author, book.Narrator, book.Genre, book.Year,
 		book.Series, hasCoverToInt(book.HasCover), book.Duration, book.ChapterCount,

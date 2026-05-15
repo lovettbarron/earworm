@@ -102,7 +102,7 @@ earworm auth
 
 Sync Audible library metadata to the local database. Each sync is a full refresh -- all books are upserted. Local-only data (download status, file paths) is preserved.
 
-Pre-ordered books that were previously marked unavailable (because they weren't yet released when a download was attempted) are automatically reset on re-sync, so they become downloadable once released.
+Pre-ordered books that were previously marked unavailable (because they weren't yet released when a download was attempted) are automatically reset on re-sync, so they become downloadable once released. Books confirmed unavailable 3 or more times (e.g. expired subscriptions) stay unavailable and won't be retried.
 
 ```bash
 earworm sync
