@@ -112,19 +112,24 @@ func runOrganize(cmd *cobra.Command, args []string) error {
 
 	// Trigger Audiobookshelf library scan after successful organization.
 	// Silent skip if unconfigured. Warn and continue on failure.
-	if successCount > 0 {
-		if absURL := viper.GetString("audiobookshelf.url"); absURL != "" {
-			abs := audiobookshelf.NewClient(
-				absURL,
-				viper.GetString("audiobookshelf.token"),
-				viper.GetString("audiobookshelf.library_id"),
-			)
-			if scanErr := abs.ScanLibrary(); scanErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: Audiobookshelf scan failed: %v\n", scanErr)
-			} else if !quiet {
-				fmt.Fprintln(cmd.OutOrStdout(), "Audiobookshelf library scan triggered.")
-			}
+	absConfigured := viper.GetString("audiobookshelf.url") != ""
+	if successCount > 0 && absConfigured {
+		abs := audiobookshelf.NewClient(
+			viper.GetString("audiobookshelf.url"),
+			viper.GetString("audiobookshelf.token"),
+			viper.GetString("audiobookshelf.library_id"),
+		)
+		if scanErr := abs.ScanLibrary(); scanErr != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: Audiobookshelf scan failed: %v\n", scanErr)
+		} else if !quiet {
+			fmt.Fprintln(cmd.OutOrStdout(), "Audiobookshelf library scan triggered.")
 		}
+	}
+
+	if successCount > 0 && !absConfigured {
+		hint(cmd.ErrOrStderr(), "earworm notify            # trigger Audiobookshelf library scan")
+	} else if errorCount > 0 && successCount == 0 {
+		hint(cmd.ErrOrStderr(), "earworm status --status error  # inspect failed books")
 	}
 
 	return nil

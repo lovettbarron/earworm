@@ -176,6 +176,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	hint(cmd.ErrOrStderr(), "earworm sync              # sync Audible library to find new books")
 	return nil
 }
 
@@ -272,6 +273,11 @@ func runDeepScan(cmd *cobra.Command, database *sql.DB, libPath string) error {
 		}
 	}
 
+	if result.IssuesFound > 0 {
+		hint(cmd.ErrOrStderr(), "earworm scan issues       # review %d detected issues", result.IssuesFound)
+	} else {
+		hint(cmd.ErrOrStderr(), "earworm sync              # sync Audible library to find new books")
+	}
 	return nil
 }
 
@@ -307,6 +313,7 @@ func runScanIssues(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "Plan created: ID %d\n", result.PlanID)
 		fmt.Fprintf(cmd.OutOrStdout(), "  %d operations created\n", result.Created)
 		fmt.Fprintf(cmd.OutOrStdout(), "  %d issues skipped (require manual review)\n", result.Skipped)
+		hint(cmd.ErrOrStderr(), "earworm plan review %d    # review before applying", result.PlanID)
 		return nil
 	}
 
@@ -328,5 +335,6 @@ func runScanIssues(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "  %-12s %-8s %s\n    %s\n", issue.IssueType, issue.Severity, issue.Path, issue.Message)
 	}
 
+	hint(cmd.ErrOrStderr(), "earworm scan issues --create-plan  # generate remediation plan")
 	return nil
 }

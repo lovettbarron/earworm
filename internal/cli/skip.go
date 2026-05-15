@@ -63,5 +63,8 @@ func runSkip(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if undoSkip {
+		hint(cmd.ErrOrStderr(), "earworm download          # download un-skipped books")
+	}
 	return nil
 }

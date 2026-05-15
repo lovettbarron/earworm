@@ -140,7 +140,9 @@ func runDownload(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if summary.AuthFailed {
-			fmt.Fprintln(cmd.OutOrStdout(), "\nRun `earworm auth` to re-authenticate.")
+			hint(cmd.ErrOrStderr(), "earworm auth              # re-authenticate with Audible")
+		} else if summary.Succeeded > 0 {
+			hint(cmd.ErrOrStderr(), "earworm organize          # move %d books to library", summary.Succeeded)
 		}
 	}
 
@@ -220,6 +222,7 @@ func runDryRun(cmd *cobra.Command) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "%s - %s [%s] (%s)\n", b.Author, b.Title, b.ASIN, runtime)
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "\n%d books to download\n", len(books))
+	hint(cmd.ErrOrStderr(), "earworm download          # download without --dry-run")
 	return nil
 }
 

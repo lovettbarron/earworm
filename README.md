@@ -17,6 +17,7 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 - Goodreads CSV export
 - Daemon/polling mode for unattended operation
 - Cross-filesystem file moves (local to NAS)
+- Contextual next-step hints after each command (suppressed with `--quiet`)
 
 ## Prerequisites
 
