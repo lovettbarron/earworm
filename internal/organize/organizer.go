@@ -20,13 +20,12 @@ type OrganizeResult struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// OrganizeBook moves a book's files from the staging directory into the library
-// with the correct Libation-compatible folder structure: Author/Title [ASIN]/.
-// The M4A file is renamed to Title.m4a, cover images to cover.jpg, and chapter
-// metadata to chapters.json. Returns the destination directory path on success.
-func OrganizeBook(book db.Book, stagingDir, libraryDir string) (string, error) {
-	// Build the relative library path (validates author/title)
-	relPath, err := BuildBookPath(book.Author, book.Title, book.ASIN)
+// OrganizeBook moves a book's files from the staging directory into the library.
+// The layout parameter controls directory structure: "flat" produces Title [ASIN]/,
+// "author-title" produces Author/Title [ASIN]/. The M4A file is renamed to
+// Title.m4a, cover images to cover.jpg, and chapter metadata to chapters.json.
+func OrganizeBook(book db.Book, stagingDir, libraryDir, layout string) (string, error) {
+	relPath, err := BuildBookPath(book.Author, book.Title, book.ASIN, layout)
 	if err != nil {
 		return "", fmt.Errorf("build book path: %w", err)
 	}
@@ -91,10 +90,11 @@ func destinationFilename(name, title string) string {
 }
 
 // OrganizeAll processes all books with 'downloaded' status, moving their files
-// from staging into the library and updating the database. It returns results
+// from staging into the library and updating the database. The layout parameter
+// controls directory structure ("flat" or "author-title"). It returns results
 // for all books (both successes and failures). Individual book failures do not
 // stop processing of remaining books.
-func OrganizeAll(database *sql.DB, stagingDir, libraryDir string) ([]OrganizeResult, error) {
+func OrganizeAll(database *sql.DB, stagingDir, libraryDir, layout string) ([]OrganizeResult, error) {
 	books, err := db.ListOrganizable(database)
 	if err != nil {
 		return nil, fmt.Errorf("list organizable books: %w", err)
@@ -109,7 +109,7 @@ func OrganizeAll(database *sql.DB, stagingDir, libraryDir string) ([]OrganizeRes
 			Author: book.Author,
 		}
 
-		destDir, err := OrganizeBook(book, stagingDir, libraryDir)
+		destDir, err := OrganizeBook(book, stagingDir, libraryDir, layout)
 		if err != nil {
 			result.Success = false
 			result.Error = err.Error()

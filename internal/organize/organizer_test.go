@@ -36,7 +36,7 @@ func TestOrganizeBook_Success(t *testing.T) {
 		Title:  "The Shining",
 	}
 
-	destDir, err := OrganizeBook(book, stagingDir, libraryDir)
+	destDir, err := OrganizeBook(book, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 
 	// Verify destination structure
@@ -58,6 +58,28 @@ func TestOrganizeBook_Success(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "staging ASIN dir should be removed")
 }
 
+func TestOrganizeBook_FlatLayout(t *testing.T) {
+	stagingDir := t.TempDir()
+	libraryDir := t.TempDir()
+
+	asinDir := filepath.Join(stagingDir, "B000000001")
+	require.NoError(t, os.MkdirAll(asinDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(asinDir, "something.m4a"), []byte("audio data"), 0644))
+
+	book := db.Book{
+		ASIN:   "B000000001",
+		Author: "King, Stephen",
+		Title:  "The Shining",
+	}
+
+	destDir, err := OrganizeBook(book, stagingDir, libraryDir, "flat")
+	require.NoError(t, err)
+
+	expectedDir := filepath.Join(libraryDir, "The Shining [B000000001]")
+	assert.Equal(t, expectedDir, destDir)
+	assert.FileExists(t, filepath.Join(expectedDir, "The Shining.m4a"))
+}
+
 func TestOrganizeBook_MissingAuthor(t *testing.T) {
 	stagingDir := t.TempDir()
 	libraryDir := t.TempDir()
@@ -73,7 +95,7 @@ func TestOrganizeBook_MissingAuthor(t *testing.T) {
 		Title:  "Some Title",
 	}
 
-	_, err := OrganizeBook(book, stagingDir, libraryDir)
+	_, err := OrganizeBook(book, stagingDir, libraryDir, "author-title")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "author")
 
@@ -91,7 +113,7 @@ func TestOrganizeBook_MissingTitle(t *testing.T) {
 		Title:  "",
 	}
 
-	_, err := OrganizeBook(book, stagingDir, libraryDir)
+	_, err := OrganizeBook(book, stagingDir, libraryDir, "author-title")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "title")
 }
@@ -116,7 +138,7 @@ func TestOrganizeBook_OverwriteExisting(t *testing.T) {
 		Title:  "Title",
 	}
 
-	_, err := OrganizeBook(book, stagingDir, libraryDir)
+	_, err := OrganizeBook(book, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 
 	// Verify new file replaced old
@@ -140,7 +162,7 @@ func TestOrganizeBook_CoverRename(t *testing.T) {
 		Title:  "Book",
 	}
 
-	destDir, err := OrganizeBook(book, stagingDir, libraryDir)
+	destDir, err := OrganizeBook(book, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 
 	// PNG should be renamed to cover.jpg
@@ -162,7 +184,7 @@ func TestOrganizeBook_ExtraFiles(t *testing.T) {
 		Title:  "Book",
 	}
 
-	destDir, err := OrganizeBook(book, stagingDir, libraryDir)
+	destDir, err := OrganizeBook(book, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 
 	// Extra files keep their original name
@@ -186,7 +208,7 @@ func TestOrganizeBook_M4B(t *testing.T) {
 		Title:  "Dungeon Crawler Carl",
 	}
 
-	destDir, err := OrganizeBook(book, stagingDir, libraryDir)
+	destDir, err := OrganizeBook(book, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 
 	expectedDir := filepath.Join(libraryDir, "Matt Dinniman", "Dungeon Crawler Carl [B000000010]")
@@ -220,7 +242,7 @@ func TestOrganizeBook_SkipsVoucherAndAAXC(t *testing.T) {
 		Title:  "Title",
 	}
 
-	destDir, err := OrganizeBook(book, stagingDir, libraryDir)
+	destDir, err := OrganizeBook(book, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 
 	// M4B should be moved
@@ -254,7 +276,7 @@ func TestOrganizeAll_Integration(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(asinDir, "cover.jpg"), []byte("cover "+asin), 0644))
 	}
 
-	results, err := OrganizeAll(database, stagingDir, libraryDir)
+	results, err := OrganizeAll(database, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 	assert.Len(t, results, 2, "should process only downloaded books")
 
@@ -303,7 +325,7 @@ func TestOrganizeAll_PartialFailure(t *testing.T) {
 	require.NoError(t, os.MkdirAll(asinDir2, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(asinDir2, "audio.m4a"), []byte("audio"), 0644))
 
-	results, err := OrganizeAll(database, stagingDir, libraryDir)
+	results, err := OrganizeAll(database, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 	assert.Len(t, results, 2)
 
@@ -338,7 +360,7 @@ func TestOrganizeAll_NoBooksToOrganize(t *testing.T) {
 		ASIN: "NB001", Title: "Scanned", Author: "A", Status: "scanned",
 	}))
 
-	results, err := OrganizeAll(database, stagingDir, libraryDir)
+	results, err := OrganizeAll(database, stagingDir, libraryDir, "author-title")
 	require.NoError(t, err)
 	assert.NotNil(t, results)
 	assert.Empty(t, results)

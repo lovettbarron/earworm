@@ -573,6 +573,83 @@ func TestSyncRemoteBook_PreservesLocalFields(t *testing.T) {
 	assert.Equal(t, 15, got.ChapterCount)
 }
 
+func TestSyncRemoteBook_ResetsUnavailableStatus(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{
+		ASIN:          "B0PREORDER",
+		Title:         "Pre-Order Book",
+		Author:        "Future Author",
+		AudibleStatus: "new",
+	}
+	err := SyncRemoteBook(db, book)
+	require.NoError(t, err)
+
+	// First unavailability (retry_count goes to 1) — should reset on re-sync
+	err = UpdateBookUnavailable(db, "B0PREORDER")
+	require.NoError(t, err)
+
+	got, err := GetBook(db, "B0PREORDER")
+	require.NoError(t, err)
+	assert.Equal(t, "unavailable", got.Status)
+	assert.Equal(t, 1, got.RetryCount)
+
+	err = SyncRemoteBook(db, book)
+	require.NoError(t, err)
+
+	got, err = GetBook(db, "B0PREORDER")
+	require.NoError(t, err)
+	assert.Equal(t, "unknown", got.Status, "unavailable books under threshold should reset on re-sync")
+}
+
+func TestSyncRemoteBook_KeepsUnavailableAfterThreshold(t *testing.T) {
+	db := setupTestDB(t)
+
+	book := Book{
+		ASIN:          "B0EXPIRED",
+		Title:         "Expired Sub Book",
+		Author:        "Gone Author",
+		AudibleStatus: "new",
+	}
+	err := SyncRemoteBook(db, book)
+	require.NoError(t, err)
+
+	// Simulate 3 unavailability confirmations across sync cycles
+	for i := 0; i < 3; i++ {
+		err = UpdateBookUnavailable(db, "B0EXPIRED")
+		require.NoError(t, err)
+	}
+
+	got, err := GetBook(db, "B0EXPIRED")
+	require.NoError(t, err)
+	assert.Equal(t, 3, got.RetryCount)
+
+	// Re-sync should NOT reset — book has hit the threshold
+	err = SyncRemoteBook(db, book)
+	require.NoError(t, err)
+
+	got, err = GetBook(db, "B0EXPIRED")
+	require.NoError(t, err)
+	assert.Equal(t, "unavailable", got.Status, "books at unavailable threshold should stay unavailable")
+}
+
+func TestUpdateBookUnavailable_IncrementsRetryCount(t *testing.T) {
+	db := setupTestDB(t)
+
+	err := InsertBook(db, Book{ASIN: "B0UNAVAIL", Title: "Test"})
+	require.NoError(t, err)
+
+	for i := 1; i <= 3; i++ {
+		err = UpdateBookUnavailable(db, "B0UNAVAIL")
+		require.NoError(t, err)
+
+		got, err := GetBook(db, "B0UNAVAIL")
+		require.NoError(t, err)
+		assert.Equal(t, "unavailable", got.Status)
+		assert.Equal(t, i, got.RetryCount)
+	}
+}
+
 func TestListNewBooks(t *testing.T) {
 	db := setupTestDB(t)
 

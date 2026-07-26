@@ -144,7 +144,8 @@ func runSplitPlan(cmd *cobra.Command, args []string) error {
 	defer database.Close()
 
 	libraryRoot := viper.GetString("library_path")
-	planID, err := split.CreateSplitPlan(database, result, libraryRoot)
+	layout := viper.GetString("library.layout")
+	planID, err := split.CreateSplitPlan(database, result, libraryRoot, layout)
 	if err != nil {
 		return fmt.Errorf("create split plan: %w", err)
 	}

@@ -145,5 +145,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "  Synced:        %d books\n", summary.TotalSynced)
 	fmt.Fprintf(cmd.OutOrStdout(), "  New:           %d (not yet downloaded)\n", summary.NewBooks)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Already local: %d\n", summary.AlreadyLocal)
+
+	if summary.NewBooks > 0 {
+		hint(cmd.ErrOrStderr(), "earworm download          # download %d new books", summary.NewBooks)
+	} else if summary.TotalSynced > 0 {
+		hint(cmd.ErrOrStderr(), "earworm status            # view your library")
+	}
 	return nil
 }

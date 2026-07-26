@@ -273,7 +273,7 @@ func TestDetectWrongStructure(t *testing.T) {
 		entries, err := os.ReadDir(deep)
 		require.NoError(t, err)
 
-		issues := detectWrongStructure(deep, entries, root)
+		issues := detectWrongStructure(deep, entries, root, "author-title")
 		require.Len(t, issues, 1)
 		assert.Equal(t, IssueWrongStructure, issues[0].IssueType)
 		assert.Equal(t, SeverityInfo, issues[0].Severity)
@@ -288,7 +288,7 @@ func TestDetectWrongStructure(t *testing.T) {
 		entries, err := os.ReadDir(bookDir)
 		require.NoError(t, err)
 
-		issues := detectWrongStructure(bookDir, entries, root)
+		issues := detectWrongStructure(bookDir, entries, root, "author-title")
 		assert.Empty(t, issues)
 	})
 
@@ -301,7 +301,7 @@ func TestDetectWrongStructure(t *testing.T) {
 		entries, err := os.ReadDir(deep)
 		require.NoError(t, err)
 
-		issues := detectWrongStructure(deep, entries, root)
+		issues := detectWrongStructure(deep, entries, root, "author-title")
 		assert.Empty(t, issues)
 	})
 }
@@ -359,7 +359,7 @@ func TestDetectIssues_Aggregation(t *testing.T) {
 		entries, err := os.ReadDir(bookDir)
 		require.NoError(t, err)
 
-		issues := DetectIssues(bookDir, entries, nil, root)
+		issues := DetectIssues(bookDir, entries, nil, root, "author-title")
 
 		// Should have: no_asin, orphan_files, cover_missing, missing_metadata
 		typeSet := make(map[IssueType]bool)
@@ -384,7 +384,7 @@ func TestDetectIssues_Aggregation(t *testing.T) {
 		require.NoError(t, err)
 
 		meta := &BookMetadata{Title: "Great Book", HasCover: true}
-		issues := DetectIssues(bookDir, entries, meta, root)
+		issues := DetectIssues(bookDir, entries, meta, root, "author-title")
 		assert.Empty(t, issues)
 	})
 }

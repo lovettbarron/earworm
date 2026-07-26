@@ -32,6 +32,7 @@ func runAuth(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintln(cmd.OutOrStdout(), "")
-	fmt.Fprintln(cmd.OutOrStdout(), "Authentication successful! Run 'earworm sync' to sync your Audible library.")
+	fmt.Fprintln(cmd.OutOrStdout(), "Authentication successful!")
+	hint(cmd.ErrOrStderr(), "earworm sync              # sync your Audible library")
 	return nil
 }
