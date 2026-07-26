@@ -48,6 +48,53 @@ This workflow has a MANDATORY approval gate. You must follow these steps in orde
 
 **Step 6 - Hand off:** Tell the user: "To apply this plan, run: `earworm plan apply <id> --confirm`"
 
+## Workflow: Reorganize Books via Plan
+
+Use this when books are in a non-standard folder structure and need to be reorganized into the flat `Title [ASIN]/` format with Audiobookshelf metadata sidecars.
+
+**Step 1 - Analyze:** List the source directory to understand current structure. Identify:
+- Which folders contain audio files (mp3, m4a, m4b)
+- Which are duplicates (different narrators/editions)
+- Which are non-audio (epub-only, graphic novels) — leave these in place
+- Whether any books already exist in the library in proper format
+
+**Step 2 - Look up ASINs:** Search Audible for each title to get the correct ASIN. Extract from Audible URLs: `audible.com/pd/Title-Audiobook/ASIN`. Every book folder needs an ASIN for the `Title [ASIN]` naming convention.
+
+**Step 3 - Create TWO CSV plans:** The plan engine runs preflight checks on all operations before executing. Since `write_metadata` references paths created by `move` operations, these MUST be in separate plans applied sequentially.
+
+**Plan 1 — Moves CSV** (`moves.csv`):
+```csv
+op_type,source_path,dest_path
+move,/Volumes/media/Audible/Old Folder/Book Name,/Volumes/media/Audible/Title [ASIN]
+```
+
+**Plan 2 — Metadata CSV** (`metadata.csv`):
+```csv
+op_type,source_path,dest_path,title,author,series,asin
+write_metadata,/Volumes/media/Audible/Title [ASIN],,Title,Author Name,Series Name #Position,ASIN
+```
+
+The `series` field format is `Series Name #Position` (e.g., `The Expanse #2`, `The Expanse #0.5` for novellas). This produces a `metadata.json` sidecar that Audiobookshelf reads for series detection.
+
+**Step 4 - Import and apply sequentially:**
+```
+earworm plan import moves.csv --name "name-moves"
+earworm plan approve <id>
+earworm plan apply <id> --confirm
+
+earworm plan import metadata.csv --name "name-metadata"
+earworm plan approve <id>
+earworm plan apply <id> --confirm
+```
+
+**Key rules:**
+- Folder naming: `Title [ASIN]` — matches the rest of the library
+- Never move a book that already exists in proper format at the library root
+- For series with novellas, use decimal positions (0.1, 0.5, 2.5, etc.)
+- If a book has no Audible ASIN (rare), use the Amazon product ASIN instead
+- Duplicate editions (different narrators): ask user which to keep, leave others in place
+- Non-audio content (epub, pdf, graphic novels): leave for user to handle manually
+
 ## Workflow: Library Scan
 
 1. When asked about library issues, run `earworm scan --deep --json` first
