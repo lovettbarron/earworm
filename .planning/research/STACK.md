@@ -1,224 +1,140 @@
-# Technology Stack: v1.1 Library Cleanup
+# Stack Research
 
-**Project:** Earworm v1.1
-**Researched:** 2026-04-06
-**Mode:** Incremental (additions to existing v1.0 stack)
-**Overall Confidence:** HIGH
+**Domain:** Listening-stats extraction, cross-source title matching, CSV export, and third-party CLI journaling — additions to an existing Go CLI (earworm v1.2)
+**Researched:** 2026-09-20
+**Confidence:** HIGH (verified against pkg.go.dev, GitHub releases, and existing repo code)
 
-## Key Finding: Zero New External Dependencies
+## Summary Verdict
 
-v1.1's features are fully covered by Go's standard library plus the existing dependency set. No new `go get` commands needed. This is the ideal outcome for a maintenance-focused milestone.
+None of the five new capabilities require a new *runtime* Go dependency for their core logic. The existing stack (stdlib `net/http`, `encoding/json`, `encoding/csv`, `os/exec`, `crypto/sha256`) already covers everything except the actual fuzzy-matching algorithm, and even that is small enough (~600 × ~70 candidate pairs) to hand-roll in well under 150 lines with full test coverage, matching the codebase's existing bias toward stdlib-first design (see `internal/audiobookshelf/client.go`, `internal/goodreads/export.go`).
 
-## Existing Stack (Unchanged)
+The one *optional* addition worth naming explicitly is `hashicorp/go-retryablehttp` for the Audiobookshelf pagination client — and the recommendation is still **no**, for reasons below. The one genuinely new *external* (non-Go) dependency is the `dayone` npm-distributed CLI binary, which is not a Go library decision but does need an integration/testing plan.
 
-| Technology | Version | Purpose | Status |
-|------------|---------|---------|--------|
-| Go | 1.26.1 | Application language | Unchanged |
-| spf13/cobra | v1.10.2 | CLI commands | Add new subcommands only |
-| spf13/viper | v1.21.0 | Configuration | May add new config keys |
-| modernc.org/sqlite | v1.48.1 | Database | Add new migrations (005+) |
-| dhowden/tag | v0.0.0-20240417 | M4A metadata reading | Unchanged |
-| testify | v1.11.1 | Test assertions | Unchanged |
+## Recommended Stack
 
-## Stdlib Capabilities for v1.1 Features
+### Core Technologies (no new Go dependencies)
 
-### Plan Infrastructure (DB-Backed Workflow)
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `encoding/json` (stdlib) | Go 1.23+ (repo on 1.26.1) | Parse `audible api <endpoint>` and Audiobookshelf JSON responses | Already used throughout `internal/audible` (`ParseLibraryExport`). No new capability needed — `audible-cli`'s `api` subcommand prints plain JSON to stdout for arbitrary Audible API calls, same shape of problem already solved for `library export`. |
+| `net/http` (stdlib) | Go 1.23+ | Paginated Audiobookshelf REST client | `internal/audiobookshelf/client.go` already wraps `net/http` directly with a `Bearer` token. Audiobookshelf's list endpoints (`/api/users/<id>/listening-sessions`, `/api/me/listening-stats`) use simple `page`/`limit` query params — a handful of lines in a `for` loop covers pagination completely. |
+| `encoding/csv` (stdlib) | Go 1.23+ | Listening-stats CSV export | `internal/goodreads/export.go` is the exact template to follow: define a header slice, iterate, write records, flush. No new capability required — this is the same shape of problem, solved. |
+| `os/exec` (stdlib) | Go 1.23+ | Subprocess calls to `audible api ...` and the `dayone` CLI | `internal/audible/audible.go`'s `cmdFactory` seam (`WithCmdFactory`) already generalizes command construction for testing. Reuse the identical pattern for both new subprocess integrations rather than inventing a second abstraction. |
+| `crypto/sha256` (stdlib) | Go 1.23+ | Deterministic hashing (e.g. stable match/dedup keys, idempotency keys for journal entries) | Already the repo's sole hashing algorithm (`internal/fileops/hash.go`, `internal/organize/mover.go`, `internal/planengine/cleanup.go`). `crypto/md5` is also stdlib and technically sufficient for non-cryptographic dedup keys, but introducing a second hash algorithm into a codebase that has standardized on SHA-256 buys nothing and adds a second thing for readers to reason about. **Use SHA-256, not MD5, purely for consistency.** |
 
-**Need:** Plan creation, review, apply, cleanup lifecycle persisted in SQLite.
+### Supporting Libraries — Fuzzy Title Matching
 
-| Stdlib Package | Purpose | Why Sufficient |
-|----------------|---------|----------------|
-| `database/sql` | Plan/action CRUD | Already used for books table. Same patterns: INSERT, UPDATE, SELECT with status filtering. |
-| `encoding/json` | Plan serialization for `--json` output | Already used in v1.0 status commands. `json.MarshalIndent` for human-readable plan display. |
-| `time` | Timestamps for plan lifecycle | Plan created_at, applied_at, completed_at tracking. |
+**No library is recommended.** Hand-roll normalization + a small hand-rolled similarity function in a new internal package (e.g. `internal/matching`). Full rationale and comparison below.
 
-**Migration pattern:** Follow existing `internal/db/migrations/` numbered SQL files (005_add_plans.sql, 006_add_plan_actions.sql, etc.). Embedded via `//go:embed`. No schema migration library needed -- the existing manual migration runner works.
+| Library | Version | Last Release | Verdict |
+|---------|---------|---------------|---------|
+| `lithammer/fuzzysearch` | v1.1.8 | May 2023 | **Rejected** — wrong tool: it's a substring/typo "did you mean" matcher (single-character-insertion fuzzy find + Levenshtein ranking of short query against a word), not a general string-similarity scorer for comparing two full titles. Would need to be repurposed awkwardly. Unmaintained 2+ years. |
+| `adrg/strutil` (+ `strutil/metrics`) | v0.3.1 | Sep 2023 | **Rejected but closest fit** — clean API (`strutil.Similarity(a, b, metrics.NewJaroWinkler())`), includes Levenshtein, Jaro-Winkler, Sorensen-Dice, Jaccard. Well-designed, but every algorithm it offers is ~15-30 lines to implement directly, and the actual hard part of this problem (stripping `"(#17) "`, `" (Unabridged)"`, `" - Subtitle"` noise) is normalization logic the library can't do for you regardless. Adopting it for one function call is not proportional. |
+| `hbollon/go-edlib` | v1.7.0 | Aug 2025 | **Rejected** — most actively maintained of the four, broadest algorithm set (Levenshtein, Damerau-Levenshtein, Jaro-Winkler, cosine, q-gram, etc.), reasonable choice if this were a larger or evolving matching problem. Still rejected here: it's a large surface area for a single comparison need, and its distance-based algorithms don't handle word-reordering well (e.g. `"Example Saga - Third Movement"` vs an Audible title that leads with series info) — a token-set overlap approach (below) handles that better and doesn't need any library. |
+| `agext/levenshtein` | v1.2.3 | Mar 2020 | **Rejected** — single-purpose, last released 2020, no Unicode-aware token handling. Superseded in every dimension by go-edlib. |
 
-**Schema additions needed:**
-- `plans` table: id, name, description, status (draft/reviewed/applying/applied/failed), created_at, applied_at
-- `plan_actions` table: id, plan_id, action_type (move/flatten/split/delete/write_metadata), source_path, dest_path, status (pending/applied/failed/skipped), error_msg, applied_at
-- `execution_log` table: id, plan_id, action_id, operation, detail, timestamp
+**Why hand-rolled is the right call at this scale:**
 
-### Structural File Operations (Flatten/Split/Move)
+- **Volume:** ~600 books × ~70 candidates = at most 42,000 pairwise comparisons, each on strings of ~20-60 characters. A classic O(n·m) Levenshtein DP table (~20 lines of Go) or a token-set Jaccard/Dice comparison (~15 lines using `strings.Fields` + a `map[string]struct{}`) runs this in well under a second. This is not a performance problem needing an optimized library implementation.
+- **The hard part is normalization, not the metric.** Given examples like `"(#17) Example Chronicle"`, `"Second Example Tale (Unabridged)"`, `"Example Saga - Third Movement"`, the dominant source of match failure is series-number prefixes, `"(Unabridged)"`/`"(Abridged)"` suffixes, subtitle separators (`" - "`, `":"`), and punctuation/case differences — none of which any similarity library solves. That logic has to be written regardless of which (if any) distance function is chosen.
+- **Token-set comparison beats pure edit-distance for this data.** Titles that reorder or drop words (series prefixes, subtitle annotations) are better served by comparing normalized *word sets* (Jaccard/Dice coefficient, or a "token sort ratio" — sort words alphabetically then compare) than by raw character-level Levenshtein distance, which penalizes reordering heavily. This is straightforward to hand-roll and arguably *more correct* for this specific data shape than what off-the-shelf character-distance libraries provide out of the box.
+- **Dependency-adoption bar:** the project's own conventions (stdlib logging over zerolog/zap, stdlib HTTP over resty, pure-Go SQLite over CGo) consistently favor zero-dependency solutions when the problem is small and well-understood. A single hand-rolled ~100-150 line matcher with its own table-driven test suite (following the `testify` convention already used everywhere) is more maintainable long-term than an external dependency whose most-current option (`go-edlib`) is still a larger API surface than needed, and whose second-most-current option (`fuzzysearch`) hasn't been touched since 2023.
 
-**Need:** Move files between directories, flatten nested structures, split multi-book folders, verify integrity with SHA-256.
+**Recommended design (for the requirements/roadmap phase, not fully specified here):**
+1. Normalize: lowercase, strip leading `(#N)` / `#N` series markers, strip trailing parenthetical annotations (`(Unabridged)`, `(Abridged)`, narrator credits), strip subtitle after `" - "` or `":"` if a first-pass exact match fails, strip punctuation, collapse whitespace.
+2. Tier 1: exact match on normalized title (+ author if available). This alone will resolve the large majority of ~600 books.
+3. Tier 2: fallback token-set similarity (Dice/Jaccard on word sets) with a threshold (e.g. ≥0.7) for the remainder, surfaced to the user as "probable matches" for confirmation rather than silently auto-joined.
+4. Anything below threshold, or with multiple ambiguous candidates: reported unmatched, not guessed. Silent wrong joins are worse than a manual review step for a ~70-item long tail.
 
-| Stdlib Package | Purpose | Why Sufficient |
-|----------------|---------|----------------|
-| `os` | File/directory operations | `os.Rename`, `os.MkdirAll`, `os.Remove`, `os.ReadDir`. Already used in organize package. |
-| `io` | Stream copying for cross-device moves | `io.Copy` for cross-filesystem moves. Already proven in v1.0's organize/mover.go. |
-| `path/filepath` | Path manipulation | `filepath.WalkDir` for deep scanning. `filepath.Rel` for relative path computation. |
-| `crypto/sha256` | File integrity verification | `sha256.New()` + `io.Copy()` pattern. Stream-based, handles large M4A files (100MB+) without loading into memory. |
-| `crypto/subtle` | Hash comparison | `subtle.ConstantTimeCompare` for secure hash verification after file moves. |
-| `encoding/hex` | Hash string representation | `hex.EncodeToString` for human-readable SHA-256 hashes in logs and plan output. |
+### Supporting Libraries — HTTP Pagination / Retry
 
-**Implementation pattern for SHA-256 verification:**
-```go
-func HashFile(path string) (string, error) {
-    f, err := os.Open(path)
-    if err != nil {
-        return "", err
-    }
-    defer f.Close()
-    h := sha256.New()
-    if _, err := io.Copy(h, f); err != nil {
-        return "", err
-    }
-    return hex.EncodeToString(h.Sum(nil)), nil
-}
-```
-
-**Cross-filesystem move pattern:** Already exists in `internal/organize/mover.go`. Reuse for plan-based moves. Hash before move, move, hash after, compare.
-
-### CSV Import
-
-**Need:** Parse user-provided CSV files to create plans (bridge manual analysis to plan system).
-
-| Stdlib Package | Purpose | Why Sufficient |
-|----------------|---------|----------------|
-| `encoding/csv` | CSV parsing | RFC 4180 compliant. Handles quoted fields, multiline values, custom delimiters. More than enough for structured plan import. |
-| `os` | File reading | Standard file open/close. |
-| `strconv` | Type conversion | Parse numeric fields from CSV strings if needed. |
-
-**Why NOT csvutil or go-csvlib:** The CSV format for plan import will be earworm-defined (action_type, source, destination, etc.). Simple column-position or header-based parsing with `csv.Reader.Read()` is straightforward. Struct-tag mapping libraries add a dependency for ~10 lines of saved code.
-
-**Expected CSV format:**
-```
-action,source_path,dest_path,notes
-move,"/lib/Author/Wrong Title","/lib/Author/Right Title",Fix title
-flatten,"/lib/Author/Book/nested/","/lib/Author/Book/",Remove nesting
-delete,"/lib/Author/Book/.DS_Store","",macOS artifact
-```
-
-### Metadata Application (metadata.json)
-
-**Need:** Write `metadata.json` files alongside audiobook folders. Read-only operation on audio files -- only creates new JSON files.
-
-| Stdlib Package | Purpose | Why Sufficient |
-|----------------|---------|----------------|
-| `encoding/json` | JSON marshaling | `json.MarshalIndent` with 2-space indent for human-readable metadata files. |
-| `os` | File writing | `os.WriteFile` for atomic-ish writes (write to temp, rename). |
-
-**metadata.json structure** (Audiobookshelf-compatible):
-```json
-{
-  "title": "Book Title",
-  "author": "Author Name",
-  "asin": "B00XXXXX",
-  "series": "Series Name",
-  "seriesSequence": "1"
-}
-```
-
-**Write pattern:** Write to `metadata.json.tmp`, then `os.Rename` to `metadata.json` for crash safety. Avoids partial writes if interrupted.
-
-### Execution Logging and Audit Trail
-
-**Need:** Persistent log of all plan operations for debugging and accountability.
-
-| Stdlib Package | Purpose | Why Sufficient |
-|----------------|---------|----------------|
-| `database/sql` | Log persistence | SQLite `execution_log` table. INSERT-only (append-only audit log). |
-| `log/slog` | Structured runtime logging | Already used. Add plan-specific log attributes (plan_id, action_id, operation). |
-| `time` | Timestamps | Microsecond-precision timestamps for operation ordering. |
-| `fmt` | Detail formatting | Format operation details for human-readable log entries. |
-
-**Design:** Dual logging -- slog for runtime terminal/file output, SQLite execution_log table for persistent queryable audit trail. The `earworm plan log <plan-id>` command queries the table.
-
-### Claude Code Skill
-
-**Need:** `.claude/skills/earworm-cleanup/SKILL.md` for conversational library cleanup orchestration.
-
-**No Go dependencies.** This is a markdown file with YAML frontmatter that instructs Claude Code how to use earworm's CLI commands for library management.
-
-**Skill location:** `.claude/skills/earworm-cleanup/SKILL.md`
-
-**Skill capabilities:**
-- Guide Claude through scan -> plan -> review -> apply workflow
-- Reference earworm CLI commands and their `--json` output
-- Include CSV format specification for plan import
-- Define safety guardrails (always dry-run first, confirm deletions)
-
-### Deep Library Scanning
-
-**Need:** Scan all folders (not just ASIN-bearing ones), detect structural issues.
-
-| Stdlib Package | Purpose | Why Sufficient |
-|----------------|---------|----------------|
-| `path/filepath` | Directory walking | `filepath.WalkDir` (Go 1.16+) is more efficient than `filepath.Walk` -- uses `fs.DirEntry` to avoid unnecessary `Stat` calls. |
-| `os` | File system queries | `os.Stat`, `os.ReadDir` for directory inspection. |
-| `strings` | Path/name analysis | Pattern matching for issue detection (empty dirs, nested structures, naming anomalies). |
-
-**Why WalkDir over Walk:** `filepath.WalkDir` avoids calling `os.Lstat` on every file, which matters when scanning large NAS-mounted libraries over SMB/NFS where each stat is a network round-trip.
-
-## What NOT to Add
-
-| Library | Why Tempting | Why Not |
-|---------|-------------|---------|
-| `jszwec/csvutil` | Struct-tag CSV mapping | Only one CSV format to parse. 10 lines of manual parsing vs a dependency. |
-| `go-resty/resty` | HTTP client for ABS API | Already decided against in v1.0. Still only 2-3 endpoints. |
-| `hashicorp/go-multierror` | Aggregate errors from batch operations | Go 1.20+ `errors.Join` covers this. Stdlib. |
-| `google/uuid` | Plan IDs | Already in go.mod as indirect dep. Use integer auto-increment IDs instead -- simpler, SQLite-native, sufficient for a local CLI tool. |
-| `fsnotify/fsnotify` | Watch library for changes | Already in go.mod as indirect dep (viper). Not needed -- earworm is run-and-exit or polled via daemon. |
-| Schema migration library (goose, migrate) | DB migrations | Existing hand-rolled migration runner works. Adding a migration framework for 3-4 new migrations is overkill. |
-| `tidwall/gjson` | JSON querying | Not needed. We write JSON, not query complex nested JSON. |
-
-## New Migrations Required
-
-| Migration | Tables/Columns | Purpose |
-|-----------|---------------|---------|
-| `005_add_plans.sql` | `plans` table | Plan lifecycle tracking |
-| `006_add_plan_actions.sql` | `plan_actions` table | Individual operations within a plan |
-| `007_add_execution_log.sql` | `execution_log` table | Audit trail for applied operations |
-| `008_add_scan_issues.sql` | `scan_issues` table | Deep scan issue tracking (orphan folders, naming problems, structural issues) |
-
-## New Internal Packages
-
-No external packages, but new internal packages are needed:
-
-| Package | Purpose | Key Stdlib Dependencies |
-|---------|---------|------------------------|
-| `internal/plan/` | Plan CRUD, lifecycle management | `database/sql`, `encoding/json` |
-| `internal/fileops/` | Flatten, split, move with SHA-256 verification | `os`, `io`, `crypto/sha256`, `path/filepath` |
-| `internal/csvimport/` | CSV parsing into plan actions | `encoding/csv`, `os` |
-| `internal/audit/` | Execution logging | `database/sql`, `log/slog`, `time` |
-
-## New CLI Commands
-
-| Command | Package | Purpose |
+| Library | Version | Verdict |
 |---------|---------|---------|
-| `earworm scan --deep` | `internal/cli/` | Deep library scan (extend existing scan) |
-| `earworm plan create` | `internal/cli/` | Create plan from scan issues or manual |
-| `earworm plan list` | `internal/cli/` | List plans with status |
-| `earworm plan show <id>` | `internal/cli/` | Show plan details and actions |
-| `earworm plan apply <id>` | `internal/cli/` | Execute plan (with --dry-run) |
-| `earworm plan import <csv>` | `internal/cli/` | Import CSV as plan |
-| `earworm plan log <id>` | `internal/cli/` | Show execution log for plan |
-| `earworm cleanup <id>` | `internal/cli/` | Guarded deletion (plan's delete actions only, explicit confirm) |
+| `hashicorp/go-retryablehttp` | v0.7.8 (Jun 2025) | **Rejected.** Actively maintained and a reasonable choice in general, but disproportionate here: the Audiobookshelf integration is a handful of authenticated GET calls against a REST API the user's own server, on a local/trusted network, for a one-shot CLI invocation — not a long-running service hammering a flaky third-party API. `net/http.Client` with a `context.Context` timeout (the existing pattern in `internal/audiobookshelf/client.go`) plus a small hand-rolled retry-on-5xx loop (5-10 lines, mirroring the exponential-backoff logic the project already implements for Audible downloads per the `PROJECT.md` rate-limiting constraint) is sufficient and keeps the dependency graph flat. |
 
-## Configuration Additions (Viper)
+**Pagination approach:** Audiobookshelf's list endpoints use `page` (zero-indexed) and `limit` query params, with `limit=0` returning all results unpaginated. For ~70 items, a single `limit=0` call may be sufficient; if page-by-page is preferred for safety against large libraries, a simple `for page := 0; ; page++` loop checking `len(results) < limit` to detect the last page is all that's needed — no helper library changes this code meaningfully.
 
-| Key | Type | Default | Purpose |
-|-----|------|---------|---------|
-| `scan.deep` | bool | false | Enable deep scanning by default |
-| `plan.auto_hash` | bool | true | SHA-256 verify after file operations |
-| `plan.backup_deletes` | bool | true | Move to trash instead of hard delete |
-| `plan.trash_dir` | string | `~/.config/earworm/trash/` | Soft-delete destination |
+### Development Tools
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `httptest.Server` (stdlib, `net/http/httptest`) | Test the Audiobookshelf pagination/stats client | Already the established pattern in `internal/audiobookshelf/client_test.go` and `internal/cli/notify_test.go`. Extend it: stand up a fake multi-page handler that returns different JSON per `page` query param to test pagination termination logic. |
+| `cmdFactory` injection seam (existing pattern, `internal/audible`) | Test subprocess wrapping for `audible api ...` and `dayone` | **Use this exact pattern, do not invent a second one.** `internal/audible/audible.go`'s `WithCmdFactory(f func(ctx, name, args...) *exec.Cmd)` + the `TestHelperProcess`/`GO_WANT_HELPER_PROCESS` Go subprocess-test idiom (visible in `internal/audible/audible_test.go`) is already proven in this codebase for exactly this shape of problem (external CLI, JSON/text stdout, stderr-based error classification, context cancellation). Apply it identically to: (a) a new `audible api` wrapper for whatever endpoint listening-stats needs, and (b) a new `dayone` client that pipes journal text via stdin (`cmd.Stdin = strings.NewReader(entryText)`) instead of args/flags. `internal/venv/venv.go` independently reinforces this as the repo's standard subprocess-testing convention — two existing packages already agree on it. |
+| `testify/assert` + `testify/require` | Assertions for new matcher, CSV writer, and stats client tests | Already a repo-wide dependency (v1.11.1); no version change needed. |
 
 ## Installation
 
+No new Go module dependencies are required for the core feature set described in this milestone.
+
 ```bash
-# No new dependencies needed for v1.1
-# Existing go.mod is sufficient
-go mod tidy
+# No `go get` needed for: JSON parsing, HTTP pagination, CSV export,
+# subprocess wrapping, or hashing — all stdlib, already in go.mod.
+
+# If title-matching needs later prove the hand-rolled approach insufficient
+# (unlikely at ~600x70 scale), the fallback choice would be:
+go get github.com/hbollon/go-edlib@v1.7.0   # NOT currently recommended — see rationale above
 ```
+
+External (non-Go) tooling the milestone depends on, managed outside `go.mod`:
+
+```bash
+# dayone CLI — npm-distributed binary, shelled out to via os/exec.
+# This is an external runtime dependency analogous to the existing
+# Python/audible-cli requirement, NOT a Go library.
+npm install -g dayone   # or npx dayone, per whatever the requirements phase settles on
+```
+
+## Alternatives Considered
+
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|--------------------------|
+| Hand-rolled normalization + token-set similarity | `hbollon/go-edlib` v1.7.0 | If the matching problem grows significantly (e.g. matching against multiple additional sources, or needing several distance algorithms interchangeably/configurably), go-edlib's broader, actively-maintained algorithm set becomes proportional. Not the case at ~600×70 scale with two known sources. |
+| Hand-rolled normalization + token-set similarity | `adrg/strutil` v0.3.1 | If the team wants a well-tested, documented Jaro-Winkler/Sorensen-Dice implementation rather than hand-rolling the metric (while still hand-rolling normalization), this is the cleanest single-purpose option of the four. Reasonable minority choice, not the default recommendation. |
+| Hand-rolled retry loop | `hashicorp/go-retryablehttp` v0.7.8 | If Audiobookshelf calls expand significantly (many more endpoints, long-running daemon polling against Audiobookshelf rather than one-shot CLI calls), a real retry-client library starts paying for itself. Not justified for the current scope of a few stats/session endpoints called once per `earworm stats` invocation. |
+| `crypto/sha256` (existing) | `crypto/md5` (stdlib) | Never, in this codebase — MD5 is stdlib-equivalent effort but breaks the established single-hash-algorithm convention for no benefit. Only relevant if some external system this milestone integrates with *requires* MD5 specifically (not indicated by anything in the milestone context). |
+
+## What NOT to Use
+
+| Avoid | Why | Use Instead |
+|-------|-----|--------------|
+| `lithammer/fuzzysearch` | Solves a different problem (substring/"did you mean" fuzzy find against a word list), not two-full-string similarity scoring. Unmaintained since May 2023. | Hand-rolled token-set similarity |
+| `agext/levenshtein` | Single-metric, unmaintained since March 2020, no advantage over hand-rolling the same ~20-line DP algorithm. | Hand-rolled Levenshtein/Dice, or `go-edlib` if a library is truly wanted |
+| Any general-purpose HTTP client library (`resty`, etc.) for Audiobookshelf pagination | Same reasoning the existing STACK.md already applied to the scan-trigger client: too few endpoints to justify the dependency. Adding pagination doesn't change that math — it's still 2-3 endpoints, called rarely, on a trusted local server. | `net/http` stdlib, same client shape as `internal/audiobookshelf/client.go` |
+| `hashicorp/go-retryablehttp` for this milestone | Correctly built and maintained, but disproportionate for a handful of one-shot GETs against the user's own local Audiobookshelf instance. | Hand-rolled retry loop, same spirit as the Audible download backoff already required by `PROJECT.md` |
+| A second subprocess-testing abstraction (e.g. an interface-based `exec.Cmd` mock, or a third-party process-mocking library) | The repo has explicitly chosen `cmdFactory` injection over interface abstraction (`PROJECT.md` Key Decisions: "cmdFactory injection for subprocess testing — Avoids interface-based exec abstraction, simpler test seams"). Introducing a second pattern for the `dayone`/`audible api` integrations would fragment testing conventions across the codebase. | Reuse `WithCmdFactory` + `TestHelperProcess` pattern from `internal/audible` |
+| Embedding/vendoring a Node.js runtime for `dayone` the way Python is embedded for `audible-cli` | Not indicated as necessary by the milestone context, and is a much heavier lift (Node runtime management vs. Python venv management) for what may be a single CLI invocation per journal entry. This is an architecture decision for the requirements/roadmap phase, not a stack dependency — flagging it here only so it isn't silently assumed. | Require `dayone` pre-installed on PATH with a clear, actionable error message if missing (mirrors how `audible-cli`'s presence is checked before the venv auto-management kicks in) |
+
+## Stack Patterns by Variant
+
+**If the ~600×70 matching problem later needs to scale to multiple additional sources (e.g. a third catalog) or needs configurable/pluggable similarity strategies:**
+- Reconsider `hbollon/go-edlib` v1.7.0 at that point — its actively maintained, multi-algorithm surface becomes proportional to a genuinely multi-source problem.
+- Because it stays out of scope now, revisit only if a future milestone's requirements explicitly call for it.
+
+**If Audiobookshelf listening-stats calls become a recurring daemon/polling workload rather than an on-demand `earworm stats` command:**
+- Reconsider `hashicorp/go-retryablehttp` — daemon-mode long-running polling against a network service is exactly the situation retry libraries are built for, unlike a one-shot CLI invocation.
+- Not warranted for the milestone as scoped (on-demand extraction + CSV/journal export).
+
+## Version Compatibility
+
+| Package A | Compatible With | Notes |
+|-----------|------------------|-------|
+| Go 1.26.1 (repo's current `go.mod`) | All stdlib packages named above (`net/http`, `encoding/json`, `encoding/csv`, `os/exec`, `crypto/sha256`) | No version constraints — all stable stdlib since long before Go 1.23. |
+| `github.com/stretchr/testify` v1.11.1 (existing) | New matcher/CSV/stats tests | No change needed; already pinned in `go.mod`. |
+| `hbollon/go-edlib` v1.7.0 (if adopted later) | Go 1.18+ (generics-era module) | Compatible with repo's Go 1.26.1 if this path is revisited. |
+| `dayone` npm CLI | Node.js runtime (version not verified — confirm during requirements phase against the specific npm package's `engines` field) | External runtime dependency, not a Go module; no `go.mod` interaction. Needs its own "is this on PATH" preflight check, mirroring the existing `audible-cli` presence check. |
 
 ## Sources
 
-- [Go crypto/sha256 package](https://pkg.go.dev/crypto/sha256) -- stdlib SHA-256, confirmed io.Copy streaming pattern
-- [Go encoding/csv package](https://pkg.go.dev/encoding/csv) -- RFC 4180 compliant CSV parser
-- [Go encoding/json package](https://pkg.go.dev/encoding/json) -- MarshalIndent for metadata files
-- [Go filepath.WalkDir](https://pkg.go.dev/path/filepath#WalkDir) -- efficient directory traversal without extra Stat calls
-- [Claude Code Skills documentation](https://code.claude.com/docs/en/skills) -- .claude/skills/ format with YAML frontmatter
-- [SHA-256 file hashing in Go](https://transloadit.com/devtips/verify-file-integrity-with-go-and-sha256/) -- io.Copy pattern for large files
-- [Go errors.Join](https://pkg.go.dev/errors#Join) -- Go 1.20+ multi-error aggregation, replaces hashicorp/go-multierror
+- Repo inspection: `internal/audible/audible.go`, `internal/audible/library.go`, `internal/audible/audible_test.go`, `internal/audiobookshelf/client.go`, `internal/audiobookshelf/client_test.go`, `internal/db/db.go`, `internal/goodreads/export.go`, `internal/venv/venv.go`, `go.mod`, `.planning/PROJECT.md` — confirmed existing stack, conventions, and test seams directly from source.
+- [pkg.go.dev: lithammer/fuzzysearch/fuzzy](https://pkg.go.dev/github.com/lithammer/fuzzysearch/fuzzy) — v1.1.8, published May 9, 2023, flagged as not the module's latest indexed version.
+- [pkg.go.dev: adrg/strutil](https://pkg.go.dev/github.com/adrg/strutil) — v0.3.1, published Sep 27, 2023; metrics list (Hamming, Levenshtein, Jaro, Jaro-Winkler, Smith-Waterman-Gotoh, Sorensen-Dice, Jaccard, Overlap).
+- [GitHub: hbollon/go-edlib releases](https://github.com/hbollon/go-edlib/releases) / [pkg.go.dev](https://pkg.go.dev/github.com/hbollon/go-edlib) — v1.7.0, published Aug 19, 2025.
+- [pkg.go.dev: agext/levenshtein](https://pkg.go.dev/github.com/agext/levenshtein) / [GitHub v1.2.3 tag](https://github.com/agext/levenshtein/tree/v1.2.3) — v1.2.3, published Mar 12, 2020, marked stable/frozen API.
+- [pkg.go.dev: hashicorp/go-retryablehttp](https://pkg.go.dev/github.com/hashicorp/go-retryablehttp) / [GitHub](https://github.com/hashicorp/go-retryablehttp) — v0.7.8, published Jun 18, 2025.
+- [Audiobookshelf API Reference](https://api.audiobookshelf.org/) — confirmed `GET /api/me/listening-sessions`, `GET /api/me/listening-stats`, `GET /api/users/<id>/listening-stats` endpoints; confirmed `page`/`limit` pagination model with `limit=0` meaning "no limit"; confirmed Bearer-token auth (query-param token also supported for GET).
+- [Day One CLI documentation](https://dayoneapp.com/guides/day-one-for-mac/command-line-interface-cli/) and [npm: dayone](https://www.npmjs.com/package/dayone) — confirmed `new` subcommand reads entry text from stdin by default (`--no-stdin` to override), confirming the stdin-piping integration shape assumed in the milestone context.
+- [mkb79/audible-cli GitHub](https://github.com/mkb79/audible-cli) — confirmed `audible api <endpoint>` exists for arbitrary Audible API calls returning plain JSON, same integration shape as the already-implemented `library export --format json`.
+
+---
+*Stack research for: listening-stats extraction, CSV export, and Day One journaling additions to earworm v1.2*
+*Researched: 2026-09-20*
