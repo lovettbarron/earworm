@@ -11,10 +11,25 @@ Reliably download and organize Audible audiobooks into a local library with zero
 ## Current State
 
 **Shipped:** v1.0 MVP (2026-04-06)
-**In progress:** v1.1 Library Cleanup — Phase 18.1 complete (CSV Metadata Flow & Format Flexibility)
+**In progress:** v1.2 Listening Stats & Journaling — Phases 19-22
+**Paused:** v1.1 Library Cleanup — Phase 18.1 complete
 **Codebase:** ~134k lines Go across 15 packages, 83.2% test coverage
 **Tech stack:** Go 1.23+, Cobra/Viper CLI, modernc.org/sqlite (pure Go, no CGo), charmbracelet/lipgloss
 **Commands:** auth, sync, scan, status, download, organize, notify, goodreads, daemon, config, version, skip, plan, cleanup, split
+
+
+## Current Milestone: v1.2 Listening Stats & Journaling
+
+**Goal:** Merge Audible and Audiobookshelf listening history into a local store, export an LLM-ready CSV dataset, and sync measured listening to Day One.
+
+**Target features:**
+- Audible listening ingestion (daily totals, status events, last playback positions)
+- Audiobookshelf playback-session ingestion with mutable-record handling
+- Cross-source book identity resolution that tolerates books present in only one source
+- LLM-oriented CSV export carrying explicit source and attribution provenance
+- Idempotent Day One journaling of measured listening, plus daemon automation
+
+**Key constraint:** inferred attribution never enters the journal and is never stored as measured fact. Exports stay local.
 
 ## Requirements
 

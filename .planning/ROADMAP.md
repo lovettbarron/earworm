@@ -266,6 +266,10 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 15. Data Safety Hardening for NAS Ops | 4/4 | Complete    | 2026-04-11 |
 | 16. Plan Lifecycle — Draft Promotion | 1/1 | Complete    | 2026-04-12 |
 | 17. Scan-to-Plan Bridge & JSON Output | 2/2 | Complete    | 2026-04-12 |
+| 19. Audible Listening Ingestion | 0/1 | Pending | - |
+| 20. Audiobookshelf Listening Ingestion | 0/1 | Pending | - |
+| 21. Identity Resolution & Dataset Export | 0/1 | Pending | - |
+| 22. Day One Journaling & Daemon Integration | 0/1 | Pending | - |
 | 18. Metadata Wiring & Artifact Cleanup | 2/2 | Complete    | 2026-04-12 |
 
 ### Phase 15: Data Safety Hardening for NAS Operations
@@ -351,3 +355,91 @@ Plans:
 Plans:
 - [x] 18.1-01-PLAN.md — Migration 007, PlanOperation.Metadata field, CSV column aliasing and metadata extraction
 - [x] 18.1-02-PLAN.md — Executor metadata preference for write_metadata, bridge missing_metadata to write_metadata
+
+### Phase 19: Audible Listening Ingestion
+
+**Goal:** Pull the full Audible listening record into local SQLite and establish the shared conventions every later phase reuses.
+
+**Requirements:** STAT-01, STAT-02, STAT-03, STAT-04, STAT-05
+
+**Scope:**
+- `internal/audible`: raw `audible api <endpoint>` caller with `-p` params, reusing the existing cmdFactory seam
+- Four endpoints: `stats/aggregates` (daily, 30-day windows; monthly, 12-month windows), `stats/status/finished` (continuation-token pagination), `annotations/lastpositions` (25 ASINs per call), `library` with `listening_status`
+- New package `internal/listening`: canonical day bucketing against a configured `time.Location`, `Clock` interface for testable time, bulk-cluster detection
+- Migration 008: `listening_days`, `book_listening`, `stats_sync_state`
+- CLI: `earworm stats backfill --source audible`, `earworm stats sync`
+
+**Success criteria:**
+1. A backfill run populates daily totals, per-book status events and last positions from a mocked audible-cli
+2. Re-running backfill produces no duplicate rows and skips already-covered ranges
+3. Batch limits are enforced in code, not left to the caller
+4. Day bucketing is timezone-explicit and covered by tests that would fail under `time.Local`
+5. A synthetic sub-second cluster of finish events is flagged rather than counted
+
+---
+
+### Phase 20: Audiobookshelf Listening Ingestion
+
+**Goal:** Ingest exact per-book playback sessions from Audiobookshelf with correct mutable-record handling.
+
+**Requirements:** ABSL-01, ABSL-02, ABSL-03, ABSL-04, ABSL-05
+
+**Scope:**
+- Expand `internal/audiobookshelf` beyond `ScanLibrary`: API-key auth, `GET /api/me`, `GET /api/sessions?user=<uuid>` paginated backfill, `POST /api/items/batch/get` enrichment
+- Lenient JSON decoding for numeric fields that arrive as int, float or string
+- Watermark sync on `updatedAt` with a 36-hour overlap; upsert sessions with `ON CONFLICT DO UPDATE`
+- Migration 009: `listening_sessions`
+- CLI: `earworm stats backfill --source abs`, `earworm config abs-check`
+
+**Success criteria:**
+1. Connectivity check reports server version and resolves the configured user
+2. Backfill pages through a mocked multi-page session list and stores every session
+3. A session whose `timeListening` grows between syncs updates in place rather than duplicating
+4. A float-valued `timeListening` decodes without error
+5. Sessions missing genres are enriched from a batch item fetch
+
+---
+
+### Phase 21: Identity Resolution & Dataset Export
+
+**Goal:** Reconcile books across sources and produce the LLM-ready CSV dataset.
+
+**Requirements:** IDNT-01, IDNT-02, IDNT-03, IDNT-04, EXPT-01, EXPT-02, EXPT-03, EXPT-04, EXPT-05
+
+**Scope:**
+- New package `internal/bookidentity`: title normalization (series prefixes, `(Unabridged)`, subtitles, punctuation) and token-set similarity; no new dependency
+- Migration 010: `book_identities`, `book_identity_sources` with `match_method` and `match_confidence`
+- New package `internal/statsexport`: greedy backward allocation computed at export time, three normalized CSVs plus opt-in `timeline.csv`
+- CLI: `earworm stats export`, `earworm stats matches`
+
+**Success criteria:**
+1. Books matching by ASIN, by normalized title, and matching nothing all resolve to distinct identities with the correct recorded method
+2. A single-source book survives export intact
+3. Every exported row carries source and attribution columns
+4. Allocation output is reproducible for the same input and is absent from the database
+5. Export writes to a gitignored local directory by default
+
+---
+
+### Phase 22: Day One Journaling & Daemon Integration
+
+**Goal:** Turn measured listening into journal entries safely, and run the whole pipeline unattended.
+
+**Requirements:** JRNL-01, JRNL-02, JRNL-03, JRNL-04, JRNL-05, JRNL-06
+
+**Scope:**
+- New package `internal/journal`: Markdown digest formatter, deterministic entry IDs (SHA-256 truncated to 32 hex chars), `dayone` subprocess client using the cmdFactory seam
+- Two entry kinds: exact per-book daily digests where session data exists, filtered genuine finish events otherwise
+- Migration 011: `journal_entries` ledger for idempotency and audit
+- Explicit `dayone sync` as its own failable step after writes
+- Daemon hook with a single-flight guard
+- CLI: `earworm stats journal [--date] [--write]`
+
+**Success criteria:**
+1. A digest renders correctly from stored sessions without touching the network
+2. Re-running a journal sync for the same date updates the existing entry rather than adding one
+3. Dry-run is the default; writing requires an explicit flag
+4. No inferred attribution appears in any generated entry
+5. A day with no listening produces no entry, and the daemon cannot start overlapping syncs
+
+---
