@@ -38,6 +38,15 @@ func SetDefaults() {
 	// enrich fetches library items so genres and series missing from session
 	// metadata snapshots are filled in.
 	viper.SetDefault("stats.enrich", true)
+	// Journaling. Writing is opt-in per invocation; these only say where and how.
+	viper.SetDefault("journal.cli_path", "dayone")
+	viper.SetDefault("journal.journal_id", "")
+	viper.SetDefault("journal.include_finishes", false)
+	// journal.daemon_write lets the daemon write entries unattended. Off by
+	// default: the daemon should not modify a personal record without the
+	// user having said so explicitly.
+	viper.SetDefault("journal.daemon_write", false)
+	viper.SetDefault("daemon.stats_sync", true)
 	// stats.backfill_start bounds how far back a backfill reaches. Audible
 	// exposes no daily-granularity data before 2015 even where monthly totals
 	// go further, so walking back further only spends API calls on empty windows.

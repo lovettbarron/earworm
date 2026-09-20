@@ -471,3 +471,58 @@ func CountListeningSessions(db *sql.DB) (int, error) {
 	}
 	return n, nil
 }
+
+// JournalEntry records one entry earworm has written to an external journal.
+type JournalEntry struct {
+	EntryKey    string
+	Kind        string
+	EntryID     string
+	JournalID   string
+	EntryDate   string
+	ContentHash string
+}
+
+// UpsertJournalEntry records that an entry was written.
+func UpsertJournalEntry(db *sql.DB, e JournalEntry) error {
+	_, err := db.Exec(`
+		INSERT INTO journal_entries (
+			entry_key, kind, entry_id, journal_id, entry_date, content_hash, written_at
+		) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(entry_key) DO UPDATE SET
+			kind = excluded.kind,
+			entry_id = excluded.entry_id,
+			journal_id = excluded.journal_id,
+			entry_date = excluded.entry_date,
+			content_hash = excluded.content_hash,
+			written_at = CURRENT_TIMESTAMP`,
+		e.EntryKey, e.Kind, e.EntryID, e.JournalID, e.EntryDate, e.ContentHash)
+	if err != nil {
+		return fmt.Errorf("upsert journal entry %s: %w", e.EntryKey, err)
+	}
+	return nil
+}
+
+// GetJournalEntry returns a previously written entry, if any.
+func GetJournalEntry(db *sql.DB, entryKey string) (JournalEntry, bool, error) {
+	var e JournalEntry
+	err := db.QueryRow(`
+		SELECT entry_key, kind, entry_id, journal_id, entry_date, content_hash
+		FROM journal_entries WHERE entry_key = ?`, entryKey).
+		Scan(&e.EntryKey, &e.Kind, &e.EntryID, &e.JournalID, &e.EntryDate, &e.ContentHash)
+	if err == sql.ErrNoRows {
+		return e, false, nil
+	}
+	if err != nil {
+		return e, false, fmt.Errorf("get journal entry %s: %w", entryKey, err)
+	}
+	return e, true, nil
+}
+
+// CountJournalEntries returns how many entries have been written.
+func CountJournalEntries(db *sql.DB) (int, error) {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM journal_entries`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count journal entries: %w", err)
+	}
+	return n, nil
+}

@@ -63,6 +63,12 @@ func executeCommandWithConfig(t *testing.T, setup func(), args ...string) (strin
 	statsExportDir = ""
 	statsExportTimeline = false
 	statsMatchesAll = false
+	journalWrite = false
+	journalDate = ""
+	journalSince = ""
+	journalUntil = ""
+	journalFinishes = false
+	journalPreview = false
 
 	// Reset cobra flag Changed state and help flag on all subcommands
 	// to prevent cross-test contamination (--help sticks across tests).

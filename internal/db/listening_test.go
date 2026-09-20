@@ -462,3 +462,66 @@ func TestListListeningSessionsReportsScanErrors(t *testing.T) {
 	_, err = ListListeningSessions(database)
 	assert.Error(t, err)
 }
+
+func TestMigration010CreatesJournalTable(t *testing.T) {
+	database := setupTestDB(t)
+	var name string
+	err := database.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='journal_entries'`).Scan(&name)
+	require.NoError(t, err)
+	assert.Equal(t, "journal_entries", name)
+}
+
+func TestJournalEntryRoundTrips(t *testing.T) {
+	database := setupTestDB(t)
+
+	in := JournalEntry{
+		EntryKey: "day:2026-09-20", Kind: "day", EntryID: "ABC123",
+		JournalID: "journal-1", EntryDate: "2026-09-20", ContentHash: "hash-1",
+	}
+	require.NoError(t, UpsertJournalEntry(database, in))
+
+	got, ok, err := GetJournalEntry(database, "day:2026-09-20")
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, in, got)
+}
+
+func TestGetJournalEntryMissingIsNotAnError(t *testing.T) {
+	database := setupTestDB(t)
+	_, ok, err := GetJournalEntry(database, "day:never-written")
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+// Rewriting a day updates the ledger rather than adding a second record.
+func TestUpsertJournalEntryUpdatesInPlace(t *testing.T) {
+	database := setupTestDB(t)
+
+	require.NoError(t, UpsertJournalEntry(database, JournalEntry{
+		EntryKey: "day:2026-09-20", ContentHash: "hash-1",
+	}))
+	require.NoError(t, UpsertJournalEntry(database, JournalEntry{
+		EntryKey: "day:2026-09-20", ContentHash: "hash-2",
+	}))
+
+	n, err := CountJournalEntries(database)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	got, _, err := GetJournalEntry(database, "day:2026-09-20")
+	require.NoError(t, err)
+	assert.Equal(t, "hash-2", got.ContentHash)
+}
+
+func TestJournalEntryOperationsReportDatabaseErrors(t *testing.T) {
+	bad := closedDB(t)
+
+	assert.Error(t, UpsertJournalEntry(bad, JournalEntry{EntryKey: "k"}))
+
+	_, _, err := GetJournalEntry(bad, "k")
+	assert.Error(t, err)
+
+	_, err = CountJournalEntries(bad)
+	assert.Error(t, err)
+}

@@ -38,43 +38,43 @@ Requirements for the Listening Stats & Journaling milestone. Each maps to roadma
 
 ### Audible Listening Ingestion
 
-- [ ] **STAT-01**: User can backfill complete Audible listening history (daily totals, monthly totals, per-book status events, last playback positions) into the local database with one command
-- [ ] **STAT-02**: Backfill is resumable — interrupting and re-running neither duplicates rows nor refetches already-stored ranges
-- [ ] **STAT-03**: Audible requests respect the API's batch limits automatically (30-day maximum per daily-stats window, 25 ASINs per last-positions call) and the configured rate limit
-- [ ] **STAT-04**: All listening days are bucketed using a single configured timezone, applied identically to every source
-- [ ] **STAT-05**: Bulk status-change clusters (many books sharing a sub-second timestamp) are detected and flagged so they are never treated as genuine finish events
+- [x] **STAT-01**: User can backfill complete Audible listening history (daily totals, monthly totals, per-book status events, last playback positions) into the local database with one command
+- [x] **STAT-02**: Backfill is resumable — interrupting and re-running neither duplicates rows nor refetches already-stored ranges
+- [x] **STAT-03**: Audible requests respect the API's batch limits automatically (30-day maximum per daily-stats window, 25 ASINs per last-positions call) and the configured rate limit
+- [x] **STAT-04**: All listening days are bucketed using a single configured timezone, applied identically to every source
+- [x] **STAT-05**: Bulk status-change clusters (many books sharing a sub-second timestamp) are detected and flagged so they are never treated as genuine finish events
 
 ### Audiobookshelf Listening Ingestion
 
-- [ ] **ABSL-01**: User can configure an Audiobookshelf URL, API key and user ID, and verify connectivity with a single command
-- [ ] **ABSL-02**: User can backfill the complete Audiobookshelf playback-session history into the local database
-- [ ] **ABSL-03**: Incremental sync fetches only sessions changed since the last watermark, using an overlap window, and updates mutable sessions in place rather than duplicating them
-- [ ] **ABSL-04**: Session records retain per-book listening seconds, start and update timestamps, and device information
-- [ ] **ABSL-05**: Genre and series data missing from session metadata snapshots is enriched from the library-items endpoint
+- [x] **ABSL-01**: User can configure an Audiobookshelf URL, API key and user ID, and verify connectivity with a single command
+- [x] **ABSL-02**: User can backfill the complete Audiobookshelf playback-session history into the local database
+- [x] **ABSL-03**: Incremental sync fetches only sessions changed since the last watermark, using an overlap window, and updates mutable sessions in place rather than duplicating them
+- [x] **ABSL-04**: Session records retain per-book listening seconds, start and update timestamps, and device information
+- [x] **ABSL-05**: Genre and series data missing from session metadata snapshots is enriched from the library-items endpoint
 
 ### Identity Resolution
 
-- [ ] **IDNT-01**: Books from both sources resolve to a single identity keyed by a surrogate ID, with ASIN as an optional attribute rather than the primary key
-- [ ] **IDNT-02**: Books present in only one source are retained in full, never dropped for failing to match
-- [ ] **IDNT-03**: Every identity mapping records how it was matched and with what confidence
-- [ ] **IDNT-04**: User can review unmatched and low-confidence matches via the CLI
+- [x] **IDNT-01**: Books from both sources resolve to a single identity keyed by a surrogate ID, with ASIN as an optional attribute rather than the primary key
+- [x] **IDNT-02**: Books present in only one source are retained in full, never dropped for failing to match
+- [x] **IDNT-03**: Every identity mapping records how it was matched and with what confidence
+- [x] **IDNT-04**: User can review unmatched and low-confidence matches via the CLI
 
 ### Dataset Export
 
-- [ ] **EXPT-01**: User can export listening history as CSV files to a local directory
-- [ ] **EXPT-02**: Export produces normalized books, days and sessions files, plus an opt-in combined timeline file
-- [ ] **EXPT-03**: Every exported row carries its source and an explicit attribution quality
-- [ ] **EXPT-04**: Inferred daily attribution is computed at export time from measured facts, never stored as if it were measured
-- [ ] **EXPT-05**: Exports default to a local gitignored directory and are never transmitted anywhere
+- [x] **EXPT-01**: User can export listening history as CSV files to a local directory
+- [x] **EXPT-02**: Export produces normalized books, days and sessions files, plus an opt-in combined timeline file
+- [x] **EXPT-03**: Every exported row carries its source and an explicit attribution quality
+- [x] **EXPT-04**: Inferred daily attribution is computed at export time from measured facts, never stored as if it were measured
+- [x] **EXPT-05**: Exports default to a local gitignored directory and are never transmitted anywhere
 
 ### Journaling & Automation
 
-- [ ] **JRNL-01**: User can generate a Markdown listening digest for any given date
-- [ ] **JRNL-02**: User can sync digests to Day One idempotently — re-running updates the existing entry instead of creating duplicates
-- [ ] **JRNL-03**: Journal sync defaults to dry-run and requires an explicit flag to write
-- [ ] **JRNL-04**: Only measured facts reach the journal: exact per-book sessions where available, filtered genuine finish events otherwise; inferred attribution is excluded
-- [ ] **JRNL-05**: Days with no listening produce no journal entry
-- [ ] **JRNL-06**: The daemon can run incremental stats sync on its poll cycle without overlapping runs
+- [x] **JRNL-01**: User can generate a Markdown listening digest for any given date
+- [x] **JRNL-02**: User can sync digests to Day One idempotently — re-running updates the existing entry instead of creating duplicates
+- [x] **JRNL-03**: Journal sync defaults to dry-run and requires an explicit flag to write
+- [x] **JRNL-04**: Only measured facts reach the journal: exact per-book sessions where available, filtered genuine finish events otherwise; inferred attribution is excluded
+- [x] **JRNL-05**: Days with no listening produce no journal entry
+- [x] **JRNL-06**: The daemon can run incremental stats sync on its poll cycle without overlapping runs
 
 ## Future Requirements
 
@@ -121,31 +121,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SAFE-04 | Phase 15 | Complete |
 | SAFE-05 | Phase 15 | Complete |
 
-| STAT-01 | Phase 19 | Pending |
-| STAT-02 | Phase 19 | Pending |
-| STAT-03 | Phase 19 | Pending |
-| STAT-04 | Phase 19 | Pending |
-| STAT-05 | Phase 19 | Pending |
-| ABSL-01 | Phase 20 | Pending |
-| ABSL-02 | Phase 20 | Pending |
-| ABSL-03 | Phase 20 | Pending |
-| ABSL-04 | Phase 20 | Pending |
-| ABSL-05 | Phase 20 | Pending |
-| IDNT-01 | Phase 21 | Pending |
-| IDNT-02 | Phase 21 | Pending |
-| IDNT-03 | Phase 21 | Pending |
-| IDNT-04 | Phase 21 | Pending |
-| EXPT-01 | Phase 21 | Pending |
-| EXPT-02 | Phase 21 | Pending |
-| EXPT-03 | Phase 21 | Pending |
-| EXPT-04 | Phase 21 | Pending |
-| EXPT-05 | Phase 21 | Pending |
-| JRNL-01 | Phase 22 | Pending |
-| JRNL-02 | Phase 22 | Pending |
-| JRNL-03 | Phase 22 | Pending |
-| JRNL-04 | Phase 22 | Pending |
-| JRNL-05 | Phase 22 | Pending |
-| JRNL-06 | Phase 22 | Pending |
+| STAT-01 | Phase 19 | Complete |
+| STAT-02 | Phase 19 | Complete |
+| STAT-03 | Phase 19 | Complete |
+| STAT-04 | Phase 19 | Complete |
+| STAT-05 | Phase 19 | Complete |
+| ABSL-01 | Phase 20 | Complete |
+| ABSL-02 | Phase 20 | Complete |
+| ABSL-03 | Phase 20 | Complete |
+| ABSL-04 | Phase 20 | Complete |
+| ABSL-05 | Phase 20 | Complete |
+| IDNT-01 | Phase 21 | Complete |
+| IDNT-02 | Phase 21 | Complete |
+| IDNT-03 | Phase 21 | Complete |
+| IDNT-04 | Phase 21 | Complete |
+| EXPT-01 | Phase 21 | Complete |
+| EXPT-02 | Phase 21 | Complete |
+| EXPT-03 | Phase 21 | Complete |
+| EXPT-04 | Phase 21 | Complete |
+| EXPT-05 | Phase 21 | Complete |
+| JRNL-01 | Phase 22 | Complete |
+| JRNL-02 | Phase 22 | Complete |
+| JRNL-03 | Phase 22 | Complete |
+| JRNL-04 | Phase 22 | Complete |
+| JRNL-05 | Phase 22 | Complete |
+| JRNL-06 | Phase 22 | Complete |
 
 **v1.2 Coverage:**
 - v1.2 requirements: 25 total

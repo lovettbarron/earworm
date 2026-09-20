@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/lovettbarron/earworm/internal/audiobookshelf"
 	"github.com/lovettbarron/earworm/internal/daemon"
+	"github.com/lovettbarron/earworm/internal/listening"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -99,6 +101,11 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 			}
 		}
 
+		// Step 5: Listening stats, and optionally the journal.
+		if viper.GetBool("daemon.stats_sync") {
+			runDaemonStatsCycle(cmd)
+		}
+
 		return nil
 	}
 
@@ -109,4 +116,59 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 
 	// Continuous polling.
 	return daemon.Run(ctx, interval, cycle, daemonVerbose)
+}
+
+// statsCycleRunning guards the stats step against overlapping runs.
+//
+// A backfill can outlast a polling interval, and two concurrent syncs would
+// interleave writes to the same rows and the same journal entries. The guard
+// makes a slow cycle skip the next one rather than race it.
+var statsCycleRunning atomic.Bool
+
+// runDaemonStatsCycle syncs listening history and, when explicitly enabled,
+// writes journal entries.
+//
+// Every failure is logged rather than returned: the stats step is an extra on
+// top of the download pipeline, and a listening-history hiccup should not stop
+// the daemon from fetching books.
+func runDaemonStatsCycle(cmd *cobra.Command) {
+	if !statsCycleRunning.CompareAndSwap(false, true) {
+		slog.Warn("daemon: stats sync still running from a previous cycle, skipping")
+		return
+	}
+	defer statsCycleRunning.Store(false)
+
+	slog.Info("daemon: syncing listening stats")
+	origSource := statsSource
+	defer func() { statsSource = origSource }()
+
+	statsSource = listening.SourceAudible
+	if err := runStatsSync(cmd, nil); err != nil {
+		slog.Warn("daemon: audible stats sync failed", "error", err)
+	}
+
+	if viper.GetString("audiobookshelf.url") != "" && viper.GetString("audiobookshelf.token") != "" {
+		statsSource = listening.SourceABS
+		if err := runStatsSync(cmd, nil); err != nil {
+			slog.Warn("daemon: audiobookshelf stats sync failed", "error", err)
+		}
+	}
+
+	// Journal writes stay opt-in. The daemon should not modify a personal
+	// record unattended unless the user has said so.
+	if !viper.GetBool("journal.daemon_write") {
+		return
+	}
+	if viper.GetString("journal.journal_id") == "" {
+		slog.Warn("daemon: journal.daemon_write is on but journal.journal_id is unset, skipping")
+		return
+	}
+
+	slog.Info("daemon: writing journal entries")
+	origWrite := journalWrite
+	defer func() { journalWrite = origWrite }()
+	journalWrite = true
+	if err := runStatsJournal(cmd, nil); err != nil {
+		slog.Warn("daemon: journal write failed", "error", err)
+	}
 }

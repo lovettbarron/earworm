@@ -19,6 +19,7 @@ import (
 	"github.com/lovettbarron/earworm/internal/audiobookshelf"
 	"github.com/lovettbarron/earworm/internal/bookidentity"
 	"github.com/lovettbarron/earworm/internal/db"
+	"github.com/lovettbarron/earworm/internal/journal"
 	"github.com/lovettbarron/earworm/internal/listening"
 	"github.com/lovettbarron/earworm/internal/stats"
 	"github.com/lovettbarron/earworm/internal/statsexport"
@@ -640,4 +641,223 @@ func TestStatsQuietSuppressesOutput(t *testing.T) {
 	n, err := db.CountListeningDays(database, listening.SourceAudible)
 	require.NoError(t, err)
 	assert.Positive(t, n, "quiet suppresses reporting, not the work")
+}
+
+// fakeJournalWriter records deliveries instead of shelling out.
+type fakeJournalWriter struct {
+	writes   []journal.Entry
+	flushes  int
+	writeErr error
+}
+
+func (f *fakeJournalWriter) Write(_ context.Context, journalID string, e journal.Entry) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
+	f.writes = append(f.writes, e)
+	return nil
+}
+func (f *fakeJournalWriter) Flush(context.Context) error { f.flushes++; return nil }
+
+type fakeJournalLister struct {
+	journals []journal.Journal
+	err      error
+}
+
+func (f *fakeJournalLister) ListJournals(context.Context) ([]journal.Journal, error) {
+	return f.journals, f.err
+}
+
+func withJournalFakes(t *testing.T, w *fakeJournalWriter, l *fakeJournalLister) {
+	t.Helper()
+	origW, origL := newJournalWriter, newJournalLister
+	newJournalWriter = func() journal.Writer { return w }
+	newJournalLister = func() interface {
+		ListJournals(ctx context.Context) ([]journal.Journal, error)
+	} {
+		return l
+	}
+	t.Cleanup(func() { newJournalWriter, newJournalLister = origW, origL })
+}
+
+func setJournalConfig() {
+	setStatsConfig()
+	viper.Set("journal.journal_id", "journal-1")
+	viper.Set("journal.cli_path", "dayone")
+}
+
+func seedJournalData(t *testing.T, database *sql.DB) {
+	t.Helper()
+	require.NoError(t, db.UpsertListeningSessions(database, []db.ListeningSession{
+		{ID: "s1", LibraryItemID: "item-1", Day: "2026-09-19", Seconds: 3600,
+			Title: "Example Chronicle", Author: "An Author"},
+		{ID: "s2", LibraryItemID: "item-1", Day: "2026-09-20", Seconds: 2700,
+			Title: "Example Chronicle", Author: "An Author"},
+	}))
+}
+
+// Nothing is written unless --write is passed. This is the only command that
+// modifies a record outside earworm's own database.
+func TestStatsJournalIsDryRunByDefault(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedJournalData(t, database)
+	w := &fakeJournalWriter{}
+	withJournalFakes(t, w, &fakeJournalLister{})
+
+	out, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journal")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "Dry run")
+	assert.Empty(t, w.writes, "a dry run must not touch the journal")
+
+	n, err := db.CountJournalEntries(database)
+	require.NoError(t, err)
+	assert.Zero(t, n)
+}
+
+func TestStatsJournalWritesWithFlag(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedJournalData(t, database)
+	w := &fakeJournalWriter{}
+	withJournalFakes(t, w, &fakeJournalLister{})
+
+	out, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journal", "--write")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "Journal updated")
+	assert.Len(t, w.writes, 2)
+	assert.Equal(t, 1, w.flushes, "queued writes must be pushed")
+
+	n, err := db.CountJournalEntries(database)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+}
+
+func TestStatsJournalRepeatedWriteIsNoop(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedJournalData(t, database)
+	w := &fakeJournalWriter{}
+	withJournalFakes(t, w, &fakeJournalLister{})
+
+	_, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journal", "--write")
+	require.NoError(t, err)
+	out, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journal", "--write")
+	require.NoError(t, err)
+
+	assert.Len(t, w.writes, 2, "a second run must not duplicate entries")
+	assert.Contains(t, out, "Unchanged: 2")
+}
+
+func TestStatsJournalSingleDate(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedJournalData(t, database)
+	w := &fakeJournalWriter{}
+	withJournalFakes(t, w, &fakeJournalLister{})
+
+	_, err := executeCommandWithConfig(t, setJournalConfig,
+		"stats", "journal", "--date", "2026-09-20", "--write")
+	require.NoError(t, err)
+
+	require.Len(t, w.writes, 1)
+	assert.Equal(t, journal.DayKey("2026-09-20"), w.writes[0].Key)
+}
+
+func TestStatsJournalRejectsBadDates(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withJournalFakes(t, &fakeJournalWriter{}, &fakeJournalLister{})
+
+	_, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journal", "--date", "20/09/2026")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "YYYY-MM-DD")
+
+	_, err = executeCommandWithConfig(t, setJournalConfig, "stats", "journal", "--since", "nonsense")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--since")
+}
+
+func TestStatsJournalPreviewShowsBody(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedJournalData(t, database)
+	withJournalFakes(t, &fakeJournalWriter{}, &fakeJournalLister{})
+
+	out, err := executeCommandWithConfig(t, setJournalConfig,
+		"stats", "journal", "--preview", "--date", "2026-09-20")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "## Listening — 2026-09-20")
+	assert.Contains(t, out, "Example Chronicle")
+}
+
+func TestStatsJournalWithNoDataSaysSo(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withJournalFakes(t, &fakeJournalWriter{}, &fakeJournalLister{})
+
+	out, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journal")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No entries to write")
+}
+
+func TestStatsJournalRequiresJournalIDToWrite(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedJournalData(t, database)
+	withJournalFakes(t, &fakeJournalWriter{}, &fakeJournalLister{})
+
+	_, err := executeCommandWithConfig(t, func() {
+		setJournalConfig()
+		viper.Set("journal.journal_id", "")
+	}, "stats", "journal", "--write")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "journal_id is not configured")
+}
+
+func TestStatsJournalsListsDestinations(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withJournalFakes(t, &fakeJournalWriter{}, &fakeJournalLister{journals: []journal.Journal{
+		{ID: "111", Name: "Journal", Encryption: "plaintext"},
+		{ID: "222", Name: "Audiobooks", Encryption: "plaintext"},
+	}})
+
+	out, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journals")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Audiobooks")
+	assert.Contains(t, out, "222")
+}
+
+func TestStatsJournalsHandlesEmptyList(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withJournalFakes(t, &fakeJournalWriter{}, &fakeJournalLister{})
+
+	out, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journals")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No journals found")
+}
+
+func TestStatsJournalsReportsCLIError(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withJournalFakes(t, &fakeJournalWriter{},
+		&fakeJournalLister{err: fmt.Errorf("dayone not signed in")})
+
+	_, err := executeCommandWithConfig(t, setJournalConfig, "stats", "journals")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not signed in")
+}
+
+func TestResolveJournalRangeRelativeDates(t *testing.T) {
+	bucket, err := listening.NewBucketer("UTC")
+	require.NoError(t, err)
+	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+
+	journalDate = "today"
+	opts, err := resolveJournalRange(bucket, now)
+	require.NoError(t, err)
+	assert.Equal(t, "2026-09-20", opts.Since)
+	assert.Equal(t, "2026-09-20", opts.Until)
+
+	journalDate = "yesterday"
+	opts, err = resolveJournalRange(bucket, now)
+	require.NoError(t, err)
+	assert.Equal(t, "2026-09-19", opts.Since)
+
+	journalDate = ""
 }

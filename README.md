@@ -17,6 +17,7 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 - Goodreads CSV export
 - Listening history collection from Audible and Audiobookshelf, with resumable backfill
 - CSV export with explicit provenance, built for LLM analysis
+- Idempotent Day One journaling of measured listening
 - Daemon/polling mode for unattended operation
 - Cross-filesystem file moves (local to NAS)
 - Contextual next-step hints after each command (suppressed with `--quiet`)
@@ -514,6 +515,40 @@ exported in full and is easy to spot. Books that match nothing are kept, not
 dropped -- books you own outside Audible are a normal part of a listening
 history.
 
+#### Journaling to Day One
+
+```bash
+earworm stats journals                        # list destinations
+earworm config set journal.journal_id <id>    # choose one
+earworm stats journal                         # dry run (default)
+earworm stats journal --write                 # actually write
+earworm stats journal --date today --write    # just today
+```
+
+Requires the Day One CLI (`npm install -g @dayone/cli`, then `dayone auth
+login --email <you>`). Note this is the npm CLI, not the older `dayone2` that
+ships inside the Day One Mac app; they share a binary name, so install only one.
+
+**Dry run is the default.** This is the only earworm command that modifies a
+record outside its own database, so writing requires `--write` explicitly.
+
+**Only measured facts become entries.** Audiobookshelf sessions name the book
+that was played, so those become daily digests. Audible reports how long you
+listened but never to what, so its days are excluded rather than guessed at.
+That reconstruction lives in `earworm stats export`, where the `attribution`
+column marks it for what it is. A journal is a record you will trust years
+later; a plausible guess does not belong in one.
+
+`--finishes` additionally writes an entry per finished book. Books whose finish
+timestamp belongs to a bulk-marking cluster are skipped -- that timestamp says
+when a shelf was marked at once, not when anything was read.
+
+Entries use an ID derived from the date, and the Day One CLI treats a repeat as
+an update, so re-running revises the existing entry rather than adding another.
+Days with no listening produce no entry. Writes are queued to a local outbox
+and pushed with an explicit sync afterwards, reported separately so "written
+but not pushed" is distinguishable from "not written".
+
 ### `earworm config init`
 
 Create the default configuration file at `~/.config/earworm/config.yaml`.
@@ -572,6 +607,11 @@ Config file location: `~/.config/earworm/config.yaml`
 | `stats.rate_limit_seconds` | `2` | Seconds between listening-history API calls |
 | `stats.export_dir` | `~/.config/earworm/stats` | Where CSV exports are written |
 | `stats.enrich` | `true` | Fetch library items to fill in genres and series missing from session data |
+| `journal.cli_path` | `dayone` | Path to the Day One CLI binary |
+| `journal.journal_id` | *(none)* | Destination journal; see `earworm stats journals` |
+| `journal.include_finishes` | `false` | Also write an entry per finished book |
+| `journal.daemon_write` | `false` | Allow the daemon to write journal entries unattended |
+| `daemon.stats_sync` | `true` | Sync listening history on each daemon cycle |
 
 ## Audiobookshelf Integration
 
@@ -655,6 +695,17 @@ sudo systemctl status earworm
 ### launchd (macOS)
 
 Create a plist at `~/Library/LaunchAgents/com.earworm.daemon.plist` with the `earworm daemon` command. Load with `launchctl load`.
+
+### Listening stats in the daemon
+
+With `daemon.stats_sync` on (the default), each cycle also syncs listening
+history from both configured sources. Journal writes stay off unless
+`journal.daemon_write` is explicitly enabled, so the daemon will not modify a
+personal record on its own.
+
+A stats sync that outlasts the polling interval causes the next cycle to skip
+the step rather than run two concurrently, which would interleave writes to the
+same rows and journal entries.
 
 ## Goodreads Export
 
