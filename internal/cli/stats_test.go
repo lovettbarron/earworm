@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,9 +17,11 @@ import (
 
 	"github.com/lovettbarron/earworm/internal/audible"
 	"github.com/lovettbarron/earworm/internal/audiobookshelf"
+	"github.com/lovettbarron/earworm/internal/bookidentity"
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/listening"
 	"github.com/lovettbarron/earworm/internal/stats"
+	"github.com/lovettbarron/earworm/internal/statsexport"
 )
 
 // fakeCLIStatsClient is a minimal scripted audible.StatsClient for CLI tests.
@@ -370,4 +374,270 @@ func TestStatsCheckRequiresURL(t *testing.T) {
 	}, "stats", "check")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not configured")
+}
+
+// seedExportData populates a database with both sources' data.
+func seedExportData(t *testing.T, database *sql.DB) {
+	t.Helper()
+
+	require.NoError(t, db.UpsertBookListeningBatch(database, []db.BookListening{
+		{
+			Source: listening.SourceAudible, SourceKey: "A1", ASIN: "A1",
+			Title: "Example Chronicle", Author: "An Author",
+			RuntimeSeconds: 7200, PercentComplete: 100, IsFinished: true,
+			StatusChangedAt: "2026-01-03T12:00:00Z", LastPositionAt: "2026-01-03T12:00:00Z",
+			AddedDate: "2026-01-01T00:00:00Z",
+		},
+		{
+			Source: listening.SourceABS, SourceKey: "item-1", ASIN: "A1",
+			Title: "Example Chronicle", Author: "An Author",
+			RuntimeSeconds: 7200, SecondsListened: 1800,
+		},
+		{
+			Source: listening.SourceABS, SourceKey: "item-2",
+			Title: "Only In Audiobookshelf", Author: "Another Author",
+			RuntimeSeconds: 3600, SecondsListened: 900,
+		},
+	}))
+
+	require.NoError(t, db.UpsertListeningDays(database, []db.ListeningDay{
+		{Day: "2026-01-02", Source: listening.SourceAudible, Seconds: 3600},
+		{Day: "2026-01-03", Source: listening.SourceAudible, Seconds: 3600},
+	}))
+
+	require.NoError(t, db.UpsertListeningSessions(database, []db.ListeningSession{
+		{ID: "s1", LibraryItemID: "item-1", Day: "2026-02-01", Seconds: 1800,
+			Title: "Example Chronicle", DurationSeconds: 7200},
+	}))
+}
+
+func TestStatsExportWritesFilesToLocalDir(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedExportData(t, database)
+	outDir := filepath.Join(t.TempDir(), "export")
+
+	out, err := executeCommandWithConfig(t, setStatsConfig,
+		"stats", "export", "--output", outDir, "--timeline", "--json")
+	require.NoError(t, err)
+
+	var res statsexport.Result
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	assert.Equal(t, outDir, res.Dir)
+	assert.Equal(t, 2, res.Books, "the ASIN pair merges into one book")
+
+	for _, name := range []string{"books.csv", "days.csv", "sessions.csv", "timeline.csv", "README.md"} {
+		_, statErr := os.Stat(filepath.Join(outDir, name))
+		assert.NoError(t, statErr, "%s should exist", name)
+	}
+}
+
+func TestStatsExportUsesConfiguredDirByDefault(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedExportData(t, database)
+	configured := filepath.Join(t.TempDir(), "configured-export")
+
+	_, err := executeCommandWithConfig(t, func() {
+		setStatsConfig()
+		viper.Set("stats.export_dir", configured)
+	}, "stats", "export", "--json")
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(filepath.Join(configured, "books.csv"))
+	assert.NoError(t, statErr)
+}
+
+func TestStatsExportRequiresOutputDir(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+
+	_, err := executeCommandWithConfig(t, func() {
+		setStatsConfig()
+		viper.Set("stats.export_dir", "")
+	}, "stats", "export")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no output directory")
+}
+
+func TestStatsExportReportsAttributionSplit(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedExportData(t, database)
+	outDir := filepath.Join(t.TempDir(), "export")
+
+	out, err := executeCommandWithConfig(t, setStatsConfig,
+		"stats", "export", "--output", outDir, "--json")
+	require.NoError(t, err)
+
+	var res statsexport.Result
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+
+	assert.Positive(t, res.Stats.ExactSeconds, "session-backed listening is measured")
+	assert.Positive(t, res.Stats.InferredSeconds+res.Stats.UnattributedSeconds,
+		"Audible day totals cannot be measured, so they land in the weaker buckets")
+}
+
+func TestStatsMatchesHidesASINMatchesByDefault(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedExportData(t, database)
+
+	out, err := executeCommandWithConfig(t, setStatsConfig, "stats", "matches", "--json")
+	require.NoError(t, err)
+
+	var rows []matchRow
+	require.NoError(t, json.Unmarshal([]byte(out), &rows))
+	for _, r := range rows {
+		assert.NotEqual(t, bookidentity.MatchASIN, r.Method,
+			"certain matches are noise in a review listing")
+	}
+
+	outAll, err := executeCommandWithConfig(t, setStatsConfig, "stats", "matches", "--all", "--json")
+	require.NoError(t, err)
+
+	var allRows []matchRow
+	require.NoError(t, json.Unmarshal([]byte(outAll), &allRows))
+	assert.Greater(t, len(allRows), len(rows), "--all should include the ASIN matches")
+}
+
+func TestStatsMatchesOnEmptyDatabase(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+
+	out, err := executeCommandWithConfig(t, setStatsConfig, "stats", "matches")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No matches to review")
+}
+
+func TestStatsExportRejectsInvalidTimezone(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+
+	_, err := executeCommandWithConfig(t, func() {
+		setStatsConfig()
+		viper.Set("stats.timezone", "Nowhere/Atlantis")
+	}, "stats", "export", "--output", t.TempDir())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "valid IANA timezone")
+}
+
+func TestStatsExportTextOutput(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedExportData(t, database)
+	outDir := filepath.Join(t.TempDir(), "export")
+
+	out, err := executeCommandWithConfig(t, setStatsConfig,
+		"stats", "export", "--output", outDir, "--timeline")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "Exported to")
+	assert.Contains(t, out, "books.csv")
+	assert.Contains(t, out, "timeline.csv")
+	// The attribution breakdown is the point of the summary and must be shown.
+	assert.Contains(t, out, "Measured:")
+	assert.Contains(t, out, "Inferred:")
+	assert.Contains(t, out, "Unattributed:")
+}
+
+func TestStatsMatchesTextOutput(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedExportData(t, database)
+
+	out, err := executeCommandWithConfig(t, setStatsConfig, "stats", "matches")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "METHOD")
+	assert.Contains(t, out, "Only In Audiobookshelf")
+	assert.Contains(t, out, "--all")
+
+	outAll, err := executeCommandWithConfig(t, setStatsConfig, "stats", "matches", "--all")
+	require.NoError(t, err)
+	assert.Contains(t, outAll, "Example Chronicle")
+}
+
+func TestStatsStatusTextOutput(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	seedExportData(t, database)
+	require.NoError(t, db.UpsertBookListening(database, db.BookListening{
+		Source: listening.SourceAudible, SourceKey: "A2", StatusIsBulk: true,
+	}))
+
+	out, err := executeCommandWithConfig(t, setStatsConfig, "stats", "status")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "audible")
+	assert.Contains(t, out, "hours")
+	assert.Contains(t, out, "bulk-marked",
+		"a bulk-marked count is worth surfacing since it affects finish data")
+}
+
+func TestStatsStatusTextOutputOnEmptyDatabase(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+
+	out, err := executeCommandWithConfig(t, setStatsConfig, "stats", "status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "no data")
+}
+
+func TestStatsBackfillTextOutput(t *testing.T) {
+	client := &fakeCLIStatsClient{
+		daily:   map[string]float64{"2026-01-01": 3600},
+		library: []audible.LibraryListening{{ASIN: "ASIN001", Title: "One"}},
+	}
+	withStatsFakes(t, client)
+
+	out, err := executeCommandWithConfig(t, setStatsConfig, "stats", "backfill")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "Backfilling")
+	assert.Contains(t, out, "Days stored")
+	assert.Contains(t, out, "Books:")
+}
+
+func TestStatsABSSyncTextOutput(t *testing.T) {
+	started := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	src := &fakeABSSource{
+		user: audiobookshelf.User{ID: "user-1"},
+		sessions: []audiobookshelf.PlaybackSession{{
+			ID: "s1", LibraryItemID: "item-1", DisplayTitle: "A Test Title",
+			TimeListening: audiobookshelf.LenientSeconds(1800),
+			Duration:      audiobookshelf.LenientSeconds(36000),
+			StartedAt:     audiobookshelf.EpochMillis(started.UnixMilli()),
+			UpdatedAt:     audiobookshelf.EpochMillis(started.Add(time.Hour).UnixMilli()),
+		}},
+	}
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withABSFakes(t, src)
+
+	out, err := executeCommandWithConfig(t, setABSConfig, "stats", "sync", "--source", "abs")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "audiobookshelf")
+	assert.Contains(t, out, "Sessions:")
+	assert.Contains(t, out, "Mode:")
+}
+
+func TestStatsCheckTextOutput(t *testing.T) {
+	src := &fakeABSSource{
+		user:   audiobookshelf.User{ID: "user-1", Username: "tester"},
+		status: audiobookshelf.ServerStatus{ServerVersion: "2.36.0"},
+	}
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withABSFakes(t, src)
+
+	out, err := executeCommandWithConfig(t, setABSConfig, "stats", "check")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "2.36.0")
+	assert.Contains(t, out, "Token accepted")
+}
+
+// --quiet must suppress human output without suppressing the work itself.
+func TestStatsQuietSuppressesOutput(t *testing.T) {
+	database := withStatsFakes(t, &fakeCLIStatsClient{
+		daily:   map[string]float64{"2026-01-01": 3600},
+		library: []audible.LibraryListening{{ASIN: "ASIN001", Title: "One"}},
+	})
+
+	out, err := executeCommandWithConfig(t, setStatsConfig, "--quiet", "stats", "backfill")
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(out))
+
+	n, err := db.CountListeningDays(database, listening.SourceAudible)
+	require.NoError(t, err)
+	assert.Positive(t, n, "quiet suppresses reporting, not the work")
 }

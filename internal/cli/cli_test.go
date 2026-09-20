@@ -60,6 +60,9 @@ func executeCommandWithConfig(t *testing.T, setup func(), args ...string) (strin
 	statsSource = "audible"
 	statsJSON = false
 	statsFullScan = false
+	statsExportDir = ""
+	statsExportTimeline = false
+	statsMatchesAll = false
 
 	// Reset cobra flag Changed state and help flag on all subcommands
 	// to prevent cross-test contamination (--help sticks across tests).

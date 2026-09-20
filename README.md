@@ -16,6 +16,7 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 - Audiobookshelf library scan integration
 - Goodreads CSV export
 - Listening history collection from Audible and Audiobookshelf, with resumable backfill
+- CSV export with explicit provenance, built for LLM analysis
 - Daemon/polling mode for unattended operation
 - Cross-filesystem file moves (local to NAS)
 - Contextual next-step hints after each command (suppressed with `--quiet`)
@@ -453,6 +454,65 @@ Two behaviours are worth knowing:
 Backfill uses the admin `/api/sessions` endpoint, which paginates server-side.
 The per-user endpoint loads your entire session table into memory on every page
 request, which makes a large backfill needlessly expensive for the server.
+
+#### Exporting the dataset
+
+```bash
+earworm stats export                  # writes to stats.export_dir
+earworm stats export -o ./mystats     # or anywhere you choose
+earworm stats export --timeline       # also write the denormalised file
+earworm stats matches                 # review uncertain book matches
+```
+
+Four files, plus a README explaining them:
+
+| File | One row per |
+|------|-------------|
+| `books.csv` | book, merged across sources |
+| `days.csv` | day and book |
+| `sessions.csv` | playback session (Audiobookshelf only) |
+| `timeline.csv` | day and book, with book metadata inlined (opt-in) |
+
+The normalised trio is the source of truth. `timeline.csv` is derived from it in
+the same pass, so the two cannot drift apart. Feed the normalised files to an
+LLM when it can read several files; `timeline.csv` exists for when it is easier
+to paste one.
+
+**Every row states how much to trust it.** The `attribution` column is not a
+score to be averaged — the values mean different things:
+
+| Value | Meaning |
+|-------|---------|
+| `exact` | A playback session recorded this book on this day. Measured. |
+| `inferred-single` | No session data; one candidate book plausibly accounts for the day. Reconstructed. |
+| `inferred-split` | Several books shared the day and the time was divided. Weaker. |
+| `unattributed` | The duration is real; the book is unknown. |
+
+Audible reports how long you listened but never to what, so its days are
+inferred or unattributed, never `exact`. The inference walks each book backwards
+from the last date there is evidence for it — a finish event or last playback
+position — consuming unassigned time until its estimated listening is accounted
+for. It is a hypothesis about which book the time belonged to, not a record.
+
+**Inference is never stored.** It is computed at export time from measured
+facts, so the database holds only what was actually observed, and a change to
+the algorithm cannot retroactively rewrite your history.
+
+#### How books are matched across sources
+
+A book can appear in both sources, in one, or under different titles. ASIN is
+used where both sides have one; otherwise titles are normalised (series
+numbering, `(Unabridged)`, subtitles and leading articles removed) and compared
+by word overlap, with the author required to agree when both are known.
+
+`books.csv` records the method in `match_method`, and `earworm stats matches`
+lists everything that was not an exact ASIN match so you can eyeball it.
+
+Matching deliberately errs toward leaving books separate. A false merge blends
+two books' histories and is nearly invisible; an unmatched book is still
+exported in full and is easy to spot. Books that match nothing are kept, not
+dropped -- books you own outside Audible are a normal part of a listening
+history.
 
 ### `earworm config init`
 
