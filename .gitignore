@@ -1,0 +1,24 @@
+# Compiled binary
+/earworm
+earworm.exe
+
+# Local stats exports — contain personal listening history, never commit
+/stats/
+*.csv
+!**/testdata/**/*.csv
+
+# Local databases and config
+*.db
+*.db-wal
+*.db-shm
+config.yaml
+!.planning/**/config.yaml
+
+# Go build/test artifacts
+*.test
+*.out
+coverage.html
+
+# Editor and OS noise
+.DS_Store
+*.swp
