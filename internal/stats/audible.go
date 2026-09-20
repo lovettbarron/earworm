@@ -231,8 +231,11 @@ func (a *AudibleIngestor) SyncBooks(ctx context.Context) (BooksResult, error) {
 		})
 	}
 
+	// Clusters are detected across every status event, including those for
+	// books no longer in the library. BulkFlagged is set below from the rows
+	// actually written, so the reported figure matches what is stored rather
+	// than counting detections the database never sees.
 	bulk := listening.DetectBulkClusters(events, a.BulkOptions)
-	res.BulkFlagged = len(bulk)
 
 	rows := make([]db.BookListening, 0, len(lib))
 	bulkKeys := make([]string, 0, len(bulk))
@@ -276,6 +279,8 @@ func (a *AudibleIngestor) SyncBooks(ctx context.Context) (BooksResult, error) {
 
 		rows = append(rows, row)
 	}
+
+	res.BulkFlagged = len(bulkKeys)
 
 	if err := db.UpsertBookListeningBatch(a.DB, rows); err != nil {
 		return res, err

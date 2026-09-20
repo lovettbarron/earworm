@@ -184,6 +184,15 @@ func TestConfigSetInvalidKey(t *testing.T) {
 }
 
 func TestNotifyCommand_Unconfigured(t *testing.T) {
+	// HOME is redirected so the test reads an empty config rather than the
+	// developer's own. Without this the test passes only on machines where
+	// Audiobookshelf happens to be unconfigured, and on machines where it is
+	// configured the test fires a real library scan at a real server.
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpHome)
+	t.Cleanup(func() { os.Setenv("HOME", origHome) })
+
 	out, err := executeCommand(t, "notify")
 	assert.NoError(t, err)
 	assert.Contains(t, out, "not configured")

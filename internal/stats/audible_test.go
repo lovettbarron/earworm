@@ -406,3 +406,50 @@ func TestBackfillDailyPacesRequests(t *testing.T) {
 type countingWaiter struct{ n int }
 
 func (c *countingWaiter) Wait(context.Context) error { c.n++; return nil }
+
+// The reported count must match what was stored. Cluster detection also sees
+// status events for books no longer in the library, and counting those made
+// the backfill summary disagree with `stats status`.
+func TestSyncBooksReportsOnlyStoredBulkFlags(t *testing.T) {
+	database := setupDB(t)
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	var lib []audible.LibraryListening
+	var fin []audible.FinishedStatus
+
+	// Ten books in a cluster that are still in the library.
+	for i := 0; i < 10; i++ {
+		asin := fmt.Sprintf("INLIB%05d", i)
+		lib = append(lib, audible.LibraryListening{ASIN: asin, Title: "In Library"})
+		fin = append(fin, audible.FinishedStatus{
+			ASIN: asin, EventTime: base.Add(time.Duration(i) * time.Millisecond), IsFinished: true,
+		})
+	}
+	// Ten more in the same cluster that are NOT in the library, as happens
+	// with returned or removed books.
+	for i := 0; i < 10; i++ {
+		fin = append(fin, audible.FinishedStatus{
+			ASIN:      fmt.Sprintf("GONE%06d", i),
+			EventTime: base.Add(time.Duration(10+i) * time.Millisecond), IsFinished: true,
+		})
+	}
+
+	client := &fakeStatsClient{library: lib, finished: fin, positions: map[string]audible.LastPosition{}}
+	ing := newIngestor(t, database, client, time.Now())
+
+	res, err := ing.SyncBooks(context.Background())
+	require.NoError(t, err)
+
+	var stored int
+	books, err := db.ListBookListening(database, listening.SourceAudible)
+	require.NoError(t, err)
+	for _, b := range books {
+		if b.StatusIsBulk {
+			stored++
+		}
+	}
+
+	assert.Equal(t, 10, stored)
+	assert.Equal(t, stored, res.BulkFlagged,
+		"the summary must report rows written, not clusters detected")
+}
