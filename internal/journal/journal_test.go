@@ -341,3 +341,154 @@ func TestNewDayOneDefaultsBinaryName(t *testing.T) {
 	assert.Equal(t, "dayone", NewDayOne("").Path)
 	assert.Equal(t, "/custom/dayone", NewDayOne("/custom/dayone").Path)
 }
+
+// recoverableBooks covers the three shapes that can yield a finish entry plus
+// one that must not.
+func recoverableBooks() []db.BookListening {
+	return []db.BookListening{
+		// Genuine finish event.
+		{Source: "audible", SourceKey: "A1", Title: "Genuine Finish", IsFinished: true,
+			StatusChangedAt: "2026-05-05T12:00:00Z", LastPositionAt: "2026-05-05T12:30:00Z"},
+		// Finished, but the timestamp was lost to a bulk marking.
+		{Source: "audible", SourceKey: "A2", Title: "Bulk Stamped", IsFinished: true,
+			StatusIsBulk: true, StatusChangedAt: "2021-12-08T22:55:38Z",
+			LastPositionAt: "2018-03-14T09:00:00Z"},
+		// Listened to the end, never marked finished.
+		{Source: "audible", SourceKey: "A3", Title: "Never Marked", IsFinished: false,
+			PercentComplete: 98, LastPositionAt: "2016-07-02T18:00:00Z"},
+		// Abandoned partway: must never produce an entry.
+		{Source: "audible", SourceKey: "A4", Title: "Abandoned", IsFinished: false,
+			PercentComplete: 40, LastPositionAt: "2019-01-01T10:00:00Z"},
+	}
+}
+
+func TestBuildFinishEntriesExcludesEstimatesByDefault(t *testing.T) {
+	entries, err := BuildFinishEntries(recoverableBooks(), BuildOptions{})
+	require.NoError(t, err)
+
+	require.Len(t, entries, 1, "only the genuine finish event without opting in")
+	assert.Contains(t, entries[0].Body, "Genuine Finish")
+}
+
+// The bulk marking destroyed the finish timestamp, but the last playback
+// position keeps its own date and is the best remaining evidence.
+func TestBuildFinishEntriesRecoversBulkStampedBooks(t *testing.T) {
+	entries, err := BuildFinishEntries(recoverableBooks(), BuildOptions{EstimatedFinishes: true})
+	require.NoError(t, err)
+
+	require.Len(t, entries, 3, "genuine, bulk-recovered and never-marked; not the abandoned one")
+
+	var bulk *Entry
+	for i := range entries {
+		if strings.Contains(entries[i].Body, "Bulk Stamped") {
+			bulk = &entries[i]
+		}
+	}
+	require.NotNil(t, bulk)
+	assert.Equal(t, 2018, bulk.Date.Year(),
+		"the date must come from the playback position, not the bulk timestamp")
+	assert.NotEqual(t, 2021, bulk.Date.Year())
+}
+
+func TestBuildFinishEntriesRecoversNearCompleteBooks(t *testing.T) {
+	entries, err := BuildFinishEntries(recoverableBooks(), BuildOptions{EstimatedFinishes: true})
+	require.NoError(t, err)
+
+	var found bool
+	for _, e := range entries {
+		if strings.Contains(e.Body, "Never Marked") {
+			found = true
+			assert.Equal(t, 2016, e.Date.Year())
+		}
+		assert.NotContains(t, e.Body, "Abandoned",
+			"a book abandoned partway is not a finish at any threshold")
+	}
+	assert.True(t, found)
+}
+
+func TestBuildFinishEntriesRespectsNearCompleteThreshold(t *testing.T) {
+	justUnder := []db.BookListening{{
+		Source: "audible", SourceKey: "A1", Title: "Just Under",
+		PercentComplete: NearCompleteThreshold - 0.1, LastPositionAt: "2020-01-01T00:00:00Z",
+	}}
+	entries, err := BuildFinishEntries(justUnder, BuildOptions{EstimatedFinishes: true})
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+// An estimated date must be visibly estimated, or a reader years later cannot
+// tell it apart from a recorded one.
+func TestEstimatedEntriesAreLabelledAsSuch(t *testing.T) {
+	entries, err := BuildFinishEntries(recoverableBooks(), BuildOptions{EstimatedFinishes: true})
+	require.NoError(t, err)
+
+	for _, e := range entries {
+		if strings.Contains(e.Body, "Genuine Finish") {
+			assert.Contains(t, e.Body, "## Finished — ")
+			assert.Contains(t, e.Body, "from an Audible finish event")
+			assert.NotContains(t, e.Body, "estimated")
+			continue
+		}
+		assert.Contains(t, e.Body, "## Finished (estimated) — ")
+		assert.Contains(t, e.Body, "Date estimated by earworm from the last playback position")
+		assert.Contains(t, e.Body, "no finish event")
+	}
+}
+
+func TestBuildFinishEntriesOrdersByResolvedDate(t *testing.T) {
+	entries, err := BuildFinishEntries(recoverableBooks(), BuildOptions{EstimatedFinishes: true})
+	require.NoError(t, err)
+
+	for i := 1; i < len(entries); i++ {
+		assert.False(t, entries[i].Date.Before(entries[i-1].Date),
+			"entries must be ordered by the date actually used, not by one stored column")
+	}
+}
+
+func TestBuildFinishEntriesRangeAppliesToEstimatedDates(t *testing.T) {
+	entries, err := BuildFinishEntries(recoverableBooks(),
+		BuildOptions{EstimatedFinishes: true, Since: "2017-01-01"})
+	require.NoError(t, err)
+
+	for _, e := range entries {
+		assert.NotContains(t, e.Body, "Never Marked",
+			"the 2016 estimate falls outside the requested range")
+	}
+}
+
+// A genuine event must win even when a playback date is also present.
+func TestGenuineFinishTakesPrecedenceOverEstimate(t *testing.T) {
+	entries, err := BuildFinishEntries([]db.BookListening{{
+		Source: "audible", SourceKey: "A1", Title: "Both Signals", IsFinished: true,
+		StatusChangedAt: "2026-05-05T12:00:00Z", LastPositionAt: "2015-01-01T00:00:00Z",
+	}}, BuildOptions{EstimatedFinishes: true})
+
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 2026, entries[0].Date.Year())
+	assert.NotContains(t, entries[0].Body, "estimated")
+}
+
+// An Audible-worded footer on an Audiobookshelf book would misdescribe where
+// the evidence came from.
+func TestEstimatedFooterNamesTheRightSource(t *testing.T) {
+	entries, err := BuildFinishEntries([]db.BookListening{
+		{Source: "audible", SourceKey: "A1", Title: "From Audible", IsFinished: true,
+			StatusIsBulk: true, LastPositionAt: "2018-01-01T00:00:00Z"},
+		{Source: "abs", SourceKey: "item-1", Title: "From Audiobookshelf",
+			PercentComplete: 99, LastPositionAt: "2026-02-01T00:00:00Z"},
+	}, BuildOptions{EstimatedFinishes: true})
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	for _, e := range entries {
+		if strings.Contains(e.Body, "From Audible") {
+			assert.Contains(t, e.Body, "Audible recorded no finish event")
+			assert.NotContains(t, e.Body, "measured playback")
+			continue
+		}
+		assert.Contains(t, e.Body, "measured playback")
+		assert.NotContains(t, e.Body, "Audible",
+			"an Audiobookshelf book must not claim Audible as its source")
+	}
+}

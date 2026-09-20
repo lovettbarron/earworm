@@ -69,6 +69,7 @@ func executeCommandWithConfig(t *testing.T, setup func(), args ...string) (strin
 	journalUntil = ""
 	journalFinishes = false
 	journalPreview = false
+	journalEstimated = false
 
 	// Reset cobra flag Changed state and help flag on all subcommands
 	// to prevent cross-test contamination (--help sticks across tests).

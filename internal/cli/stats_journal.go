@@ -14,12 +14,13 @@ import (
 )
 
 var (
-	journalWrite    bool
-	journalDate     string
-	journalSince    string
-	journalUntil    string
-	journalFinishes bool
-	journalPreview  bool
+	journalWrite     bool
+	journalDate      string
+	journalSince     string
+	journalUntil     string
+	journalFinishes  bool
+	journalPreview   bool
+	journalEstimated bool
 )
 
 var statsJournalCmd = &cobra.Command{
@@ -53,6 +54,8 @@ func init() {
 	statsJournalCmd.Flags().StringVar(&journalSince, "since", "", "earliest day to include (YYYY-MM-DD)")
 	statsJournalCmd.Flags().StringVar(&journalUntil, "until", "", "latest day to include (YYYY-MM-DD)")
 	statsJournalCmd.Flags().BoolVar(&journalFinishes, "finishes", false, "also write an entry for each finished book")
+	statsJournalCmd.Flags().BoolVar(&journalEstimated, "estimated-finishes", false,
+		"include finishes whose date is estimated from the last playback position")
 	statsJournalCmd.Flags().BoolVar(&journalPreview, "preview", false, "print the rendered entries")
 	statsJournalCmd.Flags().BoolVar(&statsJSON, "json", false, "output summary in JSON format")
 	statsCmd.AddCommand(statsJournalCmd)
@@ -123,10 +126,11 @@ func runStatsJournal(cmd *cobra.Command, args []string) error {
 	}
 
 	syncer := &journal.Syncer{
-		DB:              database,
-		JournalID:       viper.GetString("journal.journal_id"),
-		DryRun:          !journalWrite,
-		IncludeFinishes: journalFinishes || viper.GetBool("journal.include_finishes"),
+		DB:                database,
+		JournalID:         viper.GetString("journal.journal_id"),
+		DryRun:            !journalWrite,
+		IncludeFinishes:   journalFinishes || viper.GetBool("journal.include_finishes"),
+		EstimatedFinishes: journalEstimated || viper.GetBool("journal.estimated_finishes"),
 	}
 	if journalWrite {
 		syncer.Writer = newJournalWriter()

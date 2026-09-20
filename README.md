@@ -546,9 +546,24 @@ That reconstruction lives in `earworm stats export`, where the `attribution`
 column marks it for what it is. A journal is a record you will trust years
 later; a plausible guess does not belong in one.
 
-`--finishes` additionally writes an entry per finished book. Books whose finish
-timestamp belongs to a bulk-marking cluster are skipped -- that timestamp says
-when a shelf was marked at once, not when anything was read.
+`--finishes` additionally writes an entry per finished book, dated from the
+source's own finish event.
+
+`--estimated-finishes` recovers books that were completed but have no usable
+finish date, using the last playback position instead. Two cases:
+
+- the finish timestamp was overwritten by a bulk marking, which destroys the
+  date but not the fact of completion
+- the book was listened to at least 95% of its runtime but never marked finished
+
+These entries are headed `Finished (estimated)` and carry a footer saying the
+date came from playback rather than a recorded finish, so the journal never
+presents an estimate as a record. The estimated date is when the book was last
+open, which for a completed book is within a day or so of finishing it.
+
+This matters most for older history: a single bulk marking can wipe the finish
+dates of an entire shelf at once, and the playback position is then the only
+surviving evidence of when those books were actually read.
 
 Entries use an ID derived from the date, and the Day One CLI treats a repeat as
 an update, so re-running revises the existing entry rather than adding another.
@@ -617,6 +632,7 @@ Config file location: `~/.config/earworm/config.yaml`
 | `journal.cli_path` | `dayone` | Path to the Day One CLI binary |
 | `journal.journal_id` | *(none)* | Destination journal; see `earworm stats journals` |
 | `journal.include_finishes` | `false` | Also write an entry per finished book |
+| `journal.estimated_finishes` | `false` | Recover finishes whose date must be estimated from playback |
 | `journal.daemon_write` | `false` | Allow the daemon to write journal entries unattended |
 | `daemon.stats_sync` | `true` | Sync listening history on each daemon cycle |
 

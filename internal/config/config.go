@@ -42,6 +42,9 @@ func SetDefaults() {
 	viper.SetDefault("journal.cli_path", "dayone")
 	viper.SetDefault("journal.journal_id", "")
 	viper.SetDefault("journal.include_finishes", false)
+	// estimated_finishes recovers books whose finish timestamp was lost to a
+	// bulk marking, dating them from the last playback position instead.
+	viper.SetDefault("journal.estimated_finishes", false)
 	// journal.daemon_write lets the daemon write entries unattended. Off by
 	// default: the daemon should not modify a personal record without the
 	// user having said so explicitly.

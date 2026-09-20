@@ -23,6 +23,8 @@ type Syncer struct {
 	DryRun bool
 	// IncludeFinishes additionally emits an entry per genuine finish event.
 	IncludeFinishes bool
+	// EstimatedFinishes also recovers finishes whose date must be estimated.
+	EstimatedFinishes bool
 }
 
 // SyncResult reports what a run did or would do.
@@ -59,6 +61,7 @@ func (s *Syncer) Sync(ctx context.Context, opts BuildOptions) (SyncResult, error
 	}
 
 	if s.IncludeFinishes || opts.IncludeFinishes {
+		opts.EstimatedFinishes = opts.EstimatedFinishes || s.EstimatedFinishes
 		books, err := db.ListBookListening(s.DB, "")
 		if err != nil {
 			return res, err
