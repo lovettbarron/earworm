@@ -48,9 +48,9 @@ var (
 //
 // Real catalogues disagree in ways no string-distance metric handles on its
 // own: the same book appears with a series-number prefix, an "(Unabridged)"
-// suffix, a subtitle after a colon or dash, or a leading article. Normalizing
-// these away is most of the matching problem; the similarity score below only
-// resolves what is left.
+// suffix, explicit volume numbering, or a leading article. Normalizing these
+// away is most of the matching problem; the similarity score below resolves
+// what is left.
 func NormalizeTitle(title string) string {
 	s := strings.ToLower(strings.TrimSpace(title))
 
@@ -58,14 +58,18 @@ func NormalizeTitle(title string) string {
 	s = seriesNumber.ReplaceAllString(s, " ")
 	s = bookNumber.ReplaceAllString(s, " ")
 
-	// Drop a subtitle after a colon or a spaced dash. Sources frequently carry
-	// one where the other does not.
-	if i := strings.Index(s, ":"); i > 0 {
-		s = s[:i]
-	}
-	if i := strings.Index(s, " - "); i > 0 {
-		s = s[:i]
-	}
+	// Subtitles are deliberately NOT stripped.
+	//
+	// Dropping everything after a colon or dash would collapse "Some Saga" and
+	// "Some Saga - Second Volume" into one key, and a series whose volumes are
+	// named that way would have its books merged and their listening time
+	// summed. "Title - Volume Name" cannot be told apart from "Title -
+	// Descriptive Subtitle" by shape alone, so the safe reading is to keep
+	// both and let the similarity score decide.
+	//
+	// The cost is that a book titled "Title: Subtitle" in one source and
+	// "Title" in another will not match on title. That leaves two visible
+	// identities, which is recoverable; a silent merge is not.
 
 	s = apostrophes.ReplaceAllString(s, "")
 	s = nonAlnum.ReplaceAllString(s, " ")

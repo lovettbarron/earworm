@@ -20,8 +20,8 @@ func TestNormalizeTitleStripsCataloguingNoise(t *testing.T) {
 		{"trailing series number", "Example Chronicle (#26)", "example chronicle"},
 		{"book number", "Example Tale: Book 22", "example tale"},
 		{"volume number", "Example Tale, Volume 3", "example tale"},
-		{"subtitle after colon", "Example Saga: A Story of Things", "example saga"},
-		{"subtitle after dash", "Example Saga - Third Movement", "example saga"},
+		{"subtitle kept after colon", "Example Saga: A Story of Things", "example saga a story of things"},
+		{"subtitle kept after dash", "Example Saga - Third Movement", "example saga third movement"},
 		{"leading article", "The Example Chronicle", "example chronicle"},
 		{"punctuation", "Example's Chronicle!", "examples chronicle"},
 		{"case and spacing", "  EXAMPLE   Chronicle  ", "example chronicle"},
@@ -39,7 +39,6 @@ func TestNormalizeTitleCollapsesRealWorldVariants(t *testing.T) {
 	pairs := [][2]string{
 		{"Second Example Tale (Unabridged)", "Second Example Tale"},
 		{"(#17) Example Chronicle", "Example Chronicle"},
-		{"Example Saga - Third Movement", "Example Saga"},
 		{"The Example Chronicle", "Example Chronicle"},
 		{"Example Tale: Book 22", "Example Tale"},
 	}
@@ -232,4 +231,29 @@ func TestResolveDoesNotMergeIdentitiesTransitively(t *testing.T) {
 
 	assert.Len(t, ids, 2,
 		"the ASIN link wins for the audible record, leaving the title-matched one separate")
+}
+
+// Regression: a series whose volumes are named after a dash must not collapse
+// into one book. Stripping subtitles once merged two volumes of a trilogy and
+// summed their listening time, which is the failure this matcher is supposed
+// to make impossible.
+func TestResolveKeepsSeriesVolumesApart(t *testing.T) {
+	ids := Resolve([]Record{
+		{Source: "abs", SourceKey: "item-1", Title: "Example Saga", Author: "An Author"},
+		{Source: "abs", SourceKey: "item-2", Title: "Example Saga - Second Movement", Author: "An Author"},
+		{Source: "abs", SourceKey: "item-3", Title: "Example Saga Third Movement", Author: "An Author"},
+	}, DefaultOptions())
+
+	assert.Len(t, ids, 3, "volumes of one series are distinct books, not one merged book")
+}
+
+// The legitimate case still works: the same book listed twice merges.
+func TestResolveMergesDuplicateCopiesOfOneBook(t *testing.T) {
+	ids := Resolve([]Record{
+		{Source: "abs", SourceKey: "item-1", Title: "Example Chronicle", Author: "Terry Example"},
+		{Source: "abs", SourceKey: "item-2", Title: "Example Chronicle (Unabridged)", Author: "Terry Example"},
+	}, DefaultOptions())
+
+	require.Len(t, ids, 1)
+	assert.Equal(t, MatchTitle, ids[0].Method())
 }

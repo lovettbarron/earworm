@@ -503,8 +503,15 @@ the algorithm cannot retroactively rewrite your history.
 
 A book can appear in both sources, in one, or under different titles. ASIN is
 used where both sides have one; otherwise titles are normalised (series
-numbering, `(Unabridged)`, subtitles and leading articles removed) and compared
-by word overlap, with the author required to agree when both are known.
+numbering, `(Unabridged)`, volume numbering and leading articles removed) and
+compared by word overlap, with the author required to agree when both are known.
+
+Subtitles are deliberately kept. Dropping everything after a colon or dash
+would collapse `Some Saga` and `Some Saga - Second Volume` into one book and
+sum their listening time, and that shape cannot be told apart from a genuine
+descriptive subtitle. The cost is that a book titled `Title: Subtitle` in one
+source and `Title` in the other will not match on title alone -- two visible
+identities, which is recoverable, rather than a silent merge, which is not.
 
 `books.csv` records the method in `match_method`, and `earworm stats matches`
 lists everything that was not an exact ASIN match so you can eyeball it.
