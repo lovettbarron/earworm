@@ -29,8 +29,17 @@ func SetDefaults() {
 	viper.SetDefault("scan.recursive", false)
 	viper.SetDefault("library.layout", "flat")
 	viper.SetDefault("audible.profile_path", "")
+	// stats.timezone names the IANA zone every listening day is bucketed in.
+	// Empty means UTC: day keys must not depend on the host's local zone.
+	viper.SetDefault("stats.timezone", "")
+	viper.SetDefault("stats.rate_limit_seconds", 2)
+	// stats.backfill_start bounds how far back a backfill reaches. Audible
+	// exposes no daily-granularity data before 2015 even where monthly totals
+	// go further, so walking back further only spends API calls on empty windows.
+	viper.SetDefault("stats.backfill_start", "2015-01-01")
 	if configDir, err := ConfigDir(); err == nil {
 		viper.SetDefault("cleanup.trash_dir", filepath.Join(configDir, "trash"))
+		viper.SetDefault("stats.export_dir", filepath.Join(configDir, "stats"))
 	}
 }
 

@@ -15,6 +15,7 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 - Skip management for unwanted books
 - Audiobookshelf library scan integration
 - Goodreads CSV export
+- Listening history collection from Audible, with resumable backfill
 - Daemon/polling mode for unattended operation
 - Cross-filesystem file moves (local to NAS)
 - Contextual next-step hints after each command (suppressed with `--quiet`)
@@ -360,6 +361,57 @@ earworm split plan /path/to/multi-book-folder
 |------|-------------|
 | `--json` | Output in JSON format |
 
+### `earworm stats`
+
+Collect and inspect your listening history. Listening data stays on your machine:
+it is written to the local SQLite database and, in later commands, exported only
+to a local directory.
+
+```bash
+# One-time import of your full Audible listening history
+earworm stats backfill
+
+# Incremental update, safe to run repeatedly
+earworm stats sync
+
+# What is stored locally
+earworm stats status
+```
+
+**Flags:**
+
+- `--source <name>` -- which source to read (currently `audible`)
+- `--full` -- ignore saved progress and refetch everything
+- `--json` -- machine-readable summary
+
+Backfill is **resumable**: progress is saved after each window, so an
+interrupted run continues where it stopped rather than starting over. Re-running
+a completed backfill refreshes recent days without duplicating anything, because
+day totals are replaced rather than accumulated.
+
+The initial backfill makes a few hundred API calls and takes several minutes at
+the default rate limit. `earworm stats sync` afterwards costs only a handful.
+
+#### What Audible actually provides
+
+Worth knowing, because it shapes what the data can tell you:
+
+| Signal | Coverage |
+|--------|----------|
+| Daily and monthly listening totals | No book attached -- Audible reports time, not what it was spent on |
+| Per-book status changes | A timestamp per book, but it records the last *change*, including un-finishing |
+| Per-book last playback position | Position and timestamp, for books that have been opened |
+| Library metadata | Title, authors, narrators, series, genres, runtime, purchase date |
+
+Daily-granularity data does not exist before 2015, even where monthly totals
+reach further back, so `stats.backfill_start` defaults to `2015-01-01`.
+
+Because status timestamps are change events rather than completions, earworm
+screens them for **bulk clusters**: when many books share a timestamp within a
+sub-second window, that is a mass-marking or account-migration artifact, not
+evidence those books were finished at that moment. Such rows are flagged and
+`earworm stats status` reports how many were caught.
+
 ### `earworm config init`
 
 Create the default configuration file at `~/.config/earworm/config.yaml`.
@@ -412,6 +464,10 @@ Config file location: `~/.config/earworm/config.yaml`
 | `download.max_retries` | `3` | Maximum retry attempts per book |
 | `download.backoff_multiplier` | `2.0` | Exponential backoff multiplier for retries |
 | `scan.recursive` | `false` | Scan subdirectories recursively |
+| `stats.timezone` | *(UTC)* | IANA timezone used to bucket listening days, e.g. `Europe/Berlin` |
+| `stats.backfill_start` | `2015-01-01` | Earliest date a backfill reaches |
+| `stats.rate_limit_seconds` | `2` | Seconds between listening-history API calls |
+| `stats.export_dir` | `~/.config/earworm/stats` | Where CSV exports are written |
 
 ## Audiobookshelf Integration
 
@@ -505,6 +561,20 @@ earworm goodreads -o library.csv
 ```
 
 Then import the CSV at [goodreads.com/review/import](https://www.goodreads.com/review/import). Books are placed on the "read" shelf.
+
+## Listening Data and Privacy
+
+Listening history is personal data. Earworm keeps it local:
+
+- It is stored in the SQLite database under `~/.config/earworm/`, alongside your library state.
+- Nothing is transmitted anywhere. The only outbound requests are to the sources you configure.
+- CSV exports are written to `stats.export_dir` on your own machine, which the repository's `.gitignore` excludes so exports cannot be committed by accident.
+
+**Set `stats.timezone`** to your own zone. Day boundaries decide which day a
+late-evening listening session belongs to, and the default of UTC will split
+evening sessions across two days if you are far from it. Earworm never uses the
+host's local zone implicitly, so that stored data does not change meaning when
+run from a machine in a different zone.
 
 ## Data Storage
 

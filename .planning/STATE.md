@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Listening Stats & Journaling
 status: executing
-stopped_at: v1.2 roadmap created; Phase 19 ready
+stopped_at: Phase 19 complete (Audible Listening Ingestion)
 last_updated: "2026-09-20T00:00:00.000Z"
 last_activity: 2026-09-20
 progress:
   total_phases: 23
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 28
-  completed_plans: 24
+  completed_plans: 25
   percent: 48
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Reliably download and organize Audible audiobooks into a local library with zero manual intervention
-**Current focus:** Phase 19 — audible-listening-ingestion (milestone v1.2)
+**Current focus:** Phase 20 — audiobookshelf-listening-ingestion (milestone v1.2)
 
 ## Current Position
 
-Phase: 19
+Phase: 20
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-09-20 — Milestone v1.2 started, roadmap approved
+Last activity: 2026-09-20 — Phase 19 complete
 
 Progress: [████▓░░░░░] 48%
 

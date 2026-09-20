@@ -14,6 +14,13 @@ import (
 
 func executeCommand(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	return executeCommandWithConfig(t, nil, args...)
+}
+
+// executeCommandWithConfig runs a command after resetting global state, then
+// applies setup so a test can seed viper values that survive the reset.
+func executeCommandWithConfig(t *testing.T, setup func(), args ...string) (string, error) {
+	t.Helper()
 	viper.Reset()
 	t.Cleanup(func() { viper.Reset() })
 
@@ -50,6 +57,9 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 	cleanupPermanent = false
 	cleanupJSON = false
 	splitJSON = false
+	statsSource = "audible"
+	statsJSON = false
+	statsFullScan = false
 
 	// Reset cobra flag Changed state and help flag on all subcommands
 	// to prevent cross-test contamination (--help sticks across tests).
@@ -93,6 +103,10 @@ func executeCommand(t *testing.T, args ...string) (string, error) {
 				_ = f.Value.Set("false")
 			}
 		})
+	}
+
+	if setup != nil {
+		setup()
 	}
 
 	buf := new(bytes.Buffer)
