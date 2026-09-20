@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lovettbarron/earworm/internal/audible"
+	"github.com/lovettbarron/earworm/internal/audiobookshelf"
 	"github.com/lovettbarron/earworm/internal/config"
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/download"
@@ -65,19 +66,32 @@ var statsStatusCmd = &cobra.Command{
 	RunE:  runStatsStatus,
 }
 
+var statsCheckCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Verify Audiobookshelf connectivity and credentials",
+	Long: `Confirm that the configured Audiobookshelf server is reachable and that the
+API token works, before running a sync that would otherwise fail partway.
+
+Reports the server version and the account the token belongs to.`,
+	RunE: runStatsCheck,
+}
+
 func init() {
-	statsBackfillCmd.Flags().StringVar(&statsSource, "source", "audible", "source to backfill (audible)")
+	statsBackfillCmd.Flags().StringVar(&statsSource, "source", "audible", "source to backfill (audible, abs)")
 	statsBackfillCmd.Flags().BoolVar(&statsJSON, "json", false, "output summary in JSON format")
 	statsBackfillCmd.Flags().BoolVar(&statsFullScan, "full", false, "ignore the saved watermark and refetch everything")
 
-	statsSyncCmd.Flags().StringVar(&statsSource, "source", "audible", "source to sync (audible)")
+	statsSyncCmd.Flags().StringVar(&statsSource, "source", "audible", "source to sync (audible, abs)")
 	statsSyncCmd.Flags().BoolVar(&statsJSON, "json", false, "output summary in JSON format")
+	statsSyncCmd.Flags().BoolVar(&statsFullScan, "full", false, "ignore the saved watermark and refetch everything")
 
 	statsStatusCmd.Flags().BoolVar(&statsJSON, "json", false, "output status in JSON format")
 
 	statsCmd.AddCommand(statsBackfillCmd)
 	statsCmd.AddCommand(statsSyncCmd)
 	statsCmd.AddCommand(statsStatusCmd)
+	statsCheckCmd.Flags().BoolVar(&statsJSON, "json", false, "output result in JSON format")
+	statsCmd.AddCommand(statsCheckCmd)
 	rootCmd.AddCommand(statsCmd)
 }
 
@@ -135,9 +149,94 @@ func newAudibleIngestor(database *sql.DB) (*stats.AudibleIngestor, error) {
 	}, nil
 }
 
+// newABSClient builds an Audiobookshelf client from config. Extracted as a
+// variable so tests can inject a fake.
+var newABSClient = func() stats.ABSSessionSource {
+	return audiobookshelf.NewClient(
+		viper.GetString("audiobookshelf.url"),
+		viper.GetString("audiobookshelf.token"),
+		viper.GetString("audiobookshelf.library_id"),
+	)
+}
+
+// newABSIngestor assembles an Audiobookshelf ingestor from configuration.
+func newABSIngestor(database *sql.DB) (*stats.ABSIngestor, error) {
+	if viper.GetString("audiobookshelf.url") == "" {
+		return nil, fmt.Errorf("audiobookshelf.url is not configured (see 'earworm config set')")
+	}
+	if viper.GetString("audiobookshelf.token") == "" {
+		return nil, fmt.Errorf("audiobookshelf.token is not configured (create an API key in Audiobookshelf settings)")
+	}
+
+	bucket, err := listening.NewBucketer(viper.GetString("stats.timezone"))
+	if err != nil {
+		return nil, fmt.Errorf("stats.timezone is not a valid IANA timezone: %w", err)
+	}
+
+	return &stats.ABSIngestor{
+		DB:     database,
+		Client: newABSClient(),
+		Bucket: bucket,
+		Clock:  listening.SystemClock{},
+		UserID: viper.GetString("audiobookshelf.user_id"),
+		Enrich: viper.GetBool("stats.enrich"),
+	}, nil
+}
+
+// runABSSync performs an Audiobookshelf sync and renders its summary.
+func runABSSync(cmd *cobra.Command, full bool) error {
+	database, err := openStatsDB()
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+
+	ing, err := newABSIngestor(database)
+	if err != nil {
+		return err
+	}
+
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	res, err := ing.Sync(ctx, full)
+	if err != nil {
+		return err
+	}
+
+	out := cmd.OutOrStdout()
+	if statsJSON {
+		return json.NewEncoder(out).Encode(res)
+	}
+	if quiet {
+		return nil
+	}
+
+	fmt.Fprintf(out, "Listening history (audiobookshelf):\n")
+	fmt.Fprintf(out, "  Sessions:      %d\n", res.Sessions)
+	fmt.Fprintf(out, "  Days:          %d\n", res.Days)
+	fmt.Fprintf(out, "  Books:         %d\n", res.Books)
+	if res.Enriched > 0 {
+		fmt.Fprintf(out, "  Enriched:      %d items\n", res.Enriched)
+	}
+	if res.Incremental {
+		fmt.Fprintf(out, "  Mode:          incremental since %s\n", res.Since)
+	} else {
+		fmt.Fprintf(out, "  Mode:          full\n")
+	}
+	hint(os.Stderr, "earworm stats status    # review stored listening data")
+	return nil
+}
+
 func runStatsBackfill(cmd *cobra.Command, args []string) error {
-	if statsSource != listening.SourceAudible {
-		return fmt.Errorf("unknown source %q (supported: audible)", statsSource)
+	switch statsSource {
+	case listening.SourceABS:
+		return runABSSync(cmd, true)
+	case listening.SourceAudible:
+	default:
+		return fmt.Errorf("unknown source %q (supported: audible, abs)", statsSource)
 	}
 
 	database, err := openStatsDB()
@@ -195,8 +294,12 @@ func runStatsBackfill(cmd *cobra.Command, args []string) error {
 }
 
 func runStatsSync(cmd *cobra.Command, args []string) error {
-	if statsSource != listening.SourceAudible {
-		return fmt.Errorf("unknown source %q (supported: audible)", statsSource)
+	switch statsSource {
+	case listening.SourceABS:
+		return runABSSync(cmd, statsFullScan)
+	case listening.SourceAudible:
+	default:
+		return fmt.Errorf("unknown source %q (supported: audible, abs)", statsSource)
 	}
 
 	database, err := openStatsDB()
@@ -354,5 +457,91 @@ func renderStatsSummary(w io.Writer, s statsSummary) error {
 	}
 
 	hint(os.Stderr, "earworm stats status    # review stored listening data")
+	return nil
+}
+
+// statusChecker is the subset of the Audiobookshelf client used by check.
+type statusChecker interface {
+	Status(ctx context.Context) (audiobookshelf.ServerStatus, error)
+}
+
+// newABSStatusClient is separated from newABSClient so tests can supply a
+// checker without satisfying the whole session interface.
+var newABSStatusClient = func() statusChecker {
+	return audiobookshelf.NewClient(
+		viper.GetString("audiobookshelf.url"),
+		viper.GetString("audiobookshelf.token"),
+		viper.GetString("audiobookshelf.library_id"),
+	)
+}
+
+type absCheckResult struct {
+	URL           string `json:"url"`
+	Reachable     bool   `json:"reachable"`
+	ServerVersion string `json:"server_version,omitempty"`
+	Authenticated bool   `json:"authenticated"`
+	UserID        string `json:"user_id,omitempty"`
+	Username      string `json:"username,omitempty"`
+	Error         string `json:"error,omitempty"`
+}
+
+func runStatsCheck(cmd *cobra.Command, args []string) error {
+	url := viper.GetString("audiobookshelf.url")
+	if url == "" {
+		return fmt.Errorf("audiobookshelf.url is not configured (see 'earworm config set')")
+	}
+
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	res := absCheckResult{URL: url}
+	out := cmd.OutOrStdout()
+
+	// Reachability is checked before credentials so the two failures are
+	// distinguishable: the status endpoint needs no token.
+	status, err := newABSStatusClient().Status(ctx)
+	if err != nil {
+		res.Error = err.Error()
+		if statsJSON {
+			return json.NewEncoder(out).Encode(res)
+		}
+		return fmt.Errorf("audiobookshelf unreachable at %s: %w", url, err)
+	}
+	res.Reachable = true
+	res.ServerVersion = status.ServerVersion
+
+	database, err := openStatsDB()
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+
+	ing, err := newABSIngestor(database)
+	if err != nil {
+		return err
+	}
+	userID, err := ing.ResolveUser(ctx)
+	if err != nil {
+		res.Error = err.Error()
+		if statsJSON {
+			return json.NewEncoder(out).Encode(res)
+		}
+		return fmt.Errorf("audiobookshelf reachable (version %s) but the token was not accepted: %w",
+			status.ServerVersion, err)
+	}
+	res.Authenticated = true
+	res.UserID = userID
+
+	if statsJSON {
+		return json.NewEncoder(out).Encode(res)
+	}
+	if quiet {
+		return nil
+	}
+	fmt.Fprintf(out, "Audiobookshelf %s at %s\n", status.ServerVersion, url)
+	fmt.Fprintf(out, "Token accepted for user %s\n", userID)
+	hint(os.Stderr, "earworm stats backfill --source abs    # import session history")
 	return nil
 }

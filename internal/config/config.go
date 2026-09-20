@@ -21,6 +21,8 @@ func SetDefaults() {
 	viper.SetDefault("audiobookshelf.url", "")
 	viper.SetDefault("audiobookshelf.token", "")
 	viper.SetDefault("audiobookshelf.library_id", "")
+	// user_id scopes the admin sessions endpoint. Resolved from the token when empty.
+	viper.SetDefault("audiobookshelf.user_id", "")
 	viper.SetDefault("daemon.polling_interval", "6h")
 	viper.SetDefault("download.rate_limit_seconds", 5)
 	viper.SetDefault("download.max_retries", 3)
@@ -33,6 +35,9 @@ func SetDefaults() {
 	// Empty means UTC: day keys must not depend on the host's local zone.
 	viper.SetDefault("stats.timezone", "")
 	viper.SetDefault("stats.rate_limit_seconds", 2)
+	// enrich fetches library items so genres and series missing from session
+	// metadata snapshots are filled in.
+	viper.SetDefault("stats.enrich", true)
 	// stats.backfill_start bounds how far back a backfill reaches. Audible
 	// exposes no daily-granularity data before 2015 even where monthly totals
 	// go further, so walking back further only spends API calls on empty windows.

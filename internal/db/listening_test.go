@@ -345,3 +345,120 @@ func TestListBookListeningReportsScanErrors(t *testing.T) {
 	_, err = ListBookListening(database, "audible")
 	assert.Error(t, err)
 }
+
+func TestMigration009CreatesSessionsTable(t *testing.T) {
+	database := setupTestDB(t)
+	var name string
+	err := database.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='listening_sessions'`).Scan(&name)
+	require.NoError(t, err)
+	assert.Equal(t, "listening_sessions", name)
+}
+
+func sampleDBSession(id, day string, seconds int) ListeningSession {
+	return ListeningSession{
+		ID:              id,
+		UserID:          "user-1",
+		LibraryItemID:   "item-1",
+		MediaType:       "book",
+		Title:           "A Test Title",
+		Author:          "An Author",
+		Day:             day,
+		Seconds:         seconds,
+		DurationSeconds: 36000,
+		StartedAt:       day + "T10:00:00Z",
+		UpdatedAt:       day + "T11:00:00Z",
+		Device:          "Test Client / Test OS",
+	}
+}
+
+func TestUpsertListeningSessionsRoundTrips(t *testing.T) {
+	database := setupTestDB(t)
+
+	in := sampleDBSession("s1", "2026-03-01", 1800)
+	require.NoError(t, UpsertListeningSessions(database, []ListeningSession{in}))
+
+	got, err := ListListeningSessions(database)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, in, got[0])
+}
+
+// Sessions stay open and keep accumulating time, so re-observing one must
+// update it rather than insert a second row.
+func TestUpsertListeningSessionsUpdatesInPlace(t *testing.T) {
+	database := setupTestDB(t)
+
+	require.NoError(t, UpsertListeningSessions(database,
+		[]ListeningSession{sampleDBSession("s1", "2026-03-01", 1800)}))
+	require.NoError(t, UpsertListeningSessions(database,
+		[]ListeningSession{sampleDBSession("s1", "2026-03-01", 3600)}))
+
+	n, err := CountListeningSessions(database)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	got, err := ListListeningSessions(database)
+	require.NoError(t, err)
+	assert.Equal(t, 3600, got[0].Seconds, "the growing session's later value wins")
+}
+
+func TestSessionsByDayAggregates(t *testing.T) {
+	database := setupTestDB(t)
+
+	require.NoError(t, UpsertListeningSessions(database, []ListeningSession{
+		sampleDBSession("s1", "2026-03-01", 1800),
+		sampleDBSession("s2", "2026-03-01", 900),
+		sampleDBSession("s3", "2026-03-02", 600),
+	}))
+
+	byDay, err := SessionsByDay(database)
+	require.NoError(t, err)
+	assert.Equal(t, 2700, byDay["2026-03-01"])
+	assert.Equal(t, 600, byDay["2026-03-02"])
+}
+
+func TestSessionsByDayIgnoresUnbucketedSessions(t *testing.T) {
+	database := setupTestDB(t)
+
+	s := sampleDBSession("s1", "", 1800)
+	require.NoError(t, UpsertListeningSessions(database, []ListeningSession{s}))
+
+	byDay, err := SessionsByDay(database)
+	require.NoError(t, err)
+	assert.Empty(t, byDay, "a session with no day bucket contributes to no day")
+}
+
+func TestUpsertListeningSessionsEmptyIsNoop(t *testing.T) {
+	database := setupTestDB(t)
+	require.NoError(t, UpsertListeningSessions(database, nil))
+
+	n, err := CountListeningSessions(database)
+	require.NoError(t, err)
+	assert.Zero(t, n)
+}
+
+func TestSessionOperationsReportDatabaseErrors(t *testing.T) {
+	bad := closedDB(t)
+
+	assert.Error(t, UpsertListeningSessions(bad, []ListeningSession{sampleDBSession("s1", "2026-03-01", 1)}))
+
+	_, err := ListListeningSessions(bad)
+	assert.Error(t, err)
+
+	_, err = SessionsByDay(bad)
+	assert.Error(t, err)
+
+	_, err = CountListeningSessions(bad)
+	assert.Error(t, err)
+}
+
+func TestListListeningSessionsReportsScanErrors(t *testing.T) {
+	database := setupTestDB(t)
+	_, err := database.Exec(
+		`INSERT INTO listening_sessions (id, seconds) VALUES ('s1', 'not-a-number')`)
+	require.NoError(t, err)
+
+	_, err = ListListeningSessions(database)
+	assert.Error(t, err)
+}

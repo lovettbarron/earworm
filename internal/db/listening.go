@@ -340,3 +340,134 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
+
+// ListeningSession is one exact playback session from Audiobookshelf.
+type ListeningSession struct {
+	ID              string
+	UserID          string
+	LibraryItemID   string
+	BookID          string
+	EpisodeID       string
+	MediaType       string
+	ASIN            string
+	Title           string
+	Author          string
+	Day             string
+	Seconds         int
+	DurationSeconds int
+	StartSeconds    int
+	CurrentSeconds  int
+	StartedAt       string
+	UpdatedAt       string
+	Device          string
+}
+
+const listeningSessionUpsert = `
+	INSERT INTO listening_sessions (
+		id, user_id, library_item_id, book_id, episode_id, media_type, asin,
+		title, author, day, seconds, duration_seconds, start_seconds,
+		current_seconds, started_at, updated_at, device, synced_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+	ON CONFLICT(id) DO UPDATE SET
+		user_id = excluded.user_id,
+		library_item_id = excluded.library_item_id,
+		book_id = excluded.book_id,
+		episode_id = excluded.episode_id,
+		media_type = excluded.media_type,
+		asin = excluded.asin,
+		title = excluded.title,
+		author = excluded.author,
+		day = excluded.day,
+		seconds = excluded.seconds,
+		duration_seconds = excluded.duration_seconds,
+		start_seconds = excluded.start_seconds,
+		current_seconds = excluded.current_seconds,
+		started_at = excluded.started_at,
+		updated_at = excluded.updated_at,
+		device = excluded.device,
+		synced_at = CURRENT_TIMESTAMP`
+
+// UpsertListeningSessions stores sessions, updating any already present.
+//
+// Sessions are mutable while playback continues, so a session seen on an
+// earlier sync can legitimately return with more listening time. Updating in
+// place by server id is what keeps a re-sync from double-counting it.
+func UpsertListeningSessions(db *sql.DB, sessions []ListeningSession) error {
+	if len(sessions) == 0 {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin sessions tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	for _, s := range sessions {
+		if _, err := tx.Exec(listeningSessionUpsert,
+			s.ID, s.UserID, s.LibraryItemID, s.BookID, s.EpisodeID, s.MediaType,
+			s.ASIN, s.Title, s.Author, s.Day, s.Seconds, s.DurationSeconds,
+			s.StartSeconds, s.CurrentSeconds, s.StartedAt, s.UpdatedAt, s.Device,
+		); err != nil {
+			return fmt.Errorf("upsert session %s: %w", s.ID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ListListeningSessions returns every stored session ordered by start time.
+func ListListeningSessions(db *sql.DB) ([]ListeningSession, error) {
+	rows, err := db.Query(`
+		SELECT id, user_id, library_item_id, book_id, episode_id, media_type,
+		       asin, title, author, day, seconds, duration_seconds,
+		       start_seconds, current_seconds, started_at, updated_at, device
+		FROM listening_sessions
+		ORDER BY started_at, id`)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ListeningSession
+	for rows.Next() {
+		var s ListeningSession
+		if err := rows.Scan(&s.ID, &s.UserID, &s.LibraryItemID, &s.BookID,
+			&s.EpisodeID, &s.MediaType, &s.ASIN, &s.Title, &s.Author, &s.Day,
+			&s.Seconds, &s.DurationSeconds, &s.StartSeconds, &s.CurrentSeconds,
+			&s.StartedAt, &s.UpdatedAt, &s.Device); err != nil {
+			return nil, fmt.Errorf("scan session: %w", err)
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// SessionsByDay returns total listened seconds per day across all sessions.
+func SessionsByDay(db *sql.DB) (map[string]int, error) {
+	rows, err := db.Query(`
+		SELECT day, SUM(seconds) FROM listening_sessions
+		WHERE day != '' GROUP BY day`)
+	if err != nil {
+		return nil, fmt.Errorf("sessions by day: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]int)
+	for rows.Next() {
+		var day string
+		var secs int
+		if err := rows.Scan(&day, &secs); err != nil {
+			return nil, fmt.Errorf("scan session day: %w", err)
+		}
+		out[day] = secs
+	}
+	return out, rows.Err()
+}
+
+// CountListeningSessions returns how many sessions are stored.
+func CountListeningSessions(db *sql.DB) (int, error) {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM listening_sessions`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count sessions: %w", err)
+	}
+	return n, nil
+}

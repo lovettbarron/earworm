@@ -15,7 +15,7 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 - Skip management for unwanted books
 - Audiobookshelf library scan integration
 - Goodreads CSV export
-- Listening history collection from Audible, with resumable backfill
+- Listening history collection from Audible and Audiobookshelf, with resumable backfill
 - Daemon/polling mode for unattended operation
 - Cross-filesystem file moves (local to NAS)
 - Contextual next-step hints after each command (suppressed with `--quiet`)
@@ -412,6 +412,48 @@ sub-second window, that is a mass-marking or account-migration artifact, not
 evidence those books were finished at that moment. Such rows are flagged and
 `earworm stats status` reports how many were caught.
 
+
+#### Audiobookshelf listening history
+
+Audiobookshelf records **exact per-book playback sessions**, which is the one
+thing Audible cannot provide: Audible reports how long you listened, but never
+to what.
+
+```bash
+# Confirm the server is reachable and the token works
+earworm stats check
+
+# Import the full session history
+earworm stats backfill --source abs
+
+# Incremental update afterwards
+earworm stats sync --source abs
+```
+
+Requires an **API key**, created under Settings → API Keys in Audiobookshelf.
+Set `audiobookshelf.url` and `audiobookshelf.token`; `audiobookshelf.user_id` is
+resolved from the token if you leave it blank.
+
+`earworm stats check` reports the server version and the account the token
+belongs to, and distinguishes an unreachable server from a rejected token --
+worth running before a long backfill.
+
+Two behaviours are worth knowing:
+
+- **Sessions are mutable.** A session stays open while playback continues and
+  only auto-closes after 36 hours idle, so its listening time keeps growing
+  after earworm first sees it. Sync therefore re-reads a 48-hour window before
+  the last watermark and updates sessions in place by their server ID. Syncing
+  strictly forward would freeze open sessions at a stale value; inserting
+  instead of updating would double-count them.
+- **Session metadata is a snapshot** taken at play time, and its genre and
+  series fields are frequently empty. Set `stats.enrich` (on by default) to fill
+  these from the library items themselves.
+
+Backfill uses the admin `/api/sessions` endpoint, which paginates server-side.
+The per-user endpoint loads your entire session table into memory on every page
+request, which makes a large backfill needlessly expensive for the server.
+
 ### `earworm config init`
 
 Create the default configuration file at `~/.config/earworm/config.yaml`.
@@ -459,6 +501,7 @@ Config file location: `~/.config/earworm/config.yaml`
 | `audiobookshelf.url` | *(none)* | Audiobookshelf server URL |
 | `audiobookshelf.token` | *(none)* | Audiobookshelf API token |
 | `audiobookshelf.library_id` | *(none)* | Audiobookshelf library ID |
+| `audiobookshelf.user_id` | *(resolved)* | Audiobookshelf user ID; looked up from the token when blank |
 | `daemon.polling_interval` | `6h` | Polling interval for daemon mode |
 | `download.rate_limit_seconds` | `5` | Seconds between download requests |
 | `download.max_retries` | `3` | Maximum retry attempts per book |
@@ -468,6 +511,7 @@ Config file location: `~/.config/earworm/config.yaml`
 | `stats.backfill_start` | `2015-01-01` | Earliest date a backfill reaches |
 | `stats.rate_limit_seconds` | `2` | Seconds between listening-history API calls |
 | `stats.export_dir` | `~/.config/earworm/stats` | Where CSV exports are written |
+| `stats.enrich` | `true` | Fetch library items to fill in genres and series missing from session data |
 
 ## Audiobookshelf Integration
 

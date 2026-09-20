@@ -14,8 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/lovettbarron/earworm/internal/audible"
+	"github.com/lovettbarron/earworm/internal/audiobookshelf"
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/listening"
+	"github.com/lovettbarron/earworm/internal/stats"
 )
 
 // fakeCLIStatsClient is a minimal scripted audible.StatsClient for CLI tests.
@@ -220,4 +222,152 @@ func TestStatsCommandIsRegistered(t *testing.T) {
 	assert.Contains(t, out, "backfill")
 	assert.Contains(t, out, "sync")
 	assert.Contains(t, out, "status")
+}
+
+// fakeABSSource is a scripted stats.ABSSessionSource for CLI tests.
+type fakeABSSource struct {
+	user      audiobookshelf.User
+	sessions  []audiobookshelf.PlaybackSession
+	status    audiobookshelf.ServerStatus
+	statusErr error
+	userErr   error
+}
+
+func (f *fakeABSSource) Me(context.Context) (audiobookshelf.User, []audiobookshelf.MediaProgress, error) {
+	return f.user, nil, f.userErr
+}
+func (f *fakeABSSource) ListSessions(context.Context, audiobookshelf.SessionsOptions) ([]audiobookshelf.PlaybackSession, error) {
+	return f.sessions, nil
+}
+func (f *fakeABSSource) GetItems(context.Context, []string) (map[string]audiobookshelf.LibraryItem, error) {
+	return map[string]audiobookshelf.LibraryItem{}, nil
+}
+func (f *fakeABSSource) Status(context.Context) (audiobookshelf.ServerStatus, error) {
+	return f.status, f.statusErr
+}
+
+func withABSFakes(t *testing.T, src *fakeABSSource) {
+	t.Helper()
+	origClient, origStatus := newABSClient, newABSStatusClient
+	newABSClient = func() stats.ABSSessionSource { return src }
+	newABSStatusClient = func() statusChecker { return src }
+	t.Cleanup(func() { newABSClient, newABSStatusClient = origClient, origStatus })
+}
+
+func setABSConfig() {
+	setStatsConfig()
+	viper.Set("audiobookshelf.url", "http://abs.invalid:13378")
+	viper.Set("audiobookshelf.token", "test-token")
+	viper.Set("audiobookshelf.user_id", "user-1")
+	viper.Set("stats.enrich", false)
+}
+
+func TestStatsBackfillABSStoresSessions(t *testing.T) {
+	started := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	src := &fakeABSSource{
+		user: audiobookshelf.User{ID: "user-1"},
+		sessions: []audiobookshelf.PlaybackSession{{
+			ID: "s1", LibraryItemID: "item-1", DisplayTitle: "A Test Title",
+			TimeListening: audiobookshelf.LenientSeconds(1800),
+			Duration:      audiobookshelf.LenientSeconds(36000),
+			StartedAt:     audiobookshelf.EpochMillis(started.UnixMilli()),
+			UpdatedAt:     audiobookshelf.EpochMillis(started.Add(time.Hour).UnixMilli()),
+		}},
+	}
+	database := withStatsFakes(t, &fakeCLIStatsClient{})
+	withABSFakes(t, src)
+
+	_, err := executeCommandWithConfig(t, setABSConfig, "stats", "backfill", "--source", "abs", "--json")
+	require.NoError(t, err)
+
+	n, err := db.CountListeningSessions(database)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	days, err := db.ListListeningDays(database, listening.SourceABS)
+	require.NoError(t, err)
+	require.Len(t, days, 1)
+	assert.Equal(t, 1800, days[0].Seconds)
+}
+
+func TestStatsABSRequiresURLAndToken(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withABSFakes(t, &fakeABSSource{})
+
+	_, err := executeCommandWithConfig(t, func() {
+		setStatsConfig()
+		viper.Set("audiobookshelf.url", "")
+	}, "stats", "backfill", "--source", "abs")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "audiobookshelf.url is not configured")
+
+	_, err = executeCommandWithConfig(t, func() {
+		setStatsConfig()
+		viper.Set("audiobookshelf.url", "http://abs.invalid:13378")
+		viper.Set("audiobookshelf.token", "")
+	}, "stats", "backfill", "--source", "abs")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "audiobookshelf.token is not configured")
+}
+
+func TestStatsBackfillRejectsUnknownSourceMentionsBoth(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+
+	_, err := executeCommandWithConfig(t, setStatsConfig, "stats", "backfill", "--source", "trakt")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "audible, abs")
+}
+
+func TestStatsCheckReportsServerAndUser(t *testing.T) {
+	src := &fakeABSSource{
+		user:   audiobookshelf.User{ID: "user-1", Username: "tester"},
+		status: audiobookshelf.ServerStatus{App: "audiobookshelf", ServerVersion: "2.36.0"},
+	}
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withABSFakes(t, src)
+
+	out, err := executeCommandWithConfig(t, setABSConfig, "stats", "check", "--json")
+	require.NoError(t, err)
+
+	var res absCheckResult
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	assert.True(t, res.Reachable)
+	assert.True(t, res.Authenticated)
+	assert.Equal(t, "2.36.0", res.ServerVersion)
+	assert.Equal(t, "user-1", res.UserID)
+}
+
+// Unreachable and unauthorized are different problems and must not be
+// reported as the same one.
+func TestStatsCheckDistinguishesUnreachableFromUnauthorized(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+
+	withABSFakes(t, &fakeABSSource{statusErr: fmt.Errorf("connection refused")})
+	_, err := executeCommandWithConfig(t, setABSConfig, "stats", "check")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unreachable")
+
+	withABSFakes(t, &fakeABSSource{
+		status:  audiobookshelf.ServerStatus{ServerVersion: "2.36.0"},
+		userErr: fmt.Errorf("401 rejected"),
+	})
+	_, err = executeCommandWithConfig(t, func() {
+		setABSConfig()
+		viper.Set("audiobookshelf.user_id", "")
+	}, "stats", "check")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "token was not accepted")
+	assert.Contains(t, err.Error(), "2.36.0", "a reachable server should still report its version")
+}
+
+func TestStatsCheckRequiresURL(t *testing.T) {
+	withStatsFakes(t, &fakeCLIStatsClient{})
+	withABSFakes(t, &fakeABSSource{})
+
+	_, err := executeCommandWithConfig(t, func() {
+		setStatsConfig()
+		viper.Set("audiobookshelf.url", "")
+	}, "stats", "check")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not configured")
 }
