@@ -492,3 +492,12 @@ func TestEstimatedFooterNamesTheRightSource(t *testing.T) {
 			"an Audiobookshelf book must not claim Audible as its source")
 	}
 }
+
+// A bulk sync's duration scales with the backlog, so it must not share the
+// per-entry bound. A 60-second limit once killed a succeeding sync of several
+// hundred entries and reported the write as failed.
+func TestSyncTimeoutIsMuchLongerThanWriteTimeout(t *testing.T) {
+	assert.Greater(t, syncTimeout, dayoneTimeout*10,
+		"flushing a large outbox needs far more headroom than writing one entry")
+	assert.GreaterOrEqual(t, syncTimeout, 10*time.Minute)
+}

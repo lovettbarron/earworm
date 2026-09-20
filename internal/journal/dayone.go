@@ -10,8 +10,17 @@ import (
 	"time"
 )
 
-// dayoneTimeout bounds a single CLI invocation.
+// dayoneTimeout bounds a single entry write or journal listing.
 const dayoneTimeout = 60 * time.Second
+
+// syncTimeout bounds `dayone sync`, which pushes the whole queued outbox.
+//
+// Far longer than a single write, because the work is proportional to the
+// backlog: a first run that queues several hundred entries takes minutes. A
+// 60-second bound killed a sync that was succeeding and reported it as a
+// failure, which is the worst outcome here — the entries had been written and
+// the user was told they had not.
+const syncTimeout = 30 * time.Minute
 
 // Writer delivers entries to a journal.
 type Writer interface {
@@ -110,7 +119,7 @@ func (d *DayOne) Write(ctx context.Context, journalID string, e Entry) error {
 // written locally while the sync fails, and reporting that as a write failure
 // would send someone looking in the wrong place.
 func (d *DayOne) Flush(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, dayoneTimeout)
+	ctx, cancel := context.WithTimeout(ctx, syncTimeout)
 	defer cancel()
 
 	cmd := d.command(ctx, "sync")
