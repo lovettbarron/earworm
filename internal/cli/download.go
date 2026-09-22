@@ -143,6 +143,13 @@ func runDownload(cmd *cobra.Command, args []string) error {
 			hint(cmd.ErrOrStderr(), "earworm auth              # re-authenticate with Audible")
 		} else if summary.Succeeded > 0 {
 			hint(cmd.ErrOrStderr(), "earworm organize          # move %d books to library", summary.Succeeded)
+		} else {
+			// Nothing new downloaded — check for books stuck in staging.
+			staged, _ := db.CountByStatus(database, "downloaded")
+			if staged > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "\nWarning: %d books still in staging (not yet transferred to library)\n", staged)
+				hint(cmd.ErrOrStderr(), "earworm organize          # move staged books to library")
+			}
 		}
 	}
 

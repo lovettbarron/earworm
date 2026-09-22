@@ -186,7 +186,7 @@ func TestStatsStatusReportsStoredData(t *testing.T) {
 
 	var st statsStatus
 	require.NoError(t, json.Unmarshal([]byte(out), &st))
-	require.Len(t, st.Sources, 2, "both sources are always reported, even when empty")
+	require.Len(t, st.Sources, 3, "every source is reported, even when empty")
 
 	var audibleStatus statsSourceStatus
 	for _, s := range st.Sources {

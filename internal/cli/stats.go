@@ -478,6 +478,22 @@ func runStatsStatus(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(out, "%-8s no data\n", s.Source)
 			continue
 		}
+
+		// Reading is counted in volumes; only listening has a duration, and
+		// reporting "0.0 hours" for a read series is just wrong.
+		if s.Source == listening.SourceKomga {
+			fmt.Fprintf(out, "%-8s %d books read or started", s.Source, s.Books)
+			if s.FirstDay != "" {
+				fmt.Fprintf(out, " (%s to %s)", s.FirstDay, s.LastDay)
+			}
+			fmt.Fprintln(out)
+			if s.BulkFlagged > 0 {
+				fmt.Fprintf(out, "%-8s %d flagged as library-migration artifacts (kept in the export, excluded from journal entries)\n",
+					"", s.BulkFlagged)
+			}
+			continue
+		}
+
 		fmt.Fprintf(out, "%-8s %d days, %d books, %.1f hours",
 			s.Source, s.Days, s.Books, float64(s.TotalSeconds)/3600.0)
 		if s.FirstDay != "" {

@@ -86,6 +86,7 @@ func loadDataset(database *sql.DB) (statsexport.Dataset, error) {
 			ASIN:           b.ASIN,
 			Title:          b.Title,
 			Author:         b.Author,
+			Series:         b.Series,
 			SeriesPosition: b.SeriesPosition,
 			Seconds:        b.SecondsListened,
 		})

@@ -105,8 +105,8 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 			res.Unreliable++
 			unreliableKeys = append(unreliableKeys, b.ID)
 		}
-		if b.SeriesTitle != "" {
-			series[b.SeriesTitle] = struct{}{}
+		if sn := b.DisplaySeries(); sn != "" {
+			series[sn] = struct{}{}
 		}
 		if !completedAt.IsZero() && !unreliable {
 			days[k.Bucket.Day(completedAt)] = struct{}{}
@@ -130,7 +130,7 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 			SourceKey:       b.ID,
 			Title:           b.DisplayTitle(),
 			Author:          b.AuthorDisplay(),
-			Series:          b.SeriesTitle,
+			Series:          b.DisplaySeries(),
 			SeriesPosition:  b.VolumeNumber(),
 			Genres:          strings.Join(b.Metadata.Tags, ","),
 			PercentComplete: pct,

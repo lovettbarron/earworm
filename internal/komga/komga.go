@@ -88,12 +88,18 @@ type Book struct {
 	} `json:"media"`
 }
 
-// DisplayTitle returns the most useful title available.
+// DisplayTitle returns the most useful title available, with release-group
+// and format suffixes removed.
 func (b Book) DisplayTitle() string {
 	if b.Metadata.Title != "" {
-		return b.Metadata.Title
+		return CleanTitle(b.Metadata.Title)
 	}
-	return b.Name
+	return CleanTitle(b.Name)
+}
+
+// DisplaySeries returns the series name with release suffixes removed.
+func (b Book) DisplaySeries() string {
+	return CleanTitle(b.SeriesTitle)
 }
 
 // AuthorDisplay joins the credited authors, preferring writers where the role

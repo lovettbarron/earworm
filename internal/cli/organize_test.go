@@ -103,7 +103,7 @@ func TestOrganizeCommand_NoBooksToOrganize(t *testing.T) {
 
 	out, err := executeCommand(t, "--config", cfgPath, "organize")
 	require.NoError(t, err)
-	assert.Contains(t, out, "Organized 0 books, 0 errors")
+	assert.Contains(t, out, "Organized 0 books")
 }
 
 func TestOrganizeCommand_Registered(t *testing.T) {
@@ -143,7 +143,7 @@ func TestOrganizeCommand_TextOutput(t *testing.T) {
 	assert.Contains(t, out, "Organized:")
 	assert.Contains(t, out, "Writer, Famous")
 	assert.Contains(t, out, "My Book")
-	assert.Contains(t, out, "Organized 1 books, 0 errors")
+	assert.Contains(t, out, "Organized 1 books")
 }
 
 func TestOrganizeCommand_JSONWithOrganizeResult(t *testing.T) {

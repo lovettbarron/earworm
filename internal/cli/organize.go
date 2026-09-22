@@ -14,6 +14,7 @@ import (
 )
 
 var organizeJSON bool
+var organizeRetry bool
 
 var organizeCmd = &cobra.Command{
 	Use:   "organize",
@@ -31,6 +32,7 @@ metadata (author, title) are marked as errors.`,
 
 func init() {
 	organizeCmd.Flags().BoolVar(&organizeJSON, "json", false, "output results in JSON format")
+	organizeCmd.Flags().BoolVar(&organizeRetry, "retry", false, "reset previously failed books and retry organizing them")
 	rootCmd.AddCommand(organizeCmd)
 }
 
@@ -68,6 +70,27 @@ func runOrganize(cmd *cobra.Command, args []string) error {
 	}
 	defer database.Close()
 
+	// Reset error'd books back to "downloaded" if --retry is set.
+	if organizeRetry {
+		reset, err := db.ResetOrganizeErrors(database, stagingPath)
+		if err != nil {
+			return fmt.Errorf("failed to reset errors: %w", err)
+		}
+		if reset > 0 && !quiet {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Reset %d failed books for retry\n", reset)
+		}
+	}
+
+	// Validate library path is reachable and writable before attempting moves.
+	if err := organize.ValidateLibraryPath(libraryPath); err != nil {
+		// Count how many books are waiting.
+		staged, _ := db.CountByStatus(database, "downloaded")
+		if staged > 0 {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %d books in staging awaiting transfer\n", staged)
+		}
+		return fmt.Errorf("library not accessible: %w\n\nBooks remain in staging and will be organized on next successful run", err)
+	}
+
 	// Run organization
 	layout := viper.GetString("library.layout")
 	results, err := organize.OrganizeAll(database, stagingPath, libraryPath, layout)
@@ -75,11 +98,13 @@ func runOrganize(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("organize failed: %w", err)
 	}
 
-	// Count successes and failures
-	var successCount, errorCount int
+	// Count successes, retryable failures, and permanent errors
+	var successCount, retryCount, errorCount int
 	for _, r := range results {
 		if r.Success {
 			successCount++
+		} else if r.Retryable {
+			retryCount++
 		} else {
 			errorCount++
 		}
@@ -89,7 +114,7 @@ func runOrganize(cmd *cobra.Command, args []string) error {
 	if organizeJSON {
 		output := jsonOrganizeOutput{
 			Organized: successCount,
-			Errors:    errorCount,
+			Errors:    errorCount + retryCount,
 			Results:   results,
 		}
 		enc := json.NewEncoder(cmd.OutOrStdout())
@@ -102,13 +127,22 @@ func runOrganize(cmd *cobra.Command, args []string) error {
 		for _, r := range results {
 			if r.Success {
 				fmt.Fprintf(cmd.OutOrStdout(), "Organized: %s - %s -> %s\n", r.Author, r.Title, r.LibPath)
+			} else if r.Retryable {
+				fmt.Fprintf(cmd.OutOrStdout(), "Retry: %s - %s: %s (will retry next run)\n", r.Author, r.Title, r.Error)
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "Error: %s - %s: %s\n", r.Author, r.Title, r.Error)
 			}
 		}
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Organized %d books, %d errors\n", successCount, errorCount)
+	fmt.Fprintf(cmd.OutOrStdout(), "Organized %d books", successCount)
+	if retryCount > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), ", %d pending retry", retryCount)
+	}
+	if errorCount > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), ", %d errors", errorCount)
+	}
+	fmt.Fprintln(cmd.OutOrStdout())
 
 	// Trigger Audiobookshelf library scan after successful organization.
 	// Silent skip if unconfigured. Warn and continue on failure.

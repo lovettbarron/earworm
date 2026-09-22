@@ -289,3 +289,29 @@ func TestResolveMatchesWhenOneSideHasNoVolume(t *testing.T) {
 	}, DefaultOptions())
 	assert.Len(t, ids, 1, "an absent volume number is not a conflict")
 }
+
+// A sequel series shares most of its title with the original and restarts its
+// numbering, so volume one of each collides on both title similarity and
+// volume number. Series has to discriminate.
+func TestResolveKeepsParallelSeriesApart(t *testing.T) {
+	ids := Resolve([]Record{
+		{Source: "komga", SourceKey: "k1", Title: "Example Saga v01",
+			Series: "Example Saga", SeriesPosition: "1"},
+		{Source: "komga", SourceKey: "k2", Title: "Example Saga - Reprise v01",
+			Series: "Example Saga - Reprise", SeriesPosition: "1"},
+	}, DefaultOptions())
+
+	assert.Len(t, ids, 2, "a sequel series is not the original")
+}
+
+func TestResolveStillMatchesWithinOneSeries(t *testing.T) {
+	ids := Resolve([]Record{
+		{Source: "komga", SourceKey: "k1", Title: "Example Saga v01",
+			Series: "Example Saga", SeriesPosition: "1"},
+		{Source: "audible", SourceKey: "A1", Title: "Example Saga v01",
+			Series: "Example Saga", SeriesPosition: "1"},
+	}, DefaultOptions())
+
+	require.Len(t, ids, 1)
+	assert.Equal(t, []string{"audible", "komga"}, ids[0].Sources())
+}

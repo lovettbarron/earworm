@@ -13,8 +13,10 @@ type Record struct {
 	ASIN      string
 	Title     string
 	Author    string
+	// Series is the work the record belongs to, where the source has one.
+	Series string
 	// SeriesPosition is the volume or chapter number where the source has one.
-	// It acts as a hard discriminator: see findTitleMatch.
+	// Series and SeriesPosition act as hard discriminators: see findTitleMatch.
 	SeriesPosition string
 	Seconds        int
 }
@@ -87,6 +89,7 @@ type bucket struct {
 	identity   Identity
 	normTitle  string
 	normAuthor string
+	normSeries string
 	position   string
 }
 
@@ -131,7 +134,7 @@ func Resolve(records []Record, opts Options) []Identity {
 			}
 		}
 
-		if b, method, conf := findTitleMatch(buckets, nt, na, r.SeriesPosition, opts); b != nil {
+		if b, method, conf := findTitleMatch(buckets, nt, na, NormalizeTitle(r.Series), r.SeriesPosition, opts); b != nil {
 			attach(b, r, method, conf)
 			if r.ASIN != "" {
 				byASIN[r.ASIN] = b
@@ -140,7 +143,8 @@ func Resolve(records []Record, opts Options) []Identity {
 		}
 
 		nb := &bucket{
-			position: r.SeriesPosition,
+			position:   r.SeriesPosition,
+			normSeries: NormalizeTitle(r.Series),
 			identity: Identity{
 				ID:     identityID(r),
 				ASIN:   r.ASIN,
@@ -171,7 +175,7 @@ func Resolve(records []Record, opts Options) []Identity {
 //
 // The best match is taken rather than the first, so that adding an unrelated
 // book earlier in the list cannot steal a better pairing.
-func findTitleMatch(buckets []*bucket, nt, na, position string, opts Options) (*bucket, string, float64) {
+func findTitleMatch(buckets []*bucket, nt, na, nseries, position string, opts Options) (*bucket, string, float64) {
 	if nt == "" {
 		return nil, "", 0
 	}
@@ -186,6 +190,14 @@ func findTitleMatch(buckets []*bucket, nt, na, position string, opts Options) (*
 		// suffix like "(2020) (Digital) (Group)" repeats across a whole run —
 		// so similarity alone merges distinct volumes and sums their reading.
 		if position != "" && b.position != "" && position != b.position {
+			continue
+		}
+		// Series is the other hard discriminator. Two works in the same
+		// franchise share most of their title and often carry the same volume
+		// number — a sequel series' volume one against the original's — which
+		// leaves similarity alone scoring them as the same book.
+		if nseries != "" && b.normSeries != "" &&
+			Similarity(nseries, b.normSeries) < opts.TitleThreshold {
 			continue
 		}
 
@@ -233,6 +245,9 @@ func attach(b *bucket, r Record, method string, confidence float64) {
 	}
 	if b.position == "" {
 		b.position = r.SeriesPosition
+	}
+	if b.normSeries == "" {
+		b.normSeries = NormalizeTitle(r.Series)
 	}
 }
 

@@ -585,6 +585,12 @@ the same shape as Audible. It matters far less here: a book in Komga is a
 single volume or chapter, so reading a series produces one dated completion per
 volume, which is already a dense timeline with nothing to reconstruct.
 
+Release-group and format suffixes are stripped from titles on import:
+`Some Title (2018-2021) (Digital) (GroupName)` is stored as `Some Title`. These
+carry nothing about the work, and because every volume of a series repeats the
+same suffix they also made different volumes score as near-identical when
+matching.
+
 Reading lands in the same tables as listening, so `books.csv` and the journal
 pick it up through the paths that already exist. Finished volumes produce
 finish entries on the same terms as finished audiobooks.

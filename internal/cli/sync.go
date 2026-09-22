@@ -146,7 +146,12 @@ func runSync(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "  New:           %d (not yet downloaded)\n", summary.NewBooks)
 	fmt.Fprintf(cmd.OutOrStdout(), "  Already local: %d\n", summary.AlreadyLocal)
 
-	if summary.NewBooks > 0 {
+	// Check for books stuck in staging (downloaded but not yet organized).
+	staged, _ := db.CountByStatus(database, "downloaded")
+	if staged > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "\nWarning: %d books still in staging (not yet transferred to library)\n", staged)
+		hint(cmd.ErrOrStderr(), "earworm organize          # move staged books to library")
+	} else if summary.NewBooks > 0 {
 		hint(cmd.ErrOrStderr(), "earworm download          # download %d new books", summary.NewBooks)
 	} else if summary.TotalSynced > 0 {
 		hint(cmd.ErrOrStderr(), "earworm status            # view your library")
