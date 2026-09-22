@@ -8,6 +8,8 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 - Audible library sync via audible-cli
 - Fault-tolerant batch downloads with rate limiting and crash recovery
 - Automatic organization into `Author/Title [ASIN]/` folder structure
+- Books stay safely in staging when the library mount is unavailable, and are retried on the next run
+- Multi-file (MP3 etc.) audiobooks converted to single chaptered M4B files
 - Deep library scanning with structural issue detection
 - Plan-based cleanup workflow (review before applying)
 - CSV import for bulk operations with flexible column names and metadata
@@ -27,6 +29,8 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 
 - **Go 1.23+** (building from source)
 - **Python 3.9+** (required by audible-cli)
+- **ffmpeg / ffprobe** (optional; required only by `earworm convert`)
+- **Day One CLI** (optional; required only by `earworm stats journal`)
 
 > **Note:** audible-cli is installed automatically into an embedded Python venv on first use. You do not need to install it manually.
 
@@ -193,12 +197,50 @@ Move downloaded audiobooks from the staging directory into the library in Audiob
 
 ```bash
 earworm organize
+earworm organize --retry
 earworm organize --json
 ```
 
 | Flag | Description |
 |------|-------------|
+| `--retry` | Reset books that previously failed to organize and try them again |
 | `--json` | Output results in JSON format |
+
+The library path is checked before anything moves. If it is missing or not
+writable, organize stops with an error and every book stays in staging with its
+`downloaded` status, so the next run picks them up. A move that fails part way
+but leaves the files in staging is reported as `pending retry` rather than as an
+error. `earworm sync` and `earworm download` warn when books are still waiting
+in staging.
+
+### `earworm convert`
+
+Convert a multi-file audiobook (MP3, M4A and similar) into a single M4B, with
+one chapter per source file. Chapter titles come from the file names, and files
+are ordered naturally, so `Chapter 2` sorts before `Chapter 10`.
+
+```bash
+earworm convert B0XXXXXXXX --dry-run    # show what would happen
+earworm convert B0XXXXXXXX              # convert one book
+earworm convert --all                   # every multi-file book in the library
+earworm convert --all --keep-originals --bitrate 128k --mono=false
+```
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Convert every organized or scanned book that is not already a single M4B |
+| `--dry-run` | Show what would be converted without doing it |
+| `--keep-originals` | Keep the source audio files after conversion |
+| `--bitrate <rate>` | Audio bitrate (default `64k`) |
+| `--sample-rate <hz>` | Sample rate (default `44100`) |
+| `--mono` | Mono output (default `true`; pass `--mono=false` for stereo) |
+| `--json` | Output results in JSON format |
+
+The M4B is built in the staging directory and moved into the book's folder only
+after it succeeds. **The original audio files are then deleted** unless
+`--keep-originals` is given; cover art and other non-audio files are left
+alone. Books that are already a single M4B are skipped. Requires `ffmpeg` and
+`ffprobe` on the PATH.
 
 ### `earworm notify`
 
@@ -383,7 +425,7 @@ earworm stats status
 
 **Flags:**
 
-- `--source <name>` -- which source to read (currently `audible`)
+- `--source <name>` -- which source to read: `audible` (default), `abs` (Audiobookshelf) or `komga`
 - `--full` -- ignore saved progress and refetch everything
 - `--json` -- machine-readable summary
 
@@ -567,9 +609,18 @@ This matters most for older history: a single bulk marking can wipe the finish
 dates of an entire shelf at once, and the playback position is then the only
 surviving evidence of when those books were actually read.
 
+**One entry per day, covering listening and reading.** A day with both gets a
+single entry with a **Listening** section and a **Reading** section, rather than
+two entries competing for the same date. A day with only reading still gets an
+entry. Reading is counted in volumes, not time, because Komga records that a
+volume was finished but not how long it took. A day's volumes are grouped by
+series and consecutive runs condensed, so a dozen chapters of one series in an
+evening reads as `Some Series — 5 volumes (10–14)` rather than a dozen bullets.
+Komga books flagged by `komga.unreliable_before` never appear in entries.
+
 Entries use an ID derived from the date, and the Day One CLI treats a repeat as
 an update, so re-running revises the existing entry rather than adding another.
-Days with no listening produce no entry. Writes are queued to a local outbox
+Days with neither listening nor reading produce no entry. Writes are queued to a local outbox
 and pushed with an explicit sync afterwards, reported separately so "written
 but not pushed" is distinguishable from "not written".
 
@@ -762,7 +813,9 @@ Create a plist at `~/Library/LaunchAgents/com.earworm.daemon.plist` with the `ea
 ### Listening stats in the daemon
 
 With `daemon.stats_sync` on (the default), each cycle also syncs listening
-history from both configured sources. Journal writes stay off unless
+history from Audible and Audiobookshelf, and reading from Komga when
+`komga.url` and `komga.api_key` are set. Komga is synced before the journal
+step, so an entry written in the evening includes that day's reading. Journal writes stay off unless
 `journal.daemon_write` is explicitly enabled, so the daemon will not modify a
 personal record on its own.
 
@@ -837,10 +890,10 @@ earworm config set library.remount_command "open 'smb://user@host/share'"
 
 ## Listening Data and Privacy
 
-Listening history is personal data. Earworm keeps it local:
+Listening and reading history is personal data. Earworm keeps it local:
 
 - It is stored in the SQLite database under `~/.config/earworm/`, alongside your library state.
-- Nothing is transmitted anywhere. The only outbound requests are to the sources you configure.
+- Nothing is transmitted anywhere else. The only outbound requests are to the sources you configure, and to Day One when you run `earworm stats journal --write` or enable `journal.daemon_write`.
 - CSV exports are written to `stats.export_dir` on your own machine, which the repository's `.gitignore` excludes so exports cannot be committed by accident.
 
 **Set `stats.timezone`** to your own zone. Day boundaries decide which day a
@@ -855,7 +908,7 @@ run from a machine in a different zone.
 - **Database:** `~/.config/earworm/earworm.db` (SQLite, always local -- never on NAS)
 - **Staging:** `~/.config/earworm/staging/` (temporary download directory)
 
-The database stores library state. It is safe to delete and will be recreated on next scan or sync.
+The database stores library state, plus listening and reading history. It is safe to delete: library state is recreated on the next scan or sync, and history is rebuilt by running `earworm stats backfill` for each source.
 
 ## License
 
