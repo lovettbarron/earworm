@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -431,6 +432,57 @@ func UpdateOrganizeResult(db *sql.DB, asin, status, localPath, lastError string)
 		return fmt.Errorf("book %s not found", asin)
 	}
 	return nil
+}
+
+// ResetOrganizeErrors resets all books with "error" status that still have
+// staging files back to "downloaded" so they can be retried by organize.
+// Returns the number of books reset.
+func ResetOrganizeErrors(db *sql.DB, stagingDir string) (int, error) {
+	rows, err := db.Query(
+		`SELECT asin FROM books WHERE status = 'error' AND (local_path = '' OR local_path IS NULL)`,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("query error books: %w", err)
+	}
+	defer rows.Close()
+
+	var asins []string
+	for rows.Next() {
+		var asin string
+		if err := rows.Scan(&asin); err != nil {
+			return 0, fmt.Errorf("scan asin: %w", err)
+		}
+		asins = append(asins, asin)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate error books: %w", err)
+	}
+
+	var count int
+	for _, asin := range asins {
+		asinDir := filepath.Join(stagingDir, asin)
+		if entries, statErr := os.ReadDir(asinDir); statErr == nil && len(entries) > 0 {
+			_, err := db.Exec(
+				`UPDATE books SET status = 'downloaded', last_error = '', retry_count = 0, updated_at = CURRENT_TIMESTAMP WHERE asin = ?`,
+				asin,
+			)
+			if err != nil {
+				return count, fmt.Errorf("reset %s: %w", asin, err)
+			}
+			count++
+		}
+	}
+	return count, nil
+}
+
+// CountByStatus returns the number of books with the given status.
+func CountByStatus(db *sql.DB, status string) (int, error) {
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM books WHERE status = ?`, status).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count by status %q: %w", status, err)
+	}
+	return count, nil
 }
 
 // ListNewBooks returns books that exist in Audible (audible_status is set)

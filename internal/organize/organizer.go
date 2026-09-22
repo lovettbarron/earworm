@@ -12,12 +12,33 @@ import (
 
 // OrganizeResult holds the outcome of organizing a single book.
 type OrganizeResult struct {
-	ASIN    string `json:"asin"`
-	Title   string `json:"title"`
-	Author  string `json:"author"`
-	LibPath string `json:"lib_path,omitempty"` // final library path
-	Success bool   `json:"success"`
-	Error   string `json:"error,omitempty"`
+	ASIN      string `json:"asin"`
+	Title     string `json:"title"`
+	Author    string `json:"author"`
+	LibPath   string `json:"lib_path,omitempty"` // final library path
+	Success   bool   `json:"success"`
+	Error     string `json:"error,omitempty"`
+	Retryable bool   `json:"retryable,omitempty"` // true if files remain in staging for retry
+}
+
+// ValidateLibraryPath checks that the library directory exists and is writable.
+// Call before OrganizeAll to fail fast when the NAS/mount is unavailable.
+func ValidateLibraryPath(libraryDir string) error {
+	info, err := os.Stat(libraryDir)
+	if err != nil {
+		return fmt.Errorf("library path unreachable: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("library path is not a directory: %s", libraryDir)
+	}
+	tmp := filepath.Join(libraryDir, ".earworm-write-test")
+	f, err := os.Create(tmp)
+	if err != nil {
+		return fmt.Errorf("library path not writable: %w", err)
+	}
+	f.Close()
+	os.Remove(tmp)
+	return nil
 }
 
 // OrganizeBook moves a book's files from the staging directory into the library.
@@ -113,9 +134,23 @@ func OrganizeAll(database *sql.DB, stagingDir, libraryDir, layout string) ([]Org
 		if err != nil {
 			result.Success = false
 			result.Error = err.Error()
-			// Mark as error in DB
-			if dbErr := db.UpdateOrganizeResult(database, book.ASIN, "error", "", err.Error()); dbErr != nil {
-				result.Error = fmt.Sprintf("%s (db update also failed: %s)", result.Error, dbErr.Error())
+
+			// Distinguish retryable filesystem errors from permanent metadata errors.
+			// If the error is a transfer/filesystem issue AND staging files still exist,
+			// keep as "downloaded" so the book is retried on next organize run.
+			isTransferError := !strings.Contains(err.Error(), "build book path:")
+			asinStaging := filepath.Join(stagingDir, book.ASIN)
+			hasStaged := false
+			if entries, statErr := os.ReadDir(asinStaging); statErr == nil && len(entries) > 0 {
+				hasStaged = true
+			}
+
+			if isTransferError && hasStaged {
+				result.Retryable = true
+			} else {
+				if dbErr := db.UpdateOrganizeResult(database, book.ASIN, "error", "", err.Error()); dbErr != nil {
+					result.Error = fmt.Sprintf("%s (db update also failed: %s)", result.Error, dbErr.Error())
+				}
 			}
 		} else {
 			result.Success = true
