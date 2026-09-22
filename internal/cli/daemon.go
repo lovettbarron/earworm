@@ -174,6 +174,15 @@ func runDaemonStatsCycle(cmd *cobra.Command) {
 		}
 	}
 
+	// Reading must be refreshed before the journal step, or tonight's entry
+	// would describe yesterday's reading.
+	if viper.GetString("komga.url") != "" && viper.GetString("komga.api_key") != "" {
+		statsSource = listening.SourceKomga
+		if err := runStatsSync(cmd, nil); err != nil {
+			slog.Warn("daemon: komga reading sync failed", "error", err)
+		}
+	}
+
 	// Journal writes stay opt-in. The daemon should not modify a personal
 	// record unattended unless the user has said so.
 	if !viper.GetBool("journal.daemon_write") {
