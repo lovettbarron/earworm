@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -88,12 +89,25 @@ type BuildOptions struct {
 	Until string
 }
 
-// BuildDayEntries renders one digest per day that has session data.
+// ReadingCompletion is one volume finished on a given day.
 //
-// Sessions are the only per-day evidence that names a book, so these are the
-// only day entries produced. Days with no listening produce nothing: an entry
-// saying nothing happened is noise in a journal.
-func BuildDayEntries(sessions []db.ListeningSession, opts BuildOptions) ([]Entry, error) {
+// Reading has no duration to report: a source that records a completion does
+// not record how long it took, so a day's reading is counted in volumes while
+// listening is measured in time.
+type ReadingCompletion struct {
+	Day    string
+	Title  string
+	Series string
+	Volume string
+	Author string
+}
+
+// BuildDayEntries renders one digest per day with listening or reading.
+//
+// Both are measured evidence that names the work: a playback session says what
+// was played, a completion says what was finished. Days with neither produce
+// nothing — an entry saying nothing happened is noise in a journal.
+func BuildDayEntries(sessions []db.ListeningSession, reading []ReadingCompletion, opts BuildOptions) ([]Entry, error) {
 	type bookTotal struct {
 		title   string
 		author  string
@@ -139,8 +153,29 @@ func BuildDayEntries(sessions []db.ListeningSession, opts BuildOptions) ([]Entry
 		}
 	}
 
-	days := make([]string, 0, len(byDay))
+	readingByDay := make(map[string][]ReadingCompletion)
+	for _, r := range reading {
+		if r.Day == "" {
+			continue
+		}
+		if opts.Since != "" && r.Day < opts.Since {
+			continue
+		}
+		if opts.Until != "" && r.Day > opts.Until {
+			continue
+		}
+		readingByDay[r.Day] = append(readingByDay[r.Day], r)
+	}
+
+	dayset := make(map[string]struct{}, len(byDay)+len(readingByDay))
 	for d := range byDay {
+		dayset[d] = struct{}{}
+	}
+	for d := range readingByDay {
+		dayset[d] = struct{}{}
+	}
+	days := make([]string, 0, len(dayset))
+	for d := range dayset {
 		days = append(days, d)
 	}
 	sort.Strings(days)
@@ -155,9 +190,6 @@ func BuildDayEntries(sessions []db.ListeningSession, opts BuildOptions) ([]Entry
 			keys = append(keys, k)
 			total += b.seconds
 		}
-		if total <= 0 {
-			continue
-		}
 		sort.Slice(keys, func(i, j int) bool {
 			if books[keys[i]].seconds != books[keys[j]].seconds {
 				return books[keys[i]].seconds > books[keys[j]].seconds
@@ -165,26 +197,44 @@ func BuildDayEntries(sessions []db.ListeningSession, opts BuildOptions) ([]Entry
 			return keys[i] < keys[j]
 		})
 
-		var b strings.Builder
-		fmt.Fprintf(&b, "## Listening — %s\n\n", day)
-		fmt.Fprintf(&b, "**%s** across %s.\n\n", formatDuration(total), pluralise(len(books), "book"))
-
-		for _, k := range keys {
-			bt := books[k]
-			title := bt.title
-			if title == "" {
-				title = "Unknown title"
-			}
-			if bt.author != "" {
-				fmt.Fprintf(&b, "- **%s** — %s\n", title, bt.author)
-			} else {
-				fmt.Fprintf(&b, "- **%s**\n", title)
-			}
-			fmt.Fprintf(&b, "  - %s across %s\n",
-				formatDuration(bt.seconds), pluralise(bt.count, "session"))
+		read := readingByDay[day]
+		if total <= 0 && len(read) == 0 {
+			continue
 		}
 
-		b.WriteString("\n*Recorded by earworm from Audiobookshelf playback sessions.*\n")
+		var b strings.Builder
+		fmt.Fprintf(&b, "## %s\n\n", day)
+
+		if total > 0 {
+			fmt.Fprintf(&b, "**Listening** — %s across %s\n\n",
+				formatDuration(total), pluralise(len(books), "book"))
+			for _, k := range keys {
+				bt := books[k]
+				title := bt.title
+				if title == "" {
+					title = "Unknown title"
+				}
+				if bt.author != "" {
+					fmt.Fprintf(&b, "- **%s** — %s\n", title, bt.author)
+				} else {
+					fmt.Fprintf(&b, "- **%s**\n", title)
+				}
+				fmt.Fprintf(&b, "  - %s across %s\n",
+					formatDuration(bt.seconds), pluralise(bt.count, "session"))
+			}
+			if len(read) > 0 {
+				b.WriteString("\n")
+			}
+		}
+
+		if len(read) > 0 {
+			fmt.Fprintf(&b, "**Reading** — %s\n\n", pluralise(len(read), "volume"))
+			for _, line := range summariseReading(read) {
+				fmt.Fprintf(&b, "- %s\n", line)
+			}
+		}
+
+		b.WriteString("\n*Recorded by earworm.*\n")
 
 		parsed, err := time.Parse("2006-01-02", day)
 		if err != nil {
@@ -377,4 +427,104 @@ func parseTimestamp(s string) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+// summariseReading renders a day's finished volumes, collapsing a run within
+// one series into a single line.
+//
+// Reading a dozen chapters of one series in an evening is ordinary, and a
+// dozen near-identical bullets buries whatever else happened that day.
+func summariseReading(reading []ReadingCompletion) []string {
+	bySeries := make(map[string][]ReadingCompletion)
+	var order []string
+	for _, r := range reading {
+		key := r.Series
+		if key == "" {
+			key = r.Title
+		}
+		if _, seen := bySeries[key]; !seen {
+			order = append(order, key)
+		}
+		bySeries[key] = append(bySeries[key], r)
+	}
+	sort.Slice(order, func(i, j int) bool {
+		if len(bySeries[order[i]]) != len(bySeries[order[j]]) {
+			return len(bySeries[order[i]]) > len(bySeries[order[j]])
+		}
+		return order[i] < order[j]
+	})
+
+	out := make([]string, 0, len(order))
+	for _, key := range order {
+		group := bySeries[key]
+		if len(group) == 1 {
+			r := group[0]
+			line := "**" + firstNonEmptyStr(r.Title, key) + "**"
+			if r.Author != "" {
+				line += " — " + r.Author
+			}
+			out = append(out, line)
+			continue
+		}
+
+		vols := make([]string, 0, len(group))
+		for _, r := range group {
+			if r.Volume != "" {
+				vols = append(vols, r.Volume)
+			}
+		}
+		sort.Slice(vols, func(i, j int) bool { return lessNumeric(vols[i], vols[j]) })
+
+		line := fmt.Sprintf("**%s** — %s", key, pluralise(len(group), "volume"))
+		if len(vols) > 0 {
+			line += " (" + condenseRange(vols) + ")"
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+// condenseRange renders a sorted list of volume numbers compactly.
+func condenseRange(vols []string) string {
+	if len(vols) <= 2 {
+		return strings.Join(vols, ", ")
+	}
+	first, last := vols[0], vols[len(vols)-1]
+	if isContiguous(vols) {
+		return first + "–" + last
+	}
+	return strings.Join(vols, ", ")
+}
+
+func isContiguous(vols []string) bool {
+	prev, err := strconv.Atoi(strings.TrimLeft(vols[0], "0"))
+	if err != nil {
+		return false
+	}
+	for _, v := range vols[1:] {
+		n, err := strconv.Atoi(strings.TrimLeft(v, "0"))
+		if err != nil || n != prev+1 {
+			return false
+		}
+		prev = n
+	}
+	return true
+}
+
+func lessNumeric(a, b string) bool {
+	ai, aerr := strconv.Atoi(strings.TrimLeft(a, "0"))
+	bi, berr := strconv.Atoi(strings.TrimLeft(b, "0"))
+	if aerr == nil && berr == nil {
+		return ai < bi
+	}
+	return a < b
+}
+
+func firstNonEmptyStr(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

@@ -56,12 +56,12 @@ func init() {
 
 // deepScanJSON is the JSON output structure for scan --deep --json.
 type deepScanJSON struct {
-	TotalDirs   int              `json:"total_dirs"`
-	WithASIN    int              `json:"with_asin"`
-	WithoutASIN int              `json:"without_asin"`
-	IssuesFound int              `json:"issues_found"`
-	IssueCounts map[string]int   `json:"issue_counts"`
-	Issues      []scanIssueJSON  `json:"issues"`
+	TotalDirs   int             `json:"total_dirs"`
+	WithASIN    int             `json:"with_asin"`
+	WithoutASIN int             `json:"without_asin"`
+	IssuesFound int             `json:"issues_found"`
+	IssueCounts map[string]int  `json:"issue_counts"`
+	Issues      []scanIssueJSON `json:"issues"`
 }
 
 // scanIssueJSON is the JSON representation of a single scan issue.

@@ -38,8 +38,8 @@ func init() {
 
 // jsonOrganizeOutput is the JSON output structure for the organize command.
 type jsonOrganizeOutput struct {
-	Organized int                      `json:"organized"`
-	Errors    int                      `json:"errors"`
+	Organized int                       `json:"organized"`
+	Errors    int                       `json:"errors"`
 	Results   []organize.OrganizeResult `json:"results"`
 }
 

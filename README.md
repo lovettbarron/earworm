@@ -473,6 +473,7 @@ Four files, plus a README explaining them:
 | `books.csv` | book, merged across sources |
 | `days.csv` | day and book |
 | `sessions.csv` | playback session (Audiobookshelf only) |
+| `reading.csv` | finished volume (Komga) |
 | `timeline.csv` | day and book, with book metadata inlined (opt-in) |
 
 The normalised trio is the source of truth. `timeline.csv` is derived from it in

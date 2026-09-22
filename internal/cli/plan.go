@@ -160,8 +160,8 @@ func runPlanReview(cmd *cobra.Command, args []string) error {
 
 	if planJSON {
 		result := struct {
-			Plan       *db.Plan            `json:"plan"`
-			Operations []db.PlanOperation  `json:"operations"`
+			Plan       *db.Plan           `json:"plan"`
+			Operations []db.PlanOperation `json:"operations"`
 		}{
 			Plan:       plan,
 			Operations: ops,

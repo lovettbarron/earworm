@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -47,23 +48,23 @@ func sessions() []db.ListeningSession {
 }
 
 func TestBuildDayEntriesGroupsByDay(t *testing.T) {
-	entries, err := BuildDayEntries(sessions(), BuildOptions{})
+	entries, err := BuildDayEntries(sessions(), nil, BuildOptions{})
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 
 	assert.Equal(t, DayKey("2026-09-19"), entries[0].Key)
 	assert.Equal(t, KindDay, entries[0].Kind)
-	assert.Contains(t, entries[0].Body, "## Listening — 2026-09-19")
-	assert.Contains(t, entries[0].Body, "**1h** across 1 book")
+	assert.Contains(t, entries[0].Body, "## 2026-09-19")
+	assert.Contains(t, entries[0].Body, "**Listening** — 1h across 1 book")
 
-	assert.Contains(t, entries[1].Body, "## Listening — 2026-09-20")
+	assert.Contains(t, entries[1].Body, "## 2026-09-20")
 	assert.Contains(t, entries[1].Body, "2 books")
 	assert.Contains(t, entries[1].Body, "Example Chronicle")
 	assert.Contains(t, entries[1].Body, "Second Example Tale")
 }
 
 func TestBuildDayEntriesOrdersBooksByTime(t *testing.T) {
-	entries, err := BuildDayEntries(sessions(), BuildOptions{})
+	entries, err := BuildDayEntries(sessions(), nil, BuildOptions{})
 	require.NoError(t, err)
 
 	body := entries[1].Body
@@ -76,30 +77,30 @@ func TestBuildDayEntriesSkipsDaysWithNoListening(t *testing.T) {
 	entries, err := BuildDayEntries([]db.ListeningSession{
 		{ID: "s1", Day: "2026-09-19", Seconds: 0, Title: "Zero"},
 		{ID: "s2", Day: "", Seconds: 3600, Title: "No day"},
-	}, BuildOptions{})
+	}, nil, BuildOptions{})
 
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
 
 func TestBuildDayEntriesRespectsDateRange(t *testing.T) {
-	entries, err := BuildDayEntries(sessions(), BuildOptions{Since: "2026-09-20"})
+	entries, err := BuildDayEntries(sessions(), nil, BuildOptions{Since: "2026-09-20"})
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, DayKey("2026-09-20"), entries[0].Key)
 
-	entries, err = BuildDayEntries(sessions(), BuildOptions{Until: "2026-09-19"})
+	entries, err = BuildDayEntries(sessions(), nil, BuildOptions{Until: "2026-09-19"})
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, DayKey("2026-09-19"), entries[0].Key)
 }
 
 func TestBuildDayEntriesIsDeterministic(t *testing.T) {
-	first, err := BuildDayEntries(sessions(), BuildOptions{})
+	first, err := BuildDayEntries(sessions(), nil, BuildOptions{})
 	require.NoError(t, err)
 
 	for i := 0; i < 5; i++ {
-		again, err := BuildDayEntries(sessions(), BuildOptions{})
+		again, err := BuildDayEntries(sessions(), nil, BuildOptions{})
 		require.NoError(t, err)
 		require.Equal(t, len(first), len(again))
 		for j := range first {
@@ -112,7 +113,7 @@ func TestBuildDayEntriesIsDeterministic(t *testing.T) {
 func TestBuildDayEntriesHandlesMissingMetadata(t *testing.T) {
 	entries, err := BuildDayEntries([]db.ListeningSession{
 		{ID: "s1", LibraryItemID: "item-1", Day: "2026-09-20", Seconds: 600},
-	}, BuildOptions{})
+	}, nil, BuildOptions{})
 
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
@@ -538,4 +539,77 @@ func TestKomgaFinishFooterNamesKomga(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Contains(t, entries[0].Body, "from Komga")
 	assert.NotContains(t, entries[0].Body, "Audible")
+}
+
+func readingDay(day, series, vol string) ReadingCompletion {
+	return ReadingCompletion{Day: day, Series: series, Volume: vol,
+		Title: series + " v" + vol, Author: "An Author"}
+}
+
+// A day with both produces one entry, not two competing ones.
+func TestBuildDayEntriesCombinesListeningAndReading(t *testing.T) {
+	entries, err := BuildDayEntries(sessions(), []ReadingCompletion{
+		readingDay("2026-09-20", "Example Saga", "1"),
+		readingDay("2026-09-20", "Example Saga", "2"),
+	}, BuildOptions{})
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	both := entries[1].Body
+	assert.Contains(t, both, "## 2026-09-20")
+	assert.Contains(t, both, "**Listening** —")
+	assert.Contains(t, both, "**Reading** — 2 volumes")
+	assert.Less(t, strings.Index(both, "Listening"), strings.Index(both, "Reading"))
+}
+
+// Reading alone is still a day worth recording.
+func TestBuildDayEntriesRendersReadingOnlyDays(t *testing.T) {
+	entries, err := BuildDayEntries(nil, []ReadingCompletion{
+		readingDay("2026-09-21", "Example Saga", "3"),
+	}, BuildOptions{})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0].Body, "**Reading** — 1 volume")
+	assert.NotContains(t, entries[0].Body, "**Listening**")
+}
+
+// Reading a dozen chapters of one series is ordinary; a dozen near-identical
+// bullets would bury whatever else happened that day.
+func TestSummariseReadingCondensesAContiguousRun(t *testing.T) {
+	var r []ReadingCompletion
+	for i := 1; i <= 6; i++ {
+		r = append(r, readingDay("2026-09-20", "Example Saga", strconv.Itoa(i)))
+	}
+	lines := summariseReading(r)
+	require.Len(t, lines, 1)
+	assert.Contains(t, lines[0], "6 volumes")
+	assert.Contains(t, lines[0], "1–6")
+}
+
+func TestSummariseReadingListsNonContiguousVolumes(t *testing.T) {
+	lines := summariseReading([]ReadingCompletion{
+		readingDay("2026-09-20", "Example Saga", "1"),
+		readingDay("2026-09-20", "Example Saga", "5"),
+		readingDay("2026-09-20", "Example Saga", "9"),
+	})
+	require.Len(t, lines, 1)
+	assert.Contains(t, lines[0], "1, 5, 9")
+}
+
+func TestSummariseReadingKeepsSeriesSeparate(t *testing.T) {
+	lines := summariseReading([]ReadingCompletion{
+		readingDay("2026-09-20", "Example Saga", "1"),
+		readingDay("2026-09-20", "Other Series", "1"),
+	})
+	assert.Len(t, lines, 2)
+}
+
+func TestBuildDayEntriesRespectsRangeForReading(t *testing.T) {
+	entries, err := BuildDayEntries(nil, []ReadingCompletion{
+		readingDay("2026-09-19", "Example Saga", "1"),
+		readingDay("2026-09-21", "Example Saga", "2"),
+	}, BuildOptions{Since: "2026-09-20"})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0].Body, "## 2026-09-21")
 }

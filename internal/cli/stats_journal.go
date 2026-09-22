@@ -127,6 +127,7 @@ func runStatsJournal(cmd *cobra.Command, args []string) error {
 
 	syncer := &journal.Syncer{
 		DB:                database,
+		Bucket:            bucket,
 		JournalID:         viper.GetString("journal.journal_id"),
 		DryRun:            !journalWrite,
 		IncludeFinishes:   journalFinishes || viper.GetBool("journal.include_finishes"),

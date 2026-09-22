@@ -20,6 +20,7 @@ const (
 	BooksFile    = "books.csv"
 	DaysFile     = "days.csv"
 	SessionsFile = "sessions.csv"
+	ReadingFile  = "reading.csv"
 	TimelineFile = "timeline.csv"
 	ReadmeFile   = "README.md"
 )
@@ -49,6 +50,7 @@ type Result struct {
 	Books        int
 	Days         int
 	Sessions     int
+	Reading      int
 	TimelineRows int
 	Stats        AllocationStats
 }
@@ -107,6 +109,13 @@ func Export(data Dataset, opts Options) (Result, error) {
 	}
 	res.Sessions = len(sessionRows)
 	res.Files = append(res.Files, SessionsFile)
+
+	readingRows := buildReadingRows(data, identityBySource)
+	if err := writeCSV(filepath.Join(opts.Dir, ReadingFile), readingHeader, readingRows); err != nil {
+		return res, err
+	}
+	res.Reading = len(readingRows)
+	res.Files = append(res.Files, ReadingFile)
 
 	if opts.Timeline {
 		timelineRows := buildTimelineRows(data, exact, allocations, identityBySource)
@@ -590,4 +599,58 @@ func parseAnyTime(s string) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+var readingHeader = []string{
+	"day", "identity_id", "source", "series", "volume", "title", "author",
+	"genres", "completed_at", "reliable",
+}
+
+// buildReadingRows emits one row per finished volume.
+//
+// Reading is the counterpart to sessions.csv, not to days.csv: a completion is
+// a dated event naming the work, but it carries no duration, so it cannot share
+// a column denominated in seconds.
+//
+// Unreliable rows are included and marked rather than dropped. They are real
+// records of a library's state even when their date came from a migration
+// rather than from reading, and a reader that can see the flag can decide.
+func buildReadingRows(data Dataset, identityBySource map[string]bookidentity.Identity) [][]string {
+	var rows [][]string
+
+	for _, b := range data.Books {
+		if b.Source != listening.SourceKomga || !b.IsFinished {
+			continue
+		}
+		t := parseAnyTime(b.StatusChangedAt)
+		if t.IsZero() {
+			continue
+		}
+
+		identityID := b.Source + ":" + b.SourceKey
+		if id, ok := identityBySource[b.Source+"\x00"+b.SourceKey]; ok {
+			identityID = id.ID
+		}
+
+		rows = append(rows, []string{
+			t.Format("2006-01-02"),
+			identityID,
+			b.Source,
+			b.Series,
+			b.SeriesPosition,
+			b.Title,
+			b.Author,
+			b.Genres,
+			b.StatusChangedAt,
+			strconv.FormatBool(!b.StatusIsBulk),
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i][0] != rows[j][0] {
+			return rows[i][0] < rows[j][0]
+		}
+		return rows[i][1] < rows[j][1]
+	})
+	return rows
 }

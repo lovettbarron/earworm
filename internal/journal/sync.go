@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/lovettbarron/earworm/internal/db"
+	"github.com/lovettbarron/earworm/internal/listening"
 )
 
 // Syncer renders entries and delivers them to a journal.
@@ -25,6 +26,9 @@ type Syncer struct {
 	IncludeFinishes bool
 	// EstimatedFinishes also recovers finishes whose date must be estimated.
 	EstimatedFinishes bool
+	// Bucket buckets completion timestamps into days. Required for reading,
+	// which stores a timestamp rather than a day.
+	Bucket *listening.Bucketer
 }
 
 // SyncResult reports what a run did or would do.
@@ -55,17 +59,18 @@ func (s *Syncer) Sync(ctx context.Context, opts BuildOptions) (SyncResult, error
 	if err != nil {
 		return res, err
 	}
-	entries, err := BuildDayEntries(sessions, opts)
+	books, err := db.ListBookListening(s.DB, "")
+	if err != nil {
+		return res, err
+	}
+
+	entries, err := BuildDayEntries(sessions, s.readingCompletions(books), opts)
 	if err != nil {
 		return res, err
 	}
 
 	if s.IncludeFinishes || opts.IncludeFinishes {
 		opts.EstimatedFinishes = opts.EstimatedFinishes || s.EstimatedFinishes
-		books, err := db.ListBookListening(s.DB, "")
-		if err != nil {
-			return res, err
-		}
 		finishes, err := BuildFinishEntries(books, opts)
 		if err != nil {
 			return res, err
@@ -153,4 +158,34 @@ func (s *Syncer) Sync(ctx context.Context, opts BuildOptions) (SyncResult, error
 		"updated", res.Updated, "unchanged", res.Unchanged)
 
 	return res, nil
+}
+
+// readingCompletions turns stored books into dated reading events.
+//
+// Only genuine completions count: a book flagged as a migration artifact
+// carries a timestamp from when a shelf was re-marked, not from reading, and
+// putting that in a day's entry would invent an evening that never happened.
+func (s *Syncer) readingCompletions(books []db.BookListening) []ReadingCompletion {
+	if s.Bucket == nil {
+		return nil
+	}
+
+	var out []ReadingCompletion
+	for _, b := range books {
+		if b.Source != listening.SourceKomga || !b.IsFinished || b.StatusIsBulk {
+			continue
+		}
+		t := parseTimestamp(b.StatusChangedAt)
+		if t.IsZero() {
+			continue
+		}
+		out = append(out, ReadingCompletion{
+			Day:    s.Bucket.Day(t),
+			Title:  b.Title,
+			Series: b.Series,
+			Volume: b.SeriesPosition,
+			Author: b.Author,
+		})
+	}
+	return out
 }

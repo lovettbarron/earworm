@@ -784,7 +784,7 @@ func TestStatsJournalPreviewShowsBody(t *testing.T) {
 		"stats", "journal", "--preview", "--date", "2026-09-20")
 	require.NoError(t, err)
 
-	assert.Contains(t, out, "## Listening — 2026-09-20")
+	assert.Contains(t, out, "## 2026-09-20")
 	assert.Contains(t, out, "Example Chronicle")
 }
 
