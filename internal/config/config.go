@@ -38,6 +38,10 @@ func SetDefaults() {
 	// default: the command is host-specific and needs credentials, and guessing
 	// one risks mounting the wrong thing over the right place.
 	viper.SetDefault("library.remount_command", "")
+	// allow_unmounted disables the check that a library under a mount root is
+	// actually mounted. Only needed for a library that genuinely lives on the
+	// boot disk beneath /Volumes, /mnt or /media.
+	viper.SetDefault("library.allow_unmounted", false)
 	viper.SetDefault("audible.profile_path", "")
 	// stats.timezone names the IANA zone every listening day is bucketed in.
 	// Empty means UTC: day keys must not depend on the host's local zone.

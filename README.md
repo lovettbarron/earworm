@@ -658,7 +658,8 @@ Config file location: `~/.config/earworm/config.yaml`
 | `download.backoff_multiplier` | `2.0` | Exponential backoff multiplier for retries |
 | `scan.recursive` | `false` | Scan subdirectories recursively |
 | `library.probe_timeout_seconds` | `10` | How long to wait for the library path to respond before declaring it unavailable |
-| `library.remount_command` | *(none)* | Shell command run once to restore the mount when it is unreachable |
+| `library.remount_command` | *(none)* | Shell command run once to restore the mount when it is unreachable; unmount verbs are refused |
+| `library.allow_unmounted` | `false` | Skip the check that a library under a mount root is actually mounted |
 | `stats.timezone` | *(UTC)* | IANA timezone used to bucket listening days, e.g. `Europe/Berlin` |
 | `stats.backfill_start` | `2015-01-01` | Earliest date a backfill reaches |
 | `stats.rate_limit_seconds` | `2` | Seconds between listening-history API calls |
@@ -801,6 +802,25 @@ stale mount can answer a stat from cached metadata while real access hangs.
 Sync, listening and reading stats, and journaling all reach networked services
 and the local database, never the mount, so they keep running. An offline NAS
 costs you downloads and file organisation, not your whole pipeline.
+
+**Mounting is verified, not assumed.** An unmounted share fails in the most
+expensive way available: the mount point stays behind as an ordinary empty
+directory, every readability check passes, and earworm creates parent
+directories on demand. Without a check, a library sync would write gigabytes to
+the boot disk into a path that looks exactly right, and nothing downstream
+would notice.
+
+So a library path under `/Volumes`, `/mnt`, `/media` or `/run/media` is
+verified to be on a different filesystem from the boot volume before anything
+is written. A library that genuinely lives on local disk is unaffected and
+needs no configuration; set `library.allow_unmounted=true` only for a local
+library that happens to sit beneath one of those directories.
+
+**earworm will not unmount anything.** A remount command containing `umount`,
+`unmount`, `eject`, `mkfs`, `diskutil erase` and similar is refused. Mounting
+is recoverable; a forced unmount can cut short another process's write to the
+same share and truncate a file, and nothing about restoring a mount requires
+tearing one down first. Unmount by hand if you need to.
 
 **Remounting.** Set `library.remount_command` to a shell command that restores
 the mount and earworm runs it once when the path is unreachable, then re-probes

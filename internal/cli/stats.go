@@ -121,6 +121,16 @@ func ensureLibraryAvailable(ctx context.Context, w io.Writer) error {
 	if !av.Available {
 		return av.Error()
 	}
+
+	// Readable is not the same as mounted. An absent share leaves an empty
+	// directory on the boot disk that passes every readability check, and
+	// writing a library into it would fill the local volume with files that
+	// look correctly placed.
+	if !viper.GetBool("library.allow_unmounted") {
+		if err := fileops.VerifyMounted(path); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

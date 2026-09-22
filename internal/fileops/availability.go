@@ -143,6 +143,13 @@ func EnsureAvailable(ctx context.Context, path string, opts EnsureOptions) (Avai
 	if strings.TrimSpace(opts.RemountCommand) == "" {
 		return av, false
 	}
+	// Refuse to run anything that could tear down a mount other processes are
+	// using. Checked here rather than at config time so it holds however the
+	// value arrived.
+	if err := CheckRemountCommand(opts.RemountCommand); err != nil {
+		av.Reason = fmt.Sprintf("%s; %v", av.Reason, err)
+		return av, false
+	}
 
 	remountTimeout := opts.RemountTimeout
 	if remountTimeout <= 0 {
@@ -158,5 +165,14 @@ func EnsureAvailable(ctx context.Context, path string, opts EnsureOptions) (Avai
 
 	// Re-probe: a remount command can exit zero without the path becoming
 	// usable, so success is measured by the path answering, not by the exit code.
-	return Probe(path, opts.Timeout), true
+	after := Probe(path, opts.Timeout)
+	if after.Available {
+		// Answering is not enough. An unmounted share leaves an empty
+		// directory behind that answers instantly, so confirm the path is
+		// actually on a mounted volume before declaring success.
+		if err := VerifyMounted(path); err != nil {
+			return Availability{Path: path, Reason: err.Error(), Elapsed: after.Elapsed}, true
+		}
+	}
+	return after, true
 }
