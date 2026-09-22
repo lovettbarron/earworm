@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Listening Stats & Journaling
 status: executing
-stopped_at: Milestone v1.2 complete (phases 19-22)
-last_updated: "2026-09-20T00:00:00.000Z"
-last_activity: 2026-09-20
+stopped_at: Milestone v1.2 complete (phases 19-23)
+last_updated: "2026-09-22T00:00:00.000Z"
+last_activity: 2026-09-22
 progress:
   total_phases: 23
-  completed_phases: 15
-  total_plans: 28
-  completed_plans: 28
-  percent: 65
+  completed_phases: 16
+  total_plans: 29
+  completed_plans: 29
+  percent: 70
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 
 ## Current Position
 
-Phase: 22 (complete)
+Phase: 23 (complete)
 Plan: All complete
 Status: Milestone v1.2 delivered
-Last activity: 2026-09-20 — Phase 22 complete
+Last activity: 2026-09-22 — Phase 23 complete (Komga reading ingestion; tests restored to >=80%)
 
-Progress: [██████▓░░░] 65%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
@@ -152,6 +152,7 @@ None yet.
 | 260404-pw1 | Auto-manage audible-cli Python dependency via embedded venv | 2026-04-04 | 1393009 | [260404-pw1-auto-manage-audible-cli-python-dependenc](./quick/260404-pw1-auto-manage-audible-cli-python-dependenc/) |
 | 260405-m79 | AAXC-to-M4B decryption and Libation-compatible file naming | 2026-04-05 | e1c819d | [260405-m79-aaxc-to-m4b-decryption-and-libation-comp](./quick/260405-m79-aaxc-to-m4b-decryption-and-libation-comp/) |
 | 260405-nxk | Download progress indicator and per-book timeout | 2026-04-05 | 0cfff94 | [260405-nxk-download-progress-indicator-and-per-book](./quick/260405-nxk-download-progress-indicator-and-per-book/) |
+| 260922-k7t | Restore phase 23 (Komga) test coverage to >=80% | 2026-09-22 | 84431e9 | [260922-k7t-restore-phase-23-komga-test-coverage](./quick/260922-k7t-restore-phase-23-komga-test-coverage/) |
 
 ## Session Continuity
 

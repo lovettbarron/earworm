@@ -78,11 +78,11 @@ Requirements for the Listening Stats & Journaling milestone. Each maps to roadma
 
 ### Komga Reading
 
-- [ ] **KOMG-01**: User can configure a Komga URL and API key, and verify connectivity
-- [ ] **KOMG-02**: User can backfill read and in-progress books from Komga, with series and volume number
-- [ ] **KOMG-03**: Completions predating a configured cutoff are flagged as unreliable, retained in the export and excluded from journal entries
-- [ ] **KOMG-04**: A day with both listening and reading produces one combined journal entry
-- [ ] **KOMG-05**: Finished volumes produce finish entries on the same terms as finished audiobooks
+- [x] **KOMG-01**: User can configure a Komga URL and API key, and verify connectivity
+- [x] **KOMG-02**: User can backfill read and in-progress books from Komga, with series and volume number
+- [x] **KOMG-03**: Completions predating a configured cutoff are flagged as unreliable, retained in the export and excluded from journal entries
+- [x] **KOMG-04**: A day with both listening and reading produces one combined journal entry
+- [x] **KOMG-05**: Finished volumes produce finish entries on the same terms as finished audiobooks
 
 ## Future Requirements
 
@@ -155,11 +155,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JRNL-05 | Phase 22 | Complete |
 | JRNL-06 | Phase 22 | Complete |
 
-| KOMG-01 | Phase 23 | Pending |
-| KOMG-02 | Phase 23 | Pending |
-| KOMG-03 | Phase 23 | Pending |
-| KOMG-04 | Phase 23 | Pending |
-| KOMG-05 | Phase 23 | Pending |
+| KOMG-01 | Phase 23 | Complete |
+| KOMG-02 | Phase 23 | Complete |
+| KOMG-03 | Phase 23 | Complete |
+| KOMG-04 | Phase 23 | Complete |
+| KOMG-05 | Phase 23 | Complete |
 
 **v1.2 Coverage:**
 - v1.2 requirements: 25 total
@@ -173,4 +173,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-07*
-*Last updated: 2026-09-20 — v1.2 requirements defined*
+*Last updated: 2026-09-22 — Phase 23 (KOMG-01..05) complete*
