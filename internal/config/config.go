@@ -30,6 +30,14 @@ func SetDefaults() {
 	viper.SetDefault("download.timeout_minutes", 30)
 	viper.SetDefault("scan.recursive", false)
 	viper.SetDefault("library.layout", "flat")
+	// probe_timeout_seconds bounds the check that the library path is reachable.
+	// A dead network mount blocks syscalls uninterruptibly, so every command
+	// that touches the library probes first rather than risking a hang.
+	viper.SetDefault("library.probe_timeout_seconds", 10)
+	// remount_command is run when the library path is unreachable. Empty by
+	// default: the command is host-specific and needs credentials, and guessing
+	// one risks mounting the wrong thing over the right place.
+	viper.SetDefault("library.remount_command", "")
 	viper.SetDefault("audible.profile_path", "")
 	// stats.timezone names the IANA zone every listening day is bucketed in.
 	// Empty means UTC: day keys must not depend on the host's local zone.

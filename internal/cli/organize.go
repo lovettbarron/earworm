@@ -44,6 +44,12 @@ type jsonOrganizeOutput struct {
 }
 
 func runOrganize(cmd *cobra.Command, args []string) error {
+	// The library lives on a network mount that can go away. Probing first
+	// turns an indefinite hang into an immediate, explanatory failure.
+	if err := ensureLibraryAvailable(cmd.Context(), cmd.OutOrStdout()); err != nil {
+		return err
+	}
+
 	// Validate required config
 	libraryPath := viper.GetString("library_path")
 	if libraryPath == "" {

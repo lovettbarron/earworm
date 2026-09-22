@@ -69,23 +69,38 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 	defer signal.Stop(sigChan)
 
 	// Define the cycle function that runs the full pipeline.
-	cycle := func(_ context.Context) error {
+	cycle := func(cycleCtx context.Context) error {
+		// The library path is checked once per cycle. Steps that write to it
+		// are skipped when it is unreachable, rather than blocking the daemon:
+		// a syscall on a dead network mount cannot be interrupted, so a single
+		// hung step would silently end all future cycles.
+		libraryUp := true
+		if err := ensureLibraryAvailable(cycleCtx, os.Stderr); err != nil {
+			libraryUp = false
+			slog.Warn("daemon: library unavailable, skipping library steps",
+				"error", err)
+		}
+
 		// Step 1: Sync
 		slog.Info("daemon: running sync")
 		if err := runSync(cmd, nil); err != nil {
 			slog.Warn("daemon: sync failed", "error", err)
 		}
 
-		// Step 2: Download (includes organize hook if wired)
-		slog.Info("daemon: running download")
-		if err := runDownload(cmd, nil); err != nil {
-			slog.Warn("daemon: download failed", "error", err)
-		}
+		if libraryUp {
+			// Step 2: Download (includes organize hook if wired)
+			slog.Info("daemon: running download")
+			if err := runDownload(cmd, nil); err != nil {
+				slog.Warn("daemon: download failed", "error", err)
+			}
 
-		// Step 3: Organize
-		slog.Info("daemon: running organize")
-		if err := runOrganize(cmd, nil); err != nil {
-			slog.Warn("daemon: organize failed", "error", err)
+			// Step 3: Organize
+			slog.Info("daemon: running organize")
+			if err := runOrganize(cmd, nil); err != nil {
+				slog.Warn("daemon: organize failed", "error", err)
+			}
+		} else {
+			slog.Info("daemon: skipped download and organize (library unavailable)")
 		}
 
 		// Step 4: Notify ABS
@@ -101,7 +116,12 @@ func runDaemon(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// Step 5: Listening stats, and optionally the journal.
+		// Step 5: Listening and reading stats, and optionally the journal.
+		//
+		// These reach networked services and the local database, never the
+		// library mount, so they run even when the library is down. That is
+		// the point of checking rather than hanging: an unreachable NAS should
+		// not stop the parts of the cycle that have nothing to do with it.
 		if viper.GetBool("daemon.stats_sync") {
 			runDaemonStatsCycle(cmd)
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/lovettbarron/earworm/internal/config"
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/download"
+	"github.com/lovettbarron/earworm/internal/fileops"
 	"github.com/lovettbarron/earworm/internal/komga"
 	"github.com/lovettbarron/earworm/internal/listening"
 	"github.com/lovettbarron/earworm/internal/stats"
@@ -94,6 +95,33 @@ func init() {
 	statsCheckCmd.Flags().BoolVar(&statsJSON, "json", false, "output result in JSON format")
 	statsCmd.AddCommand(statsCheckCmd)
 	rootCmd.AddCommand(statsCmd)
+}
+
+// ensureLibraryAvailable checks the library path before any command that
+// touches it, and optionally tries to remount.
+//
+// Without this a dead network mount blocks the process indefinitely: the
+// syscall cannot be interrupted, so a command that simply starts reading never
+// returns and never reports why.
+func ensureLibraryAvailable(ctx context.Context, w io.Writer) error {
+	path := viper.GetString("library_path")
+	if path == "" {
+		return fmt.Errorf("library_path is not configured")
+	}
+
+	opts := fileops.EnsureOptions{
+		Timeout:        time.Duration(viper.GetInt("library.probe_timeout_seconds")) * time.Second,
+		RemountCommand: viper.GetString("library.remount_command"),
+	}
+
+	av, remounted := fileops.EnsureAvailable(ctx, path, opts)
+	if remounted && av.Available && !quiet {
+		fmt.Fprintf(w, "Library path was unavailable; remounted successfully.\n")
+	}
+	if !av.Available {
+		return av.Error()
+	}
+	return nil
 }
 
 // newStatsClient builds an Audible stats client from config. Extracted as a

@@ -124,13 +124,13 @@ func TestWriteMetadataSidecar_PrettyPrinted(t *testing.T) {
 	dir := t.TempDir()
 
 	meta := ABSMetadata{
-		Title:    "Pretty Test",
-		Authors:  []string{},
+		Title:     "Pretty Test",
+		Authors:   []string{},
 		Narrators: []string{},
-		Series:   []string{},
-		Genres:   []string{},
-		Tags:     []string{},
-		Chapters: []ABSChapter{},
+		Series:    []string{},
+		Genres:    []string{},
+		Tags:      []string{},
+		Chapters:  []ABSChapter{},
 	}
 
 	err := WriteMetadataSidecar(dir, meta)

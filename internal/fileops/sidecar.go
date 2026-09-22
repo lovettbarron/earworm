@@ -45,14 +45,14 @@ type ABSChapter struct {
 // BuildABSMetadata converts internal BookMetadata to Audiobookshelf-compatible format.
 func BuildABSMetadata(bookMeta *metadata.BookMetadata, asin string) ABSMetadata {
 	abs := ABSMetadata{
-		Title:    bookMeta.Title,
-		ASIN:     asin,
-		Authors:  toSlice(bookMeta.Author),
+		Title:     bookMeta.Title,
+		ASIN:      asin,
+		Authors:   toSlice(bookMeta.Author),
 		Narrators: toSlice(bookMeta.Narrator),
-		Series:   toSlice(bookMeta.Series),
-		Genres:   toSlice(bookMeta.Genre),
-		Tags:     []string{},
-		Chapters: []ABSChapter{},
+		Series:    toSlice(bookMeta.Series),
+		Genres:    toSlice(bookMeta.Genre),
+		Tags:      []string{},
+		Chapters:  []ABSChapter{},
 	}
 
 	if bookMeta.Year > 0 {

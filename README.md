@@ -657,6 +657,8 @@ Config file location: `~/.config/earworm/config.yaml`
 | `download.max_retries` | `3` | Maximum retry attempts per book |
 | `download.backoff_multiplier` | `2.0` | Exponential backoff multiplier for retries |
 | `scan.recursive` | `false` | Scan subdirectories recursively |
+| `library.probe_timeout_seconds` | `10` | How long to wait for the library path to respond before declaring it unavailable |
+| `library.remount_command` | *(none)* | Shell command run once to restore the mount when it is unreachable |
 | `stats.timezone` | *(UTC)* | IANA timezone used to bucket listening days, e.g. `Europe/Berlin` |
 | `stats.backfill_start` | `2015-01-01` | Earliest date a backfill reaches |
 | `stats.rate_limit_seconds` | `2` | Seconds between listening-history API calls |
@@ -775,6 +777,42 @@ earworm goodreads -o library.csv
 ```
 
 Then import the CSV at [goodreads.com/review/import](https://www.goodreads.com/review/import). Books are placed on the "read" shelf.
+
+## When the Library Is Unavailable
+
+The library usually lives on a network mount, and a mount that goes away does
+not fail — it hangs. A filesystem call on a dead SMB share blocks
+uninterruptibly, so a command that simply starts reading never returns and
+never says why. A daemon that hits this stops running cycles entirely, silently.
+
+Every command that touches the library now probes it first, in a goroutine that
+is abandoned if it does not answer within `library.probe_timeout_seconds`. An
+unreachable library becomes an immediate, explanatory error:
+
+```
+Error: library path /Volumes/media/Audible did not respond within 10s;
+the mount is present but not answering
+```
+
+The probe opens the directory and reads an entry rather than calling stat: a
+stale mount can answer a stat from cached metadata while real access hangs.
+
+**In the daemon**, an unreachable library skips only the steps that need it.
+Sync, listening and reading stats, and journaling all reach networked services
+and the local database, never the mount, so they keep running. An offline NAS
+costs you downloads and file organisation, not your whole pipeline.
+
+**Remounting.** Set `library.remount_command` to a shell command that restores
+the mount and earworm runs it once when the path is unreachable, then re-probes
+to confirm. Success is judged by the path answering, not by the command's exit
+code, because a mount command can exit zero without the share becoming usable.
+It is empty by default: the command is host-specific and needs credentials, and
+guessing at one risks mounting the wrong thing over the right place. On macOS
+it is usually something like:
+
+```bash
+earworm config set library.remount_command "open 'smb://user@host/share'"
+```
 
 ## Listening Data and Privacy
 
