@@ -76,6 +76,14 @@ Requirements for the Listening Stats & Journaling milestone. Each maps to roadma
 - [x] **JRNL-05**: Days with no listening produce no journal entry
 - [x] **JRNL-06**: The daemon can run incremental stats sync on its poll cycle without overlapping runs
 
+### Komga Reading
+
+- [ ] **KOMG-01**: User can configure a Komga URL and API key, and verify connectivity
+- [ ] **KOMG-02**: User can backfill read and in-progress books from Komga, with series and volume number
+- [ ] **KOMG-03**: Completions predating a configured cutoff are flagged as unreliable, retained in the export and excluded from journal entries
+- [ ] **KOMG-04**: A day with both listening and reading produces one combined journal entry
+- [ ] **KOMG-05**: Finished volumes produce finish entries on the same terms as finished audiobooks
+
 ## Future Requirements
 
 Deferred to v1.2+. Tracked but not in current roadmap.
@@ -146,6 +154,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JRNL-04 | Phase 22 | Complete |
 | JRNL-05 | Phase 22 | Complete |
 | JRNL-06 | Phase 22 | Complete |
+
+| KOMG-01 | Phase 23 | Pending |
+| KOMG-02 | Phase 23 | Pending |
+| KOMG-03 | Phase 23 | Pending |
+| KOMG-04 | Phase 23 | Pending |
+| KOMG-05 | Phase 23 | Pending |
 
 **v1.2 Coverage:**
 - v1.2 requirements: 25 total

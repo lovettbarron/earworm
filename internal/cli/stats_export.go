@@ -81,12 +81,13 @@ func loadDataset(database *sql.DB) (statsexport.Dataset, error) {
 	records := make([]bookidentity.Record, 0, len(books))
 	for _, b := range books {
 		records = append(records, bookidentity.Record{
-			Source:    b.Source,
-			SourceKey: b.SourceKey,
-			ASIN:      b.ASIN,
-			Title:     b.Title,
-			Author:    b.Author,
-			Seconds:   b.SecondsListened,
+			Source:         b.Source,
+			SourceKey:      b.SourceKey,
+			ASIN:           b.ASIN,
+			Title:          b.Title,
+			Author:         b.Author,
+			SeriesPosition: b.SeriesPosition,
+			Seconds:        b.SecondsListened,
 		})
 	}
 

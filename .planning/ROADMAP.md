@@ -270,6 +270,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 20. Audiobookshelf Listening Ingestion | 1/1 | Complete | 2026-09-20 |
 | 21. Identity Resolution & Dataset Export | 1/1 | Complete | 2026-09-20 |
 | 22. Day One Journaling & Daemon Integration | 1/1 | Complete | 2026-09-20 |
+| 23. Komga Reading Ingestion | 0/1 | Pending | - |
 | 18. Metadata Wiring & Artifact Cleanup | 2/2 | Complete    | 2026-04-12 |
 
 ### Phase 15: Data Safety Hardening for NAS Operations
@@ -441,5 +442,37 @@ Plans:
 3. Dry-run is the default; writing requires an explicit flag
 4. No inferred attribution appears in any generated entry
 5. A day with no listening produces no entry, and the daemon cannot start overlapping syncs
+
+---
+
+### Phase 23: Komga Reading Ingestion
+
+**Goal:** Bring comics, manga and ebooks read via Komga into the same picture as
+listening, so the journal and dataset cover reading as well.
+
+**Requirements:** KOMG-01 .. KOMG-05
+
+**Scope:**
+- New `internal/komga`: API-key client, paginated `/api/v1/books` filtered by
+  read status, `readProgress` decoding
+- Ingest into the existing `book_listening` table with `source='komga'`; the
+  schema already carries series, volume, completion timestamp and an
+  unreliable-provenance flag, so no new table is needed
+- A configured `komga.unreliable_before` date flags books whose completion
+  timestamp came from a library migration rather than real reading. This cannot
+  be inferred: measured against real data, migration re-marks and genuine reads
+  are indistinguishable (69% vs 97% instant writes, 3.5 vs 2.5 minute spans)
+- Journal day entries gain a Reading section alongside Listening, so a day with
+  both produces one entry rather than two
+- Finished books produce finish entries through the existing path, with flagged
+  books excluded automatically
+
+**Success criteria:**
+1. Backfill stores read and in-progress books with series and volume number
+2. Books completed before the configured cutoff are flagged, appear in the
+   export, and are excluded from journal entries
+3. A day with both listening and reading produces a single combined entry
+4. Finished volumes produce finish entries without new journal code
+5. Re-running backfill neither duplicates rows nor loses flags
 
 ---

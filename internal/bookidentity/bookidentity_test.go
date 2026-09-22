@@ -257,3 +257,35 @@ func TestResolveMergesDuplicateCopiesOfOneBook(t *testing.T) {
 	require.Len(t, ids, 1)
 	assert.Equal(t, MatchTitle, ids[0].Method())
 }
+
+// Serialized volumes share nearly every token — a scanlation suffix repeats
+// across a whole run — so similarity alone merged distinct volumes and summed
+// their reading. The volume number must override the score.
+func TestResolveKeepsVolumesApartDespiteSharedBoilerplate(t *testing.T) {
+	recs := []Record{
+		{Source: "komga", SourceKey: "k1", Title: "Example Saga 001 - Prologue (2020) (Digital) (Group)", SeriesPosition: "1"},
+		{Source: "komga", SourceKey: "k2", Title: "Example Saga 002 - Chapter Two (2020) (Digital) (Group)", SeriesPosition: "2"},
+		{Source: "komga", SourceKey: "k3", Title: "Example Saga 003 - Chapter Three (2020) (Digital) (Group)", SeriesPosition: "3"},
+	}
+	ids := Resolve(recs, DefaultOptions())
+	assert.Len(t, ids, 3, "each volume is its own book")
+}
+
+// The discriminator must not block a genuine cross-source match.
+func TestResolveStillMatchesWhenVolumesAgree(t *testing.T) {
+	ids := Resolve([]Record{
+		{Source: "komga", SourceKey: "k1", Title: "Example Saga", SeriesPosition: "2", Author: "An Author"},
+		{Source: "audible", SourceKey: "A1", Title: "Example Saga", SeriesPosition: "2", Author: "An Author"},
+	}, DefaultOptions())
+	require.Len(t, ids, 1)
+	assert.Equal(t, MatchTitle, ids[0].Method())
+}
+
+// A record without a volume number must still be matchable.
+func TestResolveMatchesWhenOneSideHasNoVolume(t *testing.T) {
+	ids := Resolve([]Record{
+		{Source: "komga", SourceKey: "k1", Title: "Example Saga", SeriesPosition: "2", Author: "An Author"},
+		{Source: "audible", SourceKey: "A1", Title: "Example Saga", Author: "An Author"},
+	}, DefaultOptions())
+	assert.Len(t, ids, 1, "an absent volume number is not a conflict")
+}

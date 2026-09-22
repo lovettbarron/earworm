@@ -13,7 +13,10 @@ type Record struct {
 	ASIN      string
 	Title     string
 	Author    string
-	Seconds   int
+	// SeriesPosition is the volume or chapter number where the source has one.
+	// It acts as a hard discriminator: see findTitleMatch.
+	SeriesPosition string
+	Seconds        int
 }
 
 // Mapping records how one source record was attached to an identity.
@@ -84,6 +87,7 @@ type bucket struct {
 	identity   Identity
 	normTitle  string
 	normAuthor string
+	position   string
 }
 
 // Resolve groups source records into identities.
@@ -127,7 +131,7 @@ func Resolve(records []Record, opts Options) []Identity {
 			}
 		}
 
-		if b, method, conf := findTitleMatch(buckets, nt, na, opts); b != nil {
+		if b, method, conf := findTitleMatch(buckets, nt, na, r.SeriesPosition, opts); b != nil {
 			attach(b, r, method, conf)
 			if r.ASIN != "" {
 				byASIN[r.ASIN] = b
@@ -136,6 +140,7 @@ func Resolve(records []Record, opts Options) []Identity {
 		}
 
 		nb := &bucket{
+			position: r.SeriesPosition,
 			identity: Identity{
 				ID:     identityID(r),
 				ASIN:   r.ASIN,
@@ -166,7 +171,7 @@ func Resolve(records []Record, opts Options) []Identity {
 //
 // The best match is taken rather than the first, so that adding an unrelated
 // book earlier in the list cannot steal a better pairing.
-func findTitleMatch(buckets []*bucket, nt, na string, opts Options) (*bucket, string, float64) {
+func findTitleMatch(buckets []*bucket, nt, na, position string, opts Options) (*bucket, string, float64) {
 	if nt == "" {
 		return nil, "", 0
 	}
@@ -176,6 +181,14 @@ func findTitleMatch(buckets []*bucket, nt, na string, opts Options) (*bucket, st
 	var bestScore float64
 
 	for _, b := range buckets {
+		// Volume number is a hard discriminator. Serialized titles differ only
+		// in their number while sharing every other token — a scanlation
+		// suffix like "(2020) (Digital) (Group)" repeats across a whole run —
+		// so similarity alone merges distinct volumes and sums their reading.
+		if position != "" && b.position != "" && position != b.position {
+			continue
+		}
+
 		score := Similarity(nt, b.normTitle)
 		if score < opts.TitleThreshold {
 			continue
@@ -217,6 +230,9 @@ func attach(b *bucket, r Record, method string, confidence float64) {
 	}
 	if b.normAuthor == "" {
 		b.normAuthor = NormalizeAuthor(r.Author)
+	}
+	if b.position == "" {
+		b.position = r.SeriesPosition
 	}
 }
 

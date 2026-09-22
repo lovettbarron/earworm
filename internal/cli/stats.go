@@ -14,6 +14,7 @@ import (
 	"github.com/lovettbarron/earworm/internal/config"
 	"github.com/lovettbarron/earworm/internal/db"
 	"github.com/lovettbarron/earworm/internal/download"
+	"github.com/lovettbarron/earworm/internal/komga"
 	"github.com/lovettbarron/earworm/internal/listening"
 	"github.com/lovettbarron/earworm/internal/stats"
 	"github.com/lovettbarron/earworm/internal/venv"
@@ -77,11 +78,11 @@ Reports the server version and the account the token belongs to.`,
 }
 
 func init() {
-	statsBackfillCmd.Flags().StringVar(&statsSource, "source", "audible", "source to backfill (audible, abs)")
+	statsBackfillCmd.Flags().StringVar(&statsSource, "source", "audible", "source to backfill (audible, abs, komga)")
 	statsBackfillCmd.Flags().BoolVar(&statsJSON, "json", false, "output summary in JSON format")
 	statsBackfillCmd.Flags().BoolVar(&statsFullScan, "full", false, "ignore the saved watermark and refetch everything")
 
-	statsSyncCmd.Flags().StringVar(&statsSource, "source", "audible", "source to sync (audible, abs)")
+	statsSyncCmd.Flags().StringVar(&statsSource, "source", "audible", "source to sync (audible, abs, komga)")
 	statsSyncCmd.Flags().BoolVar(&statsJSON, "json", false, "output summary in JSON format")
 	statsSyncCmd.Flags().BoolVar(&statsFullScan, "full", false, "ignore the saved watermark and refetch everything")
 
@@ -230,13 +231,96 @@ func runABSSync(cmd *cobra.Command, full bool) error {
 	return nil
 }
 
+// newKomgaClient builds a Komga client from config. Extracted for testing.
+var newKomgaClient = func() stats.KomgaSource {
+	return komga.NewClient(viper.GetString("komga.url"), viper.GetString("komga.api_key"))
+}
+
+// newKomgaIngestor assembles a Komga ingestor from configuration.
+func newKomgaIngestor(database *sql.DB) (*stats.KomgaIngestor, error) {
+	if viper.GetString("komga.url") == "" {
+		return nil, fmt.Errorf("komga.url is not configured (see 'earworm config set')")
+	}
+	if viper.GetString("komga.api_key") == "" {
+		return nil, fmt.Errorf("komga.api_key is not configured (generate one in Komga account settings)")
+	}
+
+	bucket, err := listening.NewBucketer(viper.GetString("stats.timezone"))
+	if err != nil {
+		return nil, fmt.Errorf("stats.timezone is not a valid IANA timezone: %w", err)
+	}
+
+	ing := &stats.KomgaIngestor{
+		DB:     database,
+		Client: newKomgaClient(),
+		Bucket: bucket,
+		Clock:  listening.SystemClock{},
+	}
+
+	if cutoff := viper.GetString("komga.unreliable_before"); cutoff != "" {
+		t, err := time.ParseInLocation(listening.DayFormat, cutoff, bucket.Location())
+		if err != nil {
+			return nil, fmt.Errorf("komga.unreliable_before %q must be YYYY-MM-DD: %w", cutoff, err)
+		}
+		// Inclusive of the whole named day.
+		ing.UnreliableBefore = t.AddDate(0, 0, 1).Add(-time.Nanosecond)
+	}
+	return ing, nil
+}
+
+// runKomgaSync reads Komga and renders its summary.
+func runKomgaSync(cmd *cobra.Command) error {
+	database, err := openStatsDB()
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+
+	ing, err := newKomgaIngestor(database)
+	if err != nil {
+		return err
+	}
+
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	res, err := ing.Sync(ctx)
+	if err != nil {
+		return err
+	}
+
+	out := cmd.OutOrStdout()
+	if statsJSON {
+		return json.NewEncoder(out).Encode(res)
+	}
+	if quiet {
+		return nil
+	}
+
+	fmt.Fprintf(out, "Reading history (komga):\n")
+	fmt.Fprintf(out, "  Books:         %d across %d series\n", res.Books, res.Series)
+	fmt.Fprintf(out, "  Completed:     %d\n", res.Completed)
+	fmt.Fprintf(out, "  In progress:   %d\n", res.InProgress)
+	fmt.Fprintf(out, "  Reading days:  %d\n", res.Days)
+	if res.Unreliable > 0 {
+		fmt.Fprintf(out, "  Unreliable:    %d books completed before the configured cutoff\n", res.Unreliable)
+		fmt.Fprintf(out, "                 (kept in the export, excluded from journal entries)\n")
+	}
+	hint(os.Stderr, "earworm stats status    # review stored data")
+	return nil
+}
+
 func runStatsBackfill(cmd *cobra.Command, args []string) error {
 	switch statsSource {
+	case listening.SourceKomga:
+		return runKomgaSync(cmd)
 	case listening.SourceABS:
 		return runABSSync(cmd, true)
 	case listening.SourceAudible:
 	default:
-		return fmt.Errorf("unknown source %q (supported: audible, abs)", statsSource)
+		return fmt.Errorf("unknown source %q (supported: audible, abs, komga)", statsSource)
 	}
 
 	database, err := openStatsDB()
@@ -295,11 +379,13 @@ func runStatsBackfill(cmd *cobra.Command, args []string) error {
 
 func runStatsSync(cmd *cobra.Command, args []string) error {
 	switch statsSource {
+	case listening.SourceKomga:
+		return runKomgaSync(cmd)
 	case listening.SourceABS:
 		return runABSSync(cmd, statsFullScan)
 	case listening.SourceAudible:
 	default:
-		return fmt.Errorf("unknown source %q (supported: audible, abs)", statsSource)
+		return fmt.Errorf("unknown source %q (supported: audible, abs, komga)", statsSource)
 	}
 
 	database, err := openStatsDB()
@@ -352,7 +438,7 @@ func runStatsStatus(cmd *cobra.Command, args []string) error {
 	defer database.Close()
 
 	st := statsStatus{}
-	for _, source := range []string{listening.SourceAudible, listening.SourceABS} {
+	for _, source := range []string{listening.SourceAudible, listening.SourceABS, listening.SourceKomga} {
 		n, err := db.CountListeningDays(database, source)
 		if err != nil {
 			return err

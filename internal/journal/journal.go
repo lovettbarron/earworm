@@ -233,10 +233,17 @@ func BuildFinishEntries(books []db.BookListening, opts BuildOptions) ([]Entry, e
 		case !opts.EstimatedFinishes:
 			continue
 
-		case bk.IsFinished && bk.StatusIsBulk && bk.LastPositionAt != "":
+		case bk.IsFinished && bk.StatusIsBulk && bk.LastPositionAt != "" &&
+			bk.LastPositionAt != bk.StatusChangedAt:
 			// Completed, but the finish timestamp was overwritten by a bulk
 			// marking. The last playback position keeps its own date, which
 			// survives that and is the best remaining evidence.
+			//
+			// It only counts as evidence when it is INDEPENDENT of the
+			// discredited timestamp. Where a source derives both from the same
+			// record — as Komga does, having no separate playback clock — the
+			// two are identical and "recovering" one from the other would
+			// launder a rejected date back into the journal.
 			when, estimated = parseTimestamp(bk.LastPositionAt), true
 
 		case !bk.IsFinished && bk.PercentComplete >= NearCompleteThreshold && bk.LastPositionAt != "":
@@ -303,12 +310,17 @@ func BuildFinishEntries(books []db.BookListening, opts BuildOptions) ([]Entry, e
 		// right source: an Audible-worded footer on an Audiobookshelf book
 		// would misdescribe where the evidence came from.
 		switch {
+		case estimated && bk.Source == listening.SourceKomga:
+			b.WriteString("\n*Completion inferred by earworm from reading progress; " +
+				"the date is the last recorded page turn.*\n")
 		case estimated && bk.Source == listening.SourceABS:
 			b.WriteString("\n*Completion inferred by earworm from measured playback covering " +
 				"most of the runtime; the date is the last session. No finish event was recorded.*\n")
 		case estimated:
 			b.WriteString("\n*Date estimated by earworm from the last playback position; " +
 				"Audible recorded no finish event for this book.*\n")
+		case bk.Source == listening.SourceKomga:
+			b.WriteString("\n*Recorded by earworm from Komga.*\n")
 		case bk.Source == listening.SourceABS:
 			b.WriteString("\n*Recorded by earworm from Audiobookshelf.*\n")
 		default:

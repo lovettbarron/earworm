@@ -501,3 +501,41 @@ func TestSyncTimeoutIsMuchLongerThanWriteTimeout(t *testing.T) {
 		"flushing a large outbox needs far more headroom than writing one entry")
 	assert.GreaterOrEqual(t, syncTimeout, 10*time.Minute)
 }
+
+// Recovering a rejected date from a field that holds the same value would
+// launder it back in. Only an INDEPENDENT timestamp counts as evidence.
+func TestBulkRecoveryRequiresIndependentTimestamp(t *testing.T) {
+	sameStamp := "2024-03-11T10:00:00Z"
+	entries, err := BuildFinishEntries([]db.BookListening{{
+		Source: "komga", SourceKey: "k1", Title: "Migration Artifact",
+		IsFinished: true, StatusIsBulk: true,
+		StatusChangedAt: sameStamp, LastPositionAt: sameStamp,
+	}}, BuildOptions{EstimatedFinishes: true})
+
+	require.NoError(t, err)
+	assert.Empty(t, entries,
+		"a rejected timestamp must not come back through a field holding the same value")
+}
+
+func TestBulkRecoveryAcceptsGenuinelyDifferentTimestamp(t *testing.T) {
+	entries, err := BuildFinishEntries([]db.BookListening{{
+		Source: "audible", SourceKey: "A1", Title: "Recoverable",
+		IsFinished: true, StatusIsBulk: true,
+		StatusChangedAt: "2021-12-08T22:55:38Z", LastPositionAt: "2018-03-14T09:00:00Z",
+	}}, BuildOptions{EstimatedFinishes: true})
+
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 2018, entries[0].Date.Year())
+}
+
+func TestKomgaFinishFooterNamesKomga(t *testing.T) {
+	entries, err := BuildFinishEntries([]db.BookListening{{
+		Source: "komga", SourceKey: "k1", Title: "A Volume",
+		IsFinished: true, StatusChangedAt: "2026-09-01T10:00:00Z",
+	}}, BuildOptions{})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0].Body, "from Komga")
+	assert.NotContains(t, entries[0].Body, "Audible")
+}

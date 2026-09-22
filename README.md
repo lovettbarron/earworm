@@ -18,6 +18,7 @@ A CLI-driven audiobook library manager for Audible, built in Go. Earworm downloa
 - Listening history collection from Audible and Audiobookshelf, with resumable backfill
 - CSV export with explicit provenance, built for LLM analysis
 - Idempotent Day One journaling of measured listening
+- Reading history from Komga alongside listening
 - Daemon/polling mode for unattended operation
 - Cross-filesystem file moves (local to NAS)
 - Contextual next-step hints after each command (suppressed with `--quiet`)
@@ -571,6 +572,32 @@ Days with no listening produce no entry. Writes are queued to a local outbox
 and pushed with an explicit sync afterwards, reported separately so "written
 but not pushed" is distinguishable from "not written".
 
+#### Komga (comics, manga, ebooks)
+
+```bash
+earworm config set komga.url http://your-server:25600
+earworm config set komga.api_key <key>       # Komga account settings
+earworm stats sync --source komga
+```
+
+Komga stores one progress record per book with no reading history, which is
+the same shape as Audible. It matters far less here: a book in Komga is a
+single volume or chapter, so reading a series produces one dated completion per
+volume, which is already a dense timeline with nothing to reconstruct.
+
+Reading lands in the same tables as listening, so `books.csv` and the journal
+pick it up through the paths that already exist. Finished volumes produce
+finish entries on the same terms as finished audiobooks.
+
+**Library migrations need declaring.** Re-marking a shelf as read after
+restoring a Komga instance writes completion timestamps that look exactly like
+reading. Measured against a real library, migration re-marks and genuine reads
+were indistinguishable -- 69% instant progress writes against 97% for real
+reading, a 3.5-minute median span against 2.5 -- so earworm cannot detect this
+and does not try. Set `komga.unreliable_before` to the last day of the
+migration; those books stay in the export, flagged, and are kept out of journal
+entries.
+
 ### `earworm config init`
 
 Create the default configuration file at `~/.config/earworm/config.yaml`.
@@ -629,6 +656,9 @@ Config file location: `~/.config/earworm/config.yaml`
 | `stats.rate_limit_seconds` | `2` | Seconds between listening-history API calls |
 | `stats.export_dir` | `~/.config/earworm/stats` | Where CSV exports are written |
 | `stats.enrich` | `true` | Fetch library items to fill in genres and series missing from session data |
+| `komga.url` | *(none)* | Komga server URL |
+| `komga.api_key` | *(none)* | Komga API key, from account settings |
+| `komga.unreliable_before` | *(none)* | Completions on or before this date are flagged as migration artifacts |
 | `journal.cli_path` | `dayone` | Path to the Day One CLI binary |
 | `journal.journal_id` | *(none)* | Destination journal; see `earworm stats journals` |
 | `journal.include_finishes` | `false` | Also write an entry per finished book |

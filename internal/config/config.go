@@ -38,6 +38,12 @@ func SetDefaults() {
 	// enrich fetches library items so genres and series missing from session
 	// metadata snapshots are filled in.
 	viper.SetDefault("stats.enrich", true)
+	viper.SetDefault("komga.url", "")
+	viper.SetDefault("komga.api_key", "")
+	// unreliable_before flags completions at or before this date as migration
+	// artifacts rather than real reading. It cannot be detected automatically:
+	// re-marks and genuine reads are indistinguishable in Komga's data.
+	viper.SetDefault("komga.unreliable_before", "")
 	// Journaling. Writing is opt-in per invocation; these only say where and how.
 	viper.SetDefault("journal.cli_path", "dayone")
 	viper.SetDefault("journal.journal_id", "")

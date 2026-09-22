@@ -22,6 +22,8 @@ const DayFormat = "2006-01-02"
 const (
 	SourceAudible = "audible"
 	SourceABS     = "abs"
+	// SourceKomga is reading (comics, manga, ebooks) rather than listening.
+	SourceKomga = "komga"
 )
 
 // Clock supplies the current time. Production code uses SystemClock; tests
