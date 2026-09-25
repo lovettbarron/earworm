@@ -525,3 +525,69 @@ func TestJournalEntryOperationsReportDatabaseErrors(t *testing.T) {
 	_, err = CountJournalEntries(bad)
 	assert.Error(t, err)
 }
+
+func TestMarkBulkStatusBeforeFlagsByStoredDate(t *testing.T) {
+	db := setupTestDB(t)
+
+	require.NoError(t, UpsertBookListeningBatch(db, []BookListening{
+		{Source: "komga", SourceKey: "old", StatusChangedAt: "2024-03-10T12:00:00Z"},
+		{Source: "komga", SourceKey: "edge", StatusChangedAt: "2024-03-13T23:59:59Z"},
+		{Source: "komga", SourceKey: "new", StatusChangedAt: "2026-09-22T08:00:00Z"},
+		{Source: "komga", SourceKey: "undated"},
+		{Source: "audible", SourceKey: "other", StatusChangedAt: "2024-01-01T00:00:00Z"},
+	}))
+
+	n, err := MarkBulkStatusBefore(db, "komga", "2024-03-13T23:59:59Z")
+	require.NoError(t, err)
+	assert.Equal(t, 2, n)
+
+	got := byKey(t, db, "komga")
+	assert.True(t, got["old"].StatusIsBulk)
+	assert.True(t, got["edge"].StatusIsBulk, "the cutoff itself is inclusive")
+	assert.False(t, got["new"].StatusIsBulk)
+	assert.False(t, got["undated"].StatusIsBulk, "no date is not evidence of a migration")
+
+	other := byKey(t, db, "audible")
+	assert.False(t, other["other"].StatusIsBulk, "other sources are untouched")
+}
+
+// The flag is decided from what is stored, so a row nobody mentioned this run
+// keeps it. This is what stops a library re-import from unflagging a migration
+// cluster whose books have simply stopped being listed.
+func TestMarkBulkStatusBeforeIsIndependentOfAnyResponse(t *testing.T) {
+	db := setupTestDB(t)
+	require.NoError(t, UpsertBookListeningBatch(db, []BookListening{
+		{Source: "komga", SourceKey: "stale", StatusChangedAt: "2024-03-10T12:00:00Z"},
+	}))
+
+	for i := 0; i < 3; i++ {
+		n, err := MarkBulkStatusBefore(db, "komga", "2024-03-13T23:59:59Z")
+		require.NoError(t, err)
+		assert.Equal(t, 1, n, "idempotent")
+	}
+	assert.True(t, byKey(t, db, "komga")["stale"].StatusIsBulk)
+}
+
+func TestMarkBulkStatusBeforeWithoutCutoffClearsFlags(t *testing.T) {
+	db := setupTestDB(t)
+	require.NoError(t, UpsertBookListening(db, BookListening{
+		Source: "komga", SourceKey: "a", StatusChangedAt: "2024-03-10T12:00:00Z", StatusIsBulk: true,
+	}))
+
+	n, err := MarkBulkStatusBefore(db, "komga", "")
+	require.NoError(t, err)
+	assert.Zero(t, n)
+	assert.False(t, byKey(t, db, "komga")["a"].StatusIsBulk)
+}
+
+// byKey indexes a source's rows by source key.
+func byKey(t *testing.T, db *sql.DB, source string) map[string]BookListening {
+	t.Helper()
+	rows, err := ListBookListening(db, source)
+	require.NoError(t, err)
+	out := make(map[string]BookListening, len(rows))
+	for _, r := range rows {
+		out[r.SourceKey] = r
+	}
+	return out
+}

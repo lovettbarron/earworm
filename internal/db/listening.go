@@ -246,11 +246,53 @@ func ListBookListening(db *sql.DB, source string) ([]BookListening, error) {
 	return out, rows.Err()
 }
 
+// MarkBulkStatusBefore flags every row of a source whose stored status
+// timestamp falls on or before cutoff, and clears the flag on the rest. It
+// returns the number of rows left flagged.
+//
+// This decides from what is stored rather than from what the source just
+// returned, which is what MarkBulkStatus does. A source that only lists books
+// currently holding a status — Komga lists what is read or in progress — stops
+// returning a book when its id changes or its status is cleared. Recomputing
+// from the response alone would then read "absent" as "no longer unreliable"
+// and unflag a whole migration cluster that is still sitting in the table with
+// its original dates.
+func MarkBulkStatusBefore(db *sql.DB, source, cutoff string) (int, error) {
+	if cutoff == "" {
+		if _, err := db.Exec(`UPDATE book_listening SET status_is_bulk = 0 WHERE source = ?`, source); err != nil {
+			return 0, fmt.Errorf("clear bulk status flags: %w", err)
+		}
+		return 0, nil
+	}
+
+	// Timestamps are stored as RFC3339Nano in UTC, so a string comparison
+	// orders them correctly.
+	if _, err := db.Exec(`
+		UPDATE book_listening
+		SET status_is_bulk = CASE
+			WHEN status_changed_at != '' AND status_changed_at <= ? THEN 1
+			ELSE 0
+		END
+		WHERE source = ?`, cutoff, source); err != nil {
+		return 0, fmt.Errorf("set bulk status flags: %w", err)
+	}
+
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM book_listening WHERE source = ? AND status_is_bulk = 1`,
+		source).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count bulk status flags: %w", err)
+	}
+	return n, nil
+}
+
 // MarkBulkStatus flags the given source keys as belonging to a bulk
 // status-change cluster, and clears the flag on every other row of that source.
 //
 // The clearing half matters: cluster membership is recomputed from the whole
 // event set each run, so a row that no longer qualifies must lose the flag.
+// That holds only where every run sees the whole library, as Audible's does;
+// a source that lists a subset needs MarkBulkStatusBefore instead.
 func MarkBulkStatus(db *sql.DB, source string, keys []string) error {
 	tx, err := db.Begin()
 	if err != nil {

@@ -257,3 +257,58 @@ func TestKomgaIngestorDefaults(t *testing.T) {
 	assert.NotNil(t, k.logger())
 	assert.IsType(t, listening.SystemClock{}, k.clock())
 }
+
+// The defect behind the 2026-09-22 journal flood: a Komga library re-import
+// changed every book id, the old books stopped appearing in the response, and
+// recomputing flags from the response alone cleared the flag on the whole
+// stored migration cluster. Their 2024 dates then read as genuine reading.
+func TestKomgaSyncKeepsFlagsOnBooksThatLeaveTheSource(t *testing.T) {
+	database := setupDB(t)
+	cutoff := time.Date(2024, 3, 13, 23, 59, 59, 0, time.UTC)
+	migrated := time.Date(2024, 3, 10, 12, 0, 0, 0, time.UTC)
+
+	client := &fakeKomgaClient{books: []komga.Book{
+		komgaBook("old-1", "Solo Leveling", true, migrated, 1, 1),
+		komgaBook("old-2", "Solo Leveling", true, migrated, 1, 1),
+	}}
+	ing := newKomgaIngestor(t, database, client)
+	ing.UnreliableBefore = cutoff
+
+	res, err := ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 2, res.Unreliable)
+
+	// The re-import: new ids, and the old ones now 404, so the client no
+	// longer lists them at all.
+	client.books = []komga.Book{
+		komgaBook("new-1", "Solo Leveling", true, time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC), 1, 1),
+	}
+	res, err = ing.Sync(context.Background())
+	require.NoError(t, err)
+
+	rows := komgaRows(t, database)
+	require.Len(t, rows, 3, "the stale rows stay in the table")
+	assert.True(t, rows["old-1"].StatusIsBulk, "a book that vanished is still migration data")
+	assert.True(t, rows["old-2"].StatusIsBulk)
+	assert.False(t, rows["new-1"].StatusIsBulk, "re-imported after the cutoff")
+	assert.Equal(t, 2, res.Unreliable, "the count covers every flagged row, not just this response")
+}
+
+// Flags are stored state, so a run that returns nothing must not clear them.
+func TestKomgaSyncWithEmptyResponseKeepsStoredFlags(t *testing.T) {
+	database := setupDB(t)
+	cutoff := time.Date(2024, 3, 13, 0, 0, 0, 0, time.UTC)
+	client := &fakeKomgaClient{books: []komga.Book{
+		komgaBook("a", "S", true, cutoff.Add(-48*time.Hour), 1, 1),
+	}}
+	ing := newKomgaIngestor(t, database, client)
+	ing.UnreliableBefore = cutoff
+	_, err := ing.Sync(context.Background())
+	require.NoError(t, err)
+
+	client.books = nil
+	res, err := ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Unreliable)
+	assert.True(t, komgaRows(t, database)["a"].StatusIsBulk)
+}

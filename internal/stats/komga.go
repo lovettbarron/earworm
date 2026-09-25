@@ -69,6 +69,15 @@ func (k *KomgaIngestor) clock() listening.Clock {
 	return listening.SystemClock{}
 }
 
+// cutoff renders UnreliableBefore the way status timestamps are stored, so the
+// database can compare the two as strings.
+func (k *KomgaIngestor) cutoff() string {
+	if k.UnreliableBefore.IsZero() {
+		return ""
+	}
+	return k.UnreliableBefore.UTC().Format(time.RFC3339Nano)
+}
+
 // Sync reads every book with progress and stores it.
 //
 // Komga holds current state rather than history, so each run is a full refresh
@@ -83,7 +92,6 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 	res.Books = len(books)
 
 	rows := make([]db.BookListening, 0, len(books))
-	unreliableKeys := make([]string, 0)
 	series := make(map[string]struct{})
 	days := make(map[string]struct{})
 
@@ -100,10 +108,6 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 			res.Completed++
 		} else {
 			res.InProgress++
-		}
-		if unreliable {
-			res.Unreliable++
-			unreliableKeys = append(unreliableKeys, b.ID)
 		}
 		if sn := b.DisplaySeries(); sn != "" {
 			series[sn] = struct{}{}
@@ -160,10 +164,16 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 	if err := db.UpsertBookListeningBatch(k.DB, rows); err != nil {
 		return res, err
 	}
-	// Recomputed wholesale so a row that leaves the window loses the flag.
-	if err := db.MarkBulkStatus(k.DB, listening.SourceKomga, unreliableKeys); err != nil {
+	// Flags are recomputed from the stored dates rather than from this
+	// response. Komga lists only what currently holds a read status, so a book
+	// whose id changes in a library re-import simply stops appearing; deciding
+	// from the response alone would unflag a migration cluster that is still in
+	// the table, and its dates would then read as genuine reading.
+	flagged, err := db.MarkBulkStatusBefore(k.DB, listening.SourceKomga, k.cutoff())
+	if err != nil {
 		return res, err
 	}
+	res.Unreliable = flagged
 	if err := db.SetSyncTime(k.DB, keyKomgaSyncedAt, k.clock().Now()); err != nil {
 		return res, err
 	}
