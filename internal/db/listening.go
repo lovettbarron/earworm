@@ -286,6 +286,55 @@ func MarkBulkStatusBefore(db *sql.DB, source, cutoff string) (int, error) {
 	return n, nil
 }
 
+// AddBulkStatus flags the given source keys without clearing any other row,
+// and returns how many rows it newly flagged.
+//
+// It layers a second rule onto MarkBulkStatusBefore: that pass decides every
+// row from its stored date, and this one adds the keys a caller judged bulk for
+// another reason. Because the first pass has already reset the rows it saw, a
+// key that stops qualifying is not re-added here and so ends up cleared.
+func AddBulkStatus(db *sql.DB, source string, keys []string) (int, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin add bulk status tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var added int
+	// Chunked to stay clear of SQLite's bound-parameter ceiling.
+	const chunk = 400
+	for start := 0; start < len(keys); start += chunk {
+		end := start + chunk
+		if end > len(keys) {
+			end = len(keys)
+		}
+		batch := keys[start:end]
+		args := make([]any, 0, len(batch)+1)
+		args = append(args, source)
+		for _, k := range batch {
+			args = append(args, k)
+		}
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		res, err := tx.Exec(fmt.Sprintf(
+			`UPDATE book_listening SET status_is_bulk = 1
+			 WHERE source = ? AND status_is_bulk = 0 AND source_key IN (%s)`,
+			placeholders), args...)
+		if err != nil {
+			return 0, fmt.Errorf("add bulk status flags: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, fmt.Errorf("count added bulk status flags: %w", err)
+		}
+		added += int(n)
+	}
+	return added, tx.Commit()
+}
+
 // MarkBulkStatus flags the given source keys as belonging to a bulk
 // status-change cluster, and clears the flag on every other row of that source.
 //

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -311,4 +312,118 @@ func TestKomgaSyncWithEmptyResponseKeepsStoredFlags(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, res.Unreliable)
 	assert.True(t, komgaRows(t, database)["a"].StatusIsBulk)
+}
+
+// The second half of the 2026-09-22 incident: the re-import re-marked 103 books
+// as read at once, after the cutoff, so nothing flagged them and each produced
+// a "Finished" entry. A run of completions sharing an instant is a re-mark, and
+// the same detection Audible uses catches it.
+func TestKomgaSyncFlagsMassReMarking(t *testing.T) {
+	database := setupDB(t)
+	remark := time.Date(2026, 9, 22, 12, 17, 40, 0, time.UTC)
+
+	var books []komga.Book
+	for i := 0; i < 8; i++ {
+		b := komgaBook(fmt.Sprintf("remark-%d", i), "Re-imported", true,
+			remark.Add(time.Duration(i*100)*time.Millisecond), 1, 1)
+		b.Progress.Created = b.Progress.ReadDate // instant write, no span
+		books = append(books, b)
+	}
+	// Genuine reading the same day, hours away from the cluster.
+	books = append(books, komgaBook("real", "Read Today", true, remark.Add(6*time.Hour), 1, 1))
+
+	res, err := newKomgaIngestor(t, database, &fakeKomgaClient{books: books}).Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 8, res.Unreliable, "the cluster is flagged with no cutoff configured")
+
+	rows := komgaRows(t, database)
+	assert.True(t, rows["remark-0"].StatusIsBulk)
+	assert.True(t, rows["remark-7"].StatusIsBulk)
+	assert.False(t, rows["real"].StatusIsBulk, "a book read hours from the cluster is genuine")
+	assert.Equal(t, 1, res.Days, "only the genuine completion contributes a reading day")
+}
+
+// Reading a few volumes in an evening is ordinary and must survive.
+func TestKomgaSyncKeepsGenuineSameEveningReading(t *testing.T) {
+	database := setupDB(t)
+	start := time.Date(2026, 9, 20, 19, 0, 0, 0, time.UTC)
+
+	var books []komga.Book
+	for i := 0; i < 6; i++ {
+		books = append(books, komgaBook(fmt.Sprintf("vol-%d", i), "Evening", true,
+			start.Add(time.Duration(i)*25*time.Minute), 1, 1))
+	}
+
+	res, err := newKomgaIngestor(t, database, &fakeKomgaClient{books: books}).Sync(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, res.Unreliable, "volumes minutes apart are reading, not a re-mark")
+	for id, r := range komgaRows(t, database) {
+		assert.False(t, r.StatusIsBulk, id)
+	}
+}
+
+// The cutoff and the cluster rule are independent, and neither undoes the other.
+func TestKomgaSyncCombinesCutoffAndClusterFlags(t *testing.T) {
+	database := setupDB(t)
+	cutoff := time.Date(2024, 3, 13, 23, 59, 59, 0, time.UTC)
+	remark := time.Date(2026, 9, 22, 12, 17, 40, 0, time.UTC)
+
+	books := []komga.Book{komgaBook("old", "Migrated", true, cutoff.Add(-72*time.Hour), 1, 1)}
+	for i := 0; i < 6; i++ {
+		books = append(books, komgaBook(fmt.Sprintf("remark-%d", i), "Re-imported", true,
+			remark.Add(time.Duration(i*50)*time.Millisecond), 1, 1))
+	}
+	books = append(books, komgaBook("real", "Genuine", true, remark.Add(9*time.Hour), 1, 1))
+
+	ing := newKomgaIngestor(t, database, &fakeKomgaClient{books: books})
+	ing.UnreliableBefore = cutoff
+
+	res, err := ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 7, res.Unreliable, "one before the cutoff plus the six-book cluster")
+
+	rows := komgaRows(t, database)
+	assert.True(t, rows["old"].StatusIsBulk)
+	assert.True(t, rows["remark-3"].StatusIsBulk)
+	assert.False(t, rows["real"].StatusIsBulk)
+
+	// Idempotent: re-running reports and stores the same thing.
+	again, err := ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, res, again)
+	assert.Equal(t, rows, komgaRows(t, database))
+}
+
+// A cluster that stops being one must lose its flag, which is what makes the
+// add-on-top pass safe.
+func TestKomgaSyncClearsFlagWhenClusterBreaksUp(t *testing.T) {
+	database := setupDB(t)
+	remark := time.Date(2026, 9, 22, 12, 17, 40, 0, time.UTC)
+
+	var clustered []komga.Book
+	for i := 0; i < 6; i++ {
+		clustered = append(clustered, komgaBook(fmt.Sprintf("b-%d", i), "S", true,
+			remark.Add(time.Duration(i*50)*time.Millisecond), 1, 1))
+	}
+	client := &fakeKomgaClient{books: clustered}
+	ing := newKomgaIngestor(t, database, client)
+
+	res, err := ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 6, res.Unreliable)
+
+	// The server later reports real per-volume dates for the same books.
+	var spread []komga.Book
+	for i := 0; i < 6; i++ {
+		spread = append(spread, komgaBook(fmt.Sprintf("b-%d", i), "S", true,
+			remark.Add(time.Duration(i)*30*time.Minute), 1, 1))
+	}
+	client.books = spread
+
+	res, err = ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, res.Unreliable)
+	for id, r := range komgaRows(t, database) {
+		assert.False(t, r.StatusIsBulk, id)
+	}
 }

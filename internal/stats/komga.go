@@ -34,6 +34,12 @@ type KomgaIngestor struct {
 	Clock  listening.Clock
 	Logger *slog.Logger
 
+	// BulkOptions tunes detection of mass re-marking, where a run of
+	// completions shares one instant. A Komga library re-import writes exactly
+	// that: measured on a real server, 103 books landed across 32 seconds at
+	// six per second, none of them read that day.
+	BulkOptions listening.BulkClusterOptions
+
 	// UnreliableBefore flags completions at or before this instant as not
 	// trustworthy evidence of when the book was actually read.
 	//
@@ -91,7 +97,21 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 	}
 	res.Books = len(books)
 
+	// Detected across every dated completion in the response, before rows are
+	// built, so a cluster is judged on the whole set rather than per book.
+	events := make([]listening.StatusEvent, 0, len(books))
+	for _, b := range books {
+		if b.Progress == nil {
+			continue
+		}
+		events = append(events, listening.StatusEvent{
+			Key: b.ID, OccurredAt: b.CompletedAt(), Finished: b.Progress.Completed,
+		})
+	}
+	clustered := listening.DetectBulkClusters(events, k.BulkOptions)
+
 	rows := make([]db.BookListening, 0, len(books))
+	clusterKeys := make([]string, 0)
 	series := make(map[string]struct{})
 	days := make(map[string]struct{})
 
@@ -101,8 +121,12 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 		}
 
 		completedAt := b.CompletedAt()
-		unreliable := !k.UnreliableBefore.IsZero() &&
+		beforeCutoff := !k.UnreliableBefore.IsZero() &&
 			!completedAt.IsZero() && !completedAt.After(k.UnreliableBefore)
+		unreliable := beforeCutoff || clustered[b.ID]
+		if clustered[b.ID] {
+			clusterKeys = append(clusterKeys, b.ID)
+		}
 
 		if b.Progress.Completed {
 			res.Completed++
@@ -173,7 +197,14 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 	if err != nil {
 		return res, err
 	}
-	res.Unreliable = flagged
+	// Cluster flags are added on top, without clearing: the pass above has
+	// already set every row from its stored date, so a book that has left a
+	// cluster is back to 0 and is not re-added here.
+	added, err := db.AddBulkStatus(k.DB, listening.SourceKomga, clusterKeys)
+	if err != nil {
+		return res, err
+	}
+	res.Unreliable = flagged + added
 	if err := db.SetSyncTime(k.DB, keyKomgaSyncedAt, k.clock().Now()); err != nil {
 		return res, err
 	}

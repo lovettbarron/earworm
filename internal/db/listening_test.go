@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -590,4 +591,45 @@ func byKey(t *testing.T, db *sql.DB, source string) map[string]BookListening {
 		out[r.SourceKey] = r
 	}
 	return out
+}
+
+func TestAddBulkStatusFlagsWithoutClearing(t *testing.T) {
+	db := setupTestDB(t)
+	require.NoError(t, UpsertBookListeningBatch(db, []BookListening{
+		{Source: "komga", SourceKey: "already", StatusIsBulk: true},
+		{Source: "komga", SourceKey: "add-me"},
+		{Source: "komga", SourceKey: "leave-me"},
+		{Source: "audible", SourceKey: "other"},
+	}))
+
+	n, err := AddBulkStatus(db, "komga", []string{"add-me", "already", "audible-key"})
+	require.NoError(t, err)
+	assert.Equal(t, 1, n, "counts only rows it newly flagged")
+
+	got := byKey(t, db, "komga")
+	assert.True(t, got["add-me"].StatusIsBulk)
+	assert.True(t, got["already"].StatusIsBulk, "an existing flag is left set")
+	assert.False(t, got["leave-me"].StatusIsBulk, "unnamed rows are untouched")
+	assert.False(t, byKey(t, db, "audible")["other"].StatusIsBulk, "scoped to one source")
+
+	n, err = AddBulkStatus(db, "komga", nil)
+	require.NoError(t, err)
+	assert.Zero(t, n)
+}
+
+func TestAddBulkStatusChunksLargeKeySets(t *testing.T) {
+	db := setupTestDB(t)
+
+	keys := make([]string, 0, 901)
+	rows := make([]BookListening, 0, 901)
+	for i := 0; i < 901; i++ {
+		k := fmt.Sprintf("k%04d", i)
+		keys = append(keys, k)
+		rows = append(rows, BookListening{Source: "komga", SourceKey: k})
+	}
+	require.NoError(t, UpsertBookListeningBatch(db, rows))
+
+	n, err := AddBulkStatus(db, "komga", keys)
+	require.NoError(t, err)
+	assert.Equal(t, 901, n, "every key across three chunks")
 }
