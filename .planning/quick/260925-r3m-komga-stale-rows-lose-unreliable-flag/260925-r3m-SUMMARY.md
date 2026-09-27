@@ -19,6 +19,12 @@ deleted.
    unreliable" while keeping their 2024 dates. 205 entries followed, back to 2014.
 2. **Nothing caught the re-mark itself.** 103 books were marked read at ~12:17
    on 2026-09-22, after the configured cutoff, producing 102 "Finished" entries.
+3. **The flag had a way around it.** `BuildFinishEntries` refuses a recovered
+   date that is not independent of the discredited timestamp, but only in the
+   bulk branch. A flagged book above 95% and unfinished took the near-complete
+   branch and was dated from `LastPositionAt`, which Komga copies from the very
+   status timestamp the flag rejected. Two volumes reached the journal that way
+   after the flags were restored, which is how the bug was found.
 
 ## What changed
 
@@ -28,7 +34,10 @@ deleted.
 - `listening.DetectBulkClusterGroups` hands back the clusters so a caller can
   judge one whole.
 - Komga runs cluster detection with a 30-second window, flagging a cluster only
-  when it spans `MinReMarkSeries` (3) distinct series.
+  when it spans `MinReMarkSeries` (3) distinct series, or holds more than
+  `MaxReadingBatch` (15) books however narrow it is.
+- The near-complete branch in `BuildFinishEntries` applies the same
+  independence test as the bulk branch.
 
 ## Why the series test exists
 
@@ -42,11 +51,15 @@ single-series cluster was genuine.
 | | Books |
 |---|---|
 | Flagged by cutoff | 202 |
-| Flagged as re-marking (2026-09-22) | 78 |
+| Flagged as re-marking (2026-09-22) | 97 |
 | Genuine binges still unflagged | 2026-06-02, 06-07, 09-04, 09-19, 09-20 |
 
-Day One: 200 entries for 2024-03-10/11/12 deleted, plus 80 orphaned Komga
-finish entries.
+Day One: 301 entries deleted in total — 200 for 2024-03-10/11/12, 80 orphaned
+finish entries, 19 from the narrow Solo Leveling batch the user confirmed was
+the re-import, and 2 that the near-complete branch had written back.
+
+A dry run over the whole history now reports 633 unchanged, 0 created,
+0 updated: the journal matches the data exactly.
 
 ## Notes
 
@@ -55,8 +68,10 @@ finish entries.
   tests were verified to fail against the previous ingestor.
 - The daemon runs the installed binary, so a fix in the working tree does not
   reach it. A repair sync was undone by the stale binary until `go install`.
-- Still open: 19 books (Solo Leveling v01-15, Delicious in Dungeon v01-04)
-  marked in 9 seconds on 2026-09-22 across 2 series. Below the series
-  threshold, so treated as reading. The user decides.
+- The 19-book Solo Leveling batch was confirmed by the user as the re-import,
+  which is what `MaxReadingBatch` now catches. Genuine sessions on this library
+  never exceeded nine books.
+- Writes were paused (`journal.daemon_write: false`) while the fixes were made,
+  then re-enabled and verified against a live cycle.
 - `internal/cli` sits at 74.4%, below the project bar, because the merged
   `convert` command arrived without CLI tests. Unrelated to this fix.
