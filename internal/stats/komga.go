@@ -40,6 +40,17 @@ type KomgaIngestor struct {
 	// six per second, none of them read that day.
 	BulkOptions listening.BulkClusterOptions
 
+	// MinReMarkSeries is how many distinct series a cluster must span before it
+	// counts as re-marking rather than reading. Default 3.
+	//
+	// Timestamps alone cannot tell the two apart: finishing five volumes of one
+	// series and marking them together writes the same dense run as a
+	// re-import. What differs is breadth. On the library this was measured
+	// against, every cluster spanning three or more series belonged to the
+	// re-import, and every single-series cluster was a genuine evening of
+	// reading. Without this test the detector deletes real journal entries.
+	MinReMarkSeries int
+
 	// UnreliableBefore flags completions at or before this instant as not
 	// trustworthy evidence of when the book was actually read.
 	//
@@ -84,6 +95,34 @@ func (k *KomgaIngestor) cutoff() string {
 	return k.UnreliableBefore.UTC().Format(time.RFC3339Nano)
 }
 
+// reMarked returns the ids belonging to clusters wide enough to be re-marking.
+func (k *KomgaIngestor) reMarked(events []listening.StatusEvent, books []komga.Book) map[string]bool {
+	minSeries := k.MinReMarkSeries
+	if minSeries <= 0 {
+		minSeries = 3
+	}
+
+	seriesOf := make(map[string]string, len(books))
+	for _, b := range books {
+		seriesOf[b.ID] = b.DisplaySeries()
+	}
+
+	out := make(map[string]bool)
+	for _, cluster := range listening.DetectBulkClusterGroups(events, k.BulkOptions) {
+		distinct := make(map[string]struct{}, len(cluster))
+		for _, e := range cluster {
+			distinct[seriesOf[e.Key]] = struct{}{}
+		}
+		if len(distinct) < minSeries {
+			continue
+		}
+		for _, e := range cluster {
+			out[e.Key] = true
+		}
+	}
+	return out
+}
+
 // Sync reads every book with progress and stores it.
 //
 // Komga holds current state rather than history, so each run is a full refresh
@@ -108,7 +147,7 @@ func (k *KomgaIngestor) Sync(ctx context.Context) (KomgaResult, error) {
 			Key: b.ID, OccurredAt: b.CompletedAt(), Finished: b.Progress.Completed,
 		})
 	}
-	clustered := listening.DetectBulkClusters(events, k.BulkOptions)
+	clustered := k.reMarked(events, books)
 
 	rows := make([]db.BookListening, 0, len(books))
 	clusterKeys := make([]string, 0)

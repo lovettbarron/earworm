@@ -1,6 +1,7 @@
 package listening
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -194,4 +195,40 @@ func TestDetectBulkClustersHandlesTwoSeparateClusters(t *testing.T) {
 	flagged := DetectBulkClusters(events, DefaultBulkClusterOptions)
 	assert.Len(t, flagged, 12)
 	assert.False(t, flagged["lone"])
+}
+
+func TestDetectBulkClusterGroupsReturnsEachRun(t *testing.T) {
+	base := time.Date(2026, 9, 22, 12, 17, 40, 0, time.UTC)
+	var events []StatusEvent
+	// Two dense runs, an hour apart, plus a lone event between them.
+	for i := 0; i < 6; i++ {
+		events = append(events, StatusEvent{Key: fmt.Sprintf("a%d", i), OccurredAt: base.Add(time.Duration(i*50) * time.Millisecond)})
+	}
+	events = append(events, StatusEvent{Key: "solo", OccurredAt: base.Add(30 * time.Minute)})
+	for i := 0; i < 5; i++ {
+		events = append(events, StatusEvent{Key: fmt.Sprintf("b%d", i), OccurredAt: base.Add(time.Hour + time.Duration(i*50)*time.Millisecond)})
+	}
+	// A run that is too small to count.
+	events = append(events, StatusEvent{Key: "c0", OccurredAt: base.Add(2 * time.Hour)})
+	events = append(events, StatusEvent{Key: "c1", OccurredAt: base.Add(2 * time.Hour).Add(time.Millisecond)})
+
+	groups := DetectBulkClusterGroups(events, DefaultBulkClusterOptions)
+	require.Len(t, groups, 2)
+	assert.Len(t, groups[0], 6)
+	assert.Len(t, groups[1], 5)
+
+	// The flat form stays consistent with the grouped one.
+	flat := DetectBulkClusters(events, DefaultBulkClusterOptions)
+	assert.Len(t, flat, 11)
+	assert.False(t, flat["solo"])
+	assert.False(t, flat["c0"])
+	assert.True(t, flat["a0"])
+}
+
+func TestDetectBulkClusterGroupsIgnoresUndatedEvents(t *testing.T) {
+	events := make([]StatusEvent, 0, 6)
+	for i := 0; i < 6; i++ {
+		events = append(events, StatusEvent{Key: fmt.Sprintf("k%d", i)})
+	}
+	assert.Empty(t, DetectBulkClusterGroups(events, DefaultBulkClusterOptions))
 }

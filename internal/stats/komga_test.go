@@ -322,9 +322,11 @@ func TestKomgaSyncFlagsMassReMarking(t *testing.T) {
 	database := setupDB(t)
 	remark := time.Date(2026, 9, 22, 12, 17, 40, 0, time.UTC)
 
+	// A re-import re-marks whatever it restores, so one instant covers
+	// unrelated series.
 	var books []komga.Book
 	for i := 0; i < 8; i++ {
-		b := komgaBook(fmt.Sprintf("remark-%d", i), "Re-imported", true,
+		b := komgaBook(fmt.Sprintf("remark-%d", i), fmt.Sprintf("Series %d", i), true,
 			remark.Add(time.Duration(i*100)*time.Millisecond), 1, 1)
 		b.Progress.Created = b.Progress.ReadDate // instant write, no span
 		books = append(books, b)
@@ -370,7 +372,7 @@ func TestKomgaSyncCombinesCutoffAndClusterFlags(t *testing.T) {
 
 	books := []komga.Book{komgaBook("old", "Migrated", true, cutoff.Add(-72*time.Hour), 1, 1)}
 	for i := 0; i < 6; i++ {
-		books = append(books, komgaBook(fmt.Sprintf("remark-%d", i), "Re-imported", true,
+		books = append(books, komgaBook(fmt.Sprintf("remark-%d", i), fmt.Sprintf("Series %d", i), true,
 			remark.Add(time.Duration(i*50)*time.Millisecond), 1, 1))
 	}
 	books = append(books, komgaBook("real", "Genuine", true, remark.Add(9*time.Hour), 1, 1))
@@ -402,7 +404,7 @@ func TestKomgaSyncClearsFlagWhenClusterBreaksUp(t *testing.T) {
 
 	var clustered []komga.Book
 	for i := 0; i < 6; i++ {
-		clustered = append(clustered, komgaBook(fmt.Sprintf("b-%d", i), "S", true,
+		clustered = append(clustered, komgaBook(fmt.Sprintf("b-%d", i), fmt.Sprintf("Series %d", i), true,
 			remark.Add(time.Duration(i*50)*time.Millisecond), 1, 1))
 	}
 	client := &fakeKomgaClient{books: clustered}
@@ -415,7 +417,7 @@ func TestKomgaSyncClearsFlagWhenClusterBreaksUp(t *testing.T) {
 	// The server later reports real per-volume dates for the same books.
 	var spread []komga.Book
 	for i := 0; i < 6; i++ {
-		spread = append(spread, komgaBook(fmt.Sprintf("b-%d", i), "S", true,
+		spread = append(spread, komgaBook(fmt.Sprintf("b-%d", i), fmt.Sprintf("Series %d", i), true,
 			remark.Add(time.Duration(i)*30*time.Minute), 1, 1))
 	}
 	client.books = spread
@@ -426,4 +428,52 @@ func TestKomgaSyncClearsFlagWhenClusterBreaksUp(t *testing.T) {
 	for id, r := range komgaRows(t, database) {
 		assert.False(t, r.StatusIsBulk, id)
 	}
+}
+
+// Taken from the real library: five Tokyo Ghoul volumes and one from its sequel
+// were all marked at 2026-09-20T10:50:13Z. An evening of reading marked in one
+// batch looks exactly like a re-import in its timestamps and is not one, and it
+// is the entry the journal showed as "Tokyo Ghoul — 5 volumes (10–14)".
+func TestKomgaSyncKeepsASingleSeriesBatchMarking(t *testing.T) {
+	database := setupDB(t)
+	at := time.Date(2026, 9, 20, 10, 50, 13, 0, time.UTC)
+
+	var books []komga.Book
+	for i, vol := range []int{10, 11, 12, 13, 14} {
+		b := komgaBook(fmt.Sprintf("tg-%d", vol), "Tokyo Ghoul", true, at, 1, 1)
+		b.Number = float64(vol)
+		b.Progress.ReadDate = at.Add(time.Duration(i) * time.Millisecond)
+		books = append(books, b)
+	}
+	books = append(books, komgaBook("tgre-12", "Tokyo Ghoul - re", true, at.Add(time.Second), 1, 1))
+
+	res, err := newKomgaIngestor(t, database, &fakeKomgaClient{books: books}).Sync(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, res.Unreliable, "two series is not a library re-import")
+	assert.Equal(t, 1, res.Days, "the day still counts as reading")
+	for id, r := range komgaRows(t, database) {
+		assert.False(t, r.StatusIsBulk, id)
+	}
+}
+
+func TestKomgaSyncReMarkSeriesThresholdIsConfigurable(t *testing.T) {
+	database := setupDB(t)
+	at := time.Date(2026, 9, 22, 12, 17, 40, 0, time.UTC)
+
+	var books []komga.Book
+	for i, name := range []string{"A", "A", "B", "B", "C"} {
+		books = append(books, komgaBook(fmt.Sprintf("b-%d", i), name, true,
+			at.Add(time.Duration(i*50)*time.Millisecond), 1, 1))
+	}
+
+	ing := newKomgaIngestor(t, database, &fakeKomgaClient{books: books})
+	ing.MinReMarkSeries = 4
+	res, err := ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, res.Unreliable, "three series is below the raised threshold")
+
+	ing.MinReMarkSeries = 3
+	res, err = ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 5, res.Unreliable)
 }

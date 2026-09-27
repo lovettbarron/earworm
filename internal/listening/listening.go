@@ -122,6 +122,23 @@ var DefaultBulkClusterOptions = BulkClusterOptions{
 // Events with a zero timestamp are ignored: absence of a timestamp is not
 // evidence of bulk marking.
 func DetectBulkClusters(events []StatusEvent, opts BulkClusterOptions) map[string]bool {
+	flagged := make(map[string]bool)
+	for _, cluster := range DetectBulkClusterGroups(events, opts) {
+		for _, e := range cluster {
+			flagged[e.Key] = true
+		}
+	}
+	return flagged
+}
+
+// DetectBulkClusterGroups returns the clusters themselves, one slice per run,
+// for callers that need to judge a cluster as a whole rather than key by key.
+//
+// Reading needs this: finishing six volumes of one series and marking them
+// together is genuine, while one instant covering six unrelated series is a
+// library re-import. Only the caller knows what its keys belong to, so the
+// grouping is handed back rather than decided here.
+func DetectBulkClusterGroups(events []StatusEvent, opts BulkClusterOptions) [][]StatusEvent {
 	if opts.Window <= 0 {
 		opts.Window = DefaultBulkClusterOptions.Window
 	}
@@ -139,16 +156,16 @@ func DetectBulkClusters(events []StatusEvent, opts BulkClusterOptions) map[strin
 		return dated[i].OccurredAt.Before(dated[j].OccurredAt)
 	})
 
-	flagged := make(map[string]bool)
+	var groups [][]StatusEvent
 	for i := 0; i < len(dated); {
 		j := i + 1
 		for j < len(dated) && dated[j].OccurredAt.Sub(dated[i].OccurredAt) <= opts.Window {
 			j++
 		}
 		if j-i >= opts.MinSize {
-			for _, e := range dated[i:j] {
-				flagged[e.Key] = true
-			}
+			cluster := make([]StatusEvent, j-i)
+			copy(cluster, dated[i:j])
+			groups = append(groups, cluster)
 		}
 		// Advance past the cluster we just closed, not just one event, so a
 		// long dense run is reported once rather than re-scanned per element.
@@ -158,5 +175,5 @@ func DetectBulkClusters(events []StatusEvent, opts BulkClusterOptions) map[strin
 			i++
 		}
 	}
-	return flagged
+	return groups
 }

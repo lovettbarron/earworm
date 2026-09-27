@@ -343,7 +343,7 @@ func runKomgaSync(cmd *cobra.Command) error {
 	fmt.Fprintf(out, "  In progress:   %d\n", res.InProgress)
 	fmt.Fprintf(out, "  Reading days:  %d\n", res.Days)
 	if res.Unreliable > 0 {
-		fmt.Fprintf(out, "  Unreliable:    %d books completed before the configured cutoff\n", res.Unreliable)
+		fmt.Fprintf(out, "  Unreliable:    %d books, from the configured cutoff or mass re-marking\n", res.Unreliable)
 		fmt.Fprintf(out, "                 (kept in the export, excluded from journal entries)\n")
 	}
 	hint(os.Stderr, "earworm stats status    # review stored data")
