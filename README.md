@@ -649,12 +649,23 @@ finish entries on the same terms as finished audiobooks.
 
 **Library migrations need declaring.** Re-marking a shelf as read after
 restoring a Komga instance writes completion timestamps that look exactly like
-reading. Measured against a real library, migration re-marks and genuine reads
-were indistinguishable -- 69% instant progress writes against 97% for real
-reading, a 3.5-minute median span against 2.5 -- so earworm cannot detect this
-and does not try. Set `komga.unreliable_before` to the last day of the
-migration; those books stay in the export, flagged, and are kept out of journal
-entries.
+reading. Set `komga.unreliable_before` to the last day of the migration; those
+books stay in the export, flagged, and are kept out of journal entries. The
+flag is decided from the stored completion date, so a book that later
+disappears from Komga -- a re-import changes every book id -- keeps it.
+
+**A re-import after that date is caught by its shape.** A restore marks a run
+of books read at one instant. Earworm treats a run of completions inside 30
+seconds as re-marking when it spans three or more distinct series, which is
+what separates it from reading: an evening of five volumes is one series, while
+a restore sweeps up unrelated titles. On the library this was measured against,
+one re-import wrote 78 books across 63 series in 17 seconds, and no genuine
+reading session was touched.
+
+Neither test can be perfect. A batch you marked yourself, in one or two series,
+is indistinguishable from reading and is left alone; a restore of a single
+series is too. Check `earworm stats status` for the flagged count after a
+restore, and extend `komga.unreliable_before` if something slipped through.
 
 ### `earworm config init`
 
