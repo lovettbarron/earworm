@@ -51,6 +51,15 @@ type KomgaIngestor struct {
 	// spared by MinReMarkSeries.
 	BulkOptions listening.BulkClusterOptions
 
+	// MaxReadingBatch is the largest run of completions one instant can hold
+	// and still be called reading, whatever it spans. Default 15.
+	//
+	// The series test alone lets a narrow but enormous batch through: a
+	// re-import wrote fifteen Solo Leveling volumes and four of another series
+	// in nine seconds, which no evening produces. Genuine sessions on the
+	// measured library never exceeded nine books, so the two do not overlap.
+	MaxReadingBatch int
+
 	// MinReMarkSeries is how many distinct series a cluster must span before it
 	// counts as re-marking rather than reading. Default 3.
 	//
@@ -117,6 +126,10 @@ func (k *KomgaIngestor) reMarked(events []listening.StatusEvent, books []komga.B
 	if minSeries <= 0 {
 		minSeries = 3
 	}
+	maxBatch := k.MaxReadingBatch
+	if maxBatch <= 0 {
+		maxBatch = 15
+	}
 
 	seriesOf := make(map[string]string, len(books))
 	for _, b := range books {
@@ -129,7 +142,7 @@ func (k *KomgaIngestor) reMarked(events []listening.StatusEvent, books []komga.B
 		for _, e := range cluster {
 			distinct[seriesOf[e.Key]] = struct{}{}
 		}
-		if len(distinct) < minSeries {
+		if len(distinct) < minSeries && len(cluster) < maxBatch {
 			continue
 		}
 		for _, e := range cluster {

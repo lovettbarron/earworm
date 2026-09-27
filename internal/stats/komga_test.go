@@ -516,3 +516,65 @@ func TestKomgaSyncWideWindowStillSparesOneSeries(t *testing.T) {
 	assert.Zero(t, res.Unreliable)
 	assert.Equal(t, 1, res.Days)
 }
+
+// From the real library: a re-import marked Solo Leveling v01-15 and Delicious
+// in Dungeon v01-04 within nine seconds. Only two series, so the breadth test
+// spares it, but nineteen volumes is not an evening.
+func TestKomgaSyncFlagsAnEnormousNarrowBatch(t *testing.T) {
+	database := setupDB(t)
+	at := time.Date(2026, 9, 22, 11, 15, 12, 0, time.UTC)
+
+	var books []komga.Book
+	for i := 1; i <= 15; i++ {
+		books = append(books, komgaBook(fmt.Sprintf("sl-%d", i), "Solo Leveling", true,
+			at.Add(time.Duration(i*400)*time.Millisecond), 1, 1))
+	}
+	for i := 1; i <= 4; i++ {
+		books = append(books, komgaBook(fmt.Sprintf("did-%d", i), "Delicious in Dungeon", true,
+			at.Add(time.Duration(7000+i*400)*time.Millisecond), 1, 1))
+	}
+
+	res, err := newKomgaIngestor(t, database, &fakeKomgaClient{books: books}).Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 19, res.Unreliable)
+	assert.Zero(t, res.Days)
+}
+
+// The cap must sit clear of a long genuine session. Nine volumes of one series
+// was the largest real one on the measured library.
+func TestKomgaSyncKeepsALongGenuineSession(t *testing.T) {
+	database := setupDB(t)
+	at := time.Date(2026, 9, 4, 21, 8, 58, 0, time.UTC)
+
+	var books []komga.Book
+	for i := 1; i <= 9; i++ {
+		books = append(books, komgaBook(fmt.Sprintf("tg-%d", i), "Tokyo Ghoul", true,
+			at.Add(time.Duration(i*200)*time.Millisecond), 1, 1))
+	}
+
+	res, err := newKomgaIngestor(t, database, &fakeKomgaClient{books: books}).Sync(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, res.Unreliable, "nine volumes of one series is reading")
+	assert.Equal(t, 1, res.Days)
+}
+
+func TestKomgaSyncReadingBatchCapIsConfigurable(t *testing.T) {
+	database := setupDB(t)
+	at := time.Date(2026, 9, 22, 11, 15, 12, 0, time.UTC)
+
+	var books []komga.Book
+	for i := 1; i <= 10; i++ {
+		books = append(books, komgaBook(fmt.Sprintf("v-%d", i), "One Series", true,
+			at.Add(time.Duration(i*300)*time.Millisecond), 1, 1))
+	}
+
+	ing := newKomgaIngestor(t, database, &fakeKomgaClient{books: books})
+	res, err := ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, res.Unreliable, "ten is under the default cap of fifteen")
+
+	ing.MaxReadingBatch = 10
+	res, err = ing.Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 10, res.Unreliable)
+}
