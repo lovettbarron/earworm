@@ -613,3 +613,34 @@ func TestBuildDayEntriesRespectsRangeForReading(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Contains(t, entries[0].Body, "## 2026-09-21")
 }
+
+// From the real journal: two re-marked Solo Leveling volumes sat at 95% and
+// unfinished, so the near-complete branch dated them from LastPositionAt —
+// which Komga copies from the discredited status timestamp. The flag had
+// already excluded them and this wrote them back in.
+func TestBuildFinishEntriesRejectsNearCompleteBooksDatedFromADiscreditedStamp(t *testing.T) {
+	books := []db.BookListening{
+		{Source: "komga", SourceKey: "K1", Title: "Re-marked Volume", IsFinished: false,
+			PercentComplete: 97, StatusIsBulk: true,
+			StatusChangedAt: "2024-03-12T10:11:02Z", LastPositionAt: "2024-03-12T10:11:02Z"},
+	}
+
+	entries, err := BuildFinishEntries(books, BuildOptions{EstimatedFinishes: true})
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the only date available is the one the flag rejected")
+}
+
+// A flagged book whose position date is genuinely independent is still
+// recoverable: that is what the estimate is for.
+func TestBuildFinishEntriesStillRecoversNearCompleteWithAnIndependentDate(t *testing.T) {
+	books := []db.BookListening{
+		{Source: "audible", SourceKey: "A9", Title: "Independent Position", IsFinished: false,
+			PercentComplete: 97, StatusIsBulk: true,
+			StatusChangedAt: "2021-12-08T22:55:38Z", LastPositionAt: "2019-04-02T20:00:00Z"},
+	}
+
+	entries, err := BuildFinishEntries(books, BuildOptions{EstimatedFinishes: true})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 2019, entries[0].Date.Year())
+}

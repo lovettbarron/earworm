@@ -296,8 +296,17 @@ func BuildFinishEntries(books []db.BookListening, opts BuildOptions) ([]Entry, e
 			// launder a rejected date back into the journal.
 			when, estimated = parseTimestamp(bk.LastPositionAt), true
 
-		case !bk.IsFinished && bk.PercentComplete >= NearCompleteThreshold && bk.LastPositionAt != "":
+		case !bk.IsFinished && bk.PercentComplete >= NearCompleteThreshold &&
+			bk.LastPositionAt != "" &&
+			!(bk.StatusIsBulk && bk.LastPositionAt == bk.StatusChangedAt):
 			// Listened to the end but never marked finished.
+			//
+			// The same independence test as above applies here, or the branch
+			// becomes a way around it: a flagged book sitting at 95% would be
+			// dated from the very timestamp the flag rejected. Komga derives
+			// both fields from one progress record, so this is how two
+			// re-marked volumes reached a journal that had already excluded
+			// them.
 			when, estimated = parseTimestamp(bk.LastPositionAt), true
 		}
 
