@@ -16,6 +16,10 @@ import (
 // keyKomgaSyncedAt records when Komga was last read.
 const keyKomgaSyncedAt = "komga.synced_at"
 
+// DefaultKomgaBulkWindow is how long a run of completions may keep going and
+// still count as one re-marking event.
+const DefaultKomgaBulkWindow = 30 * time.Second
+
 // KomgaSource is the subset of the Komga client the ingestor needs.
 type KomgaSource interface {
 	BooksWithProgress(ctx context.Context) ([]komga.Book, error)
@@ -38,6 +42,13 @@ type KomgaIngestor struct {
 	// completions shares one instant. A Komga library re-import writes exactly
 	// that: measured on a real server, 103 books landed across 32 seconds at
 	// six per second, none of them read that day.
+	//
+	// The default window is wider than Audible's one second, because a
+	// re-import writes continuously for as long as the restore takes. At one
+	// second the same event broke into fourteen clusters and the narrow tail of
+	// each escaped; at thirty it is one cluster of 78 books across 63 series,
+	// while every genuine reading batch stays inside a single series and is
+	// spared by MinReMarkSeries.
 	BulkOptions listening.BulkClusterOptions
 
 	// MinReMarkSeries is how many distinct series a cluster must span before it
@@ -97,6 +108,11 @@ func (k *KomgaIngestor) cutoff() string {
 
 // reMarked returns the ids belonging to clusters wide enough to be re-marking.
 func (k *KomgaIngestor) reMarked(events []listening.StatusEvent, books []komga.Book) map[string]bool {
+	opts := k.BulkOptions
+	if opts.Window <= 0 {
+		opts.Window = DefaultKomgaBulkWindow
+	}
+
 	minSeries := k.MinReMarkSeries
 	if minSeries <= 0 {
 		minSeries = 3
@@ -108,7 +124,7 @@ func (k *KomgaIngestor) reMarked(events []listening.StatusEvent, books []komga.B
 	}
 
 	out := make(map[string]bool)
-	for _, cluster := range listening.DetectBulkClusterGroups(events, k.BulkOptions) {
+	for _, cluster := range listening.DetectBulkClusterGroups(events, opts) {
 		distinct := make(map[string]struct{}, len(cluster))
 		for _, e := range cluster {
 			distinct[seriesOf[e.Key]] = struct{}{}

@@ -477,3 +477,42 @@ func TestKomgaSyncReMarkSeriesThresholdIsConfigurable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 5, res.Unreliable)
 }
+
+// A re-import writes for as long as the restore takes, so the run must be read
+// as one event. At a one-second window the real 2026-09-22 event broke into
+// fourteen clusters and the narrow tail of each escaped.
+func TestKomgaSyncTreatsALongReImportRunAsOneCluster(t *testing.T) {
+	database := setupDB(t)
+	start := time.Date(2026, 9, 22, 12, 17, 35, 0, time.UTC)
+
+	// Two books per second for 18 seconds, each a different series: never five
+	// within one second, but plainly one event.
+	var books []komga.Book
+	for i := 0; i < 36; i++ {
+		books = append(books, komgaBook(fmt.Sprintf("b-%d", i), fmt.Sprintf("Series %d", i), true,
+			start.Add(time.Duration(i*500)*time.Millisecond), 1, 1))
+	}
+
+	res, err := newKomgaIngestor(t, database, &fakeKomgaClient{books: books}).Sync(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 36, res.Unreliable, "the whole run is one re-marking event")
+	assert.Zero(t, res.Days)
+}
+
+// The wider window must not swallow a genuine session that happens to sit
+// inside it.
+func TestKomgaSyncWideWindowStillSparesOneSeries(t *testing.T) {
+	database := setupDB(t)
+	at := time.Date(2026, 9, 4, 21, 8, 58, 0, time.UTC)
+
+	var books []komga.Book
+	for i := 0; i < 9; i++ {
+		books = append(books, komgaBook(fmt.Sprintf("tg-%d", i), "Tokyo Ghoul", true,
+			at.Add(time.Duration(i*200)*time.Millisecond), 1, 1))
+	}
+
+	res, err := newKomgaIngestor(t, database, &fakeKomgaClient{books: books}).Sync(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, res.Unreliable)
+	assert.Equal(t, 1, res.Days)
+}
